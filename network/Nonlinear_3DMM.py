@@ -19,13 +19,16 @@ class Nonlinear3DMM(nn.Module):
         self.m_dim = m_dim              # Dimension of camera matrix latent vector [8]
         self.il_dim = il_dim            # Dimension of illumination latent vector [27]
 
+        # encoder
         self.nl_encoder = NLEncoderBlock(self.nz, self.gf_dim)
         self.in_dim = self.nl_encoder.in_dim
 
-        self.lv_m_layer = NLEmbedingBlock(self.in_dim, self.gfc_dim // 5, fc_dim=self.m_dim)
-        self.lv_il_layer = NLEmbedingBlock(self.in_dim, self.gfc_dim // 5, fc_dim=self.il_dim)
-        self.lv_shape_layer = NLEmbedingBlock(self.in_dim, self.gfc_dim // 2)
-        self.lv_tex_layer = NLEmbedingBlock(self.in_dim, self.gfc_dim // 2)
+        # embedding each component (camera, illustration, shape, texture)
+        self.lv_m_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 5, fc_dim=self.m_dim)
+        self.lv_il_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 5, fc_dim=self.il_dim)
+        self.lv_shape_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 2)
+        self.lv_tex_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 2)
+
 
     def forward(self, x):
         x = self.nl_encoder(x)

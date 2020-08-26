@@ -1,9 +1,9 @@
 from torch import nn
 
 
-class NLEmbedingBlock(nn.Module):
+class NLEmbeddingBlock(nn.Module):
     def __init__(self, in_dim, out_dim, fc_dim=None):
-        super(NLEmbedingBlock, self).__init__()
+        super(NLEmbeddingBlock, self).__init__()
 
         self.ngpu = 1
         self.num_flat_features = out_dim
