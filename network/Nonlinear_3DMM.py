@@ -1,11 +1,11 @@
 import torch
 from torch import nn
 
-from .block import *
+from network.block import *
 
 
 class Nonlinear3DMM(nn.Module):
-    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, m_dim=8, il_dim=27):
+    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, m_dim=8, il_dim=27, tex_sz=(192, 224)):
         super(Nonlinear3DMM, self).__init__()
 
         # naming from https://gist.github.com/EderSantana/9b0d5fb309d775b995d5236c32238349
@@ -18,6 +18,7 @@ class Nonlinear3DMM(nn.Module):
         self.nz = nz                    # number of color channels in the input images. For color images this is 3
         self.m_dim = m_dim              # Dimension of camera matrix latent vector [8]
         self.il_dim = il_dim            # Dimension of illumination latent vector [27]
+        self.tex_sz = tex_sz            # Texture size
 
         # encoder
         self.nl_encoder = NLEncoderBlock(self.nz, self.gf_dim)
@@ -29,16 +30,22 @@ class Nonlinear3DMM(nn.Module):
         self.lv_shape_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 2)
         self.lv_tex_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 2)
 
+        #
+        self.albedo_layer = NLAlbedoDecoderBlock(self.gfc_dim//2, self.gf_dim, self.tex_sz)
+
 
     def forward(self, x):
         x = self.nl_encoder(x)
 
+        """
         lv_m = self.lv_m_layer(x)
         lv_il = self.lv_il_layer(x)
         lv_shape = self.lv_shape_layer(x)
+        """
         lv_tex = self.lv_tex_layer(x)
+        albedo = self.albedo_layer(lv_tex)
 
-        return lv_m, lv_il, lv_shape, lv_tex
+        return albedo
 
 
 class Helper():
@@ -103,11 +110,8 @@ if __name__ == "__main__":
             inputs = inputs.to(device)
             labels = labels.to(device)
 
-            m, il, shape, tex = nl3dmm(inputs)
+            tex = nl3dmm(inputs)
 
-            loss = criterion(m, m)
-            loss = criterion(il, il)
-            loss = criterion(shape, shape)
             loss = criterion(tex, tex)
             loss.backward()
             optimizer.step()
