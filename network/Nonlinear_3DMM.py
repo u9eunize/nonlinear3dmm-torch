@@ -31,7 +31,7 @@ class Nonlinear3DMM(nn.Module):
         self.lv_tex_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 2)
 
         #
-        self.albedo_layer = NLAlbedoDecoderBlock(self.gfc_dim//2, self.gf_dim, self.tex_sz)
+        self.albedo_gen = NLAlbedoDecoderBlock(self.gfc_dim//2, self.gf_dim, self.tex_sz)
 
 
     def forward(self, x):
@@ -43,7 +43,7 @@ class Nonlinear3DMM(nn.Module):
         lv_shape = self.lv_shape_layer(x)
         """
         lv_tex = self.lv_tex_layer(x)
-        albedo = self.albedo_layer(lv_tex)
+        albedo = self.albedo_gen(lv_tex)
 
         return albedo
 
