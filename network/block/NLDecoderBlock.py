@@ -1,7 +1,10 @@
 from collections import OrderedDict
+
+import torch
 from torch import nn
 from _3dmm_utils import *
 import numpy as np
+from rendering_ops import bilinear_interpolate
 
 
 class ConvTranspose2dOutputResize(nn.Module):
@@ -101,3 +104,45 @@ class NLAlbedoDecoderBlock(nn.Module):
         x = self.nl_decoder_block(x)
         return x
 
+
+class NLShapeDecoderBlock(nn.Module):
+
+    def __init__(self, in_dim, gf_dim, gfc_dim, tex_sz):
+        super(NLShapeDecoderBlock, self).__init__()
+
+        self.gf_dim = gf_dim
+        self.gfc_dim = gfc_dim
+
+        self.s_h = int(tex_sz[0])
+        self.s_w = int(tex_sz[1])
+        self.s32_h = int(self.s_h / 32)
+        self.s32_w = int(self.s_w / 32)
+
+        # shape2d network
+        self.linear = nn.Linear(in_dim, self.gfc_dim * self.s32_h * self.s32_w)
+        self.bn_elu = nn.Sequential(
+            nn.BatchNorm2d(self.gfc_dim),
+            nn.ELU(inplace=True)
+        )
+        self.nl_decoder_block = NLDecoderBlock(self.gfc_dim, self.gf_dim, 3, [self.s32_h, self.s32_w])
+        self.in_dim = self.nl_decoder_block.in_dim
+
+        # generate shape1d
+        self.vt2pixel_u, self.vt2pixel_v = load_3DMM_vt2pixel()
+
+        self.vt2pixel_u = torch.tensor(self.vt2pixel_u[:-1], dtype=torch.float32)
+        self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=torch.float32)
+
+    def forward(self, x):
+        # shape 2d
+        x = self.linear(x)
+        x = x.view(-1, self.gfc_dim, self.s32_h, self.s32_w)
+        x = self.bn_elu(x)
+        shape2d = 2 * self.nl_decoder_block(x)
+
+        # shape 1d
+        bat_sz = x.shape[0]
+        shape1d = bilinear_interpolate(shape2d, self.vt2pixel_u, self.vt2pixel_v)
+        shape1d = shape1d.view(bat_sz, -1)
+
+        return shape1d

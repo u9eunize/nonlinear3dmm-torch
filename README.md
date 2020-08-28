@@ -1,2 +1,5 @@
-#NonLinear3DMM-torch
+# NonLinear3DMM-torch
 
+## TODO
+
+- Docker automation

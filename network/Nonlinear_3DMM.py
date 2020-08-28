@@ -3,10 +3,15 @@ from torch import nn
 
 from network.block import *
 
+TRI_NUM = 105840
+VERTEX_NUM = 53215
+CONST_PIXELS_NUM = 20
+
 
 class Nonlinear3DMM(nn.Module):
     def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, m_dim=8, il_dim=27, tex_sz=(192, 224)):
         super(Nonlinear3DMM, self).__init__()
+        dtype = torch.float
 
         # naming from https://gist.github.com/EderSantana/9b0d5fb309d775b995d5236c32238349
         # TODO: gen(gf)->encoder(ef)
@@ -20,6 +25,21 @@ class Nonlinear3DMM(nn.Module):
         self.il_dim = il_dim            # Dimension of illumination latent vector [27]
         self.tex_sz = tex_sz            # Texture size
 
+        # Basis
+        mu_shape, w_shape = load_Basel_basic('shape')
+        mu_exp, w_exp = load_Basel_basic('exp')
+
+        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype)
+        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM), dtype=dtype)
+        # self.std_shape  = np.load('std_shape.npy')
+
+        self.mean_m = torch.tensor(np.load('mean_m.npy'), dtype=dtype)
+        self.std_m = torch.tensor(np.load('std_m.npy'), dtype=dtype)
+
+        self.w_shape = torch.tensor(w_shape, dtype=dtype)
+        self.w_exp = torch.tensor(w_exp, dtype=dtype)
+
+
         # encoder
         self.nl_encoder = NLEncoderBlock(self.nz, self.gf_dim)
         self.in_dim = self.nl_encoder.in_dim
@@ -32,20 +52,23 @@ class Nonlinear3DMM(nn.Module):
 
         #
         self.albedo_gen = NLAlbedoDecoderBlock(self.gfc_dim//2, self.gf_dim, self.tex_sz)
-
+        self.shape1d_gen = NLShapeDecoderBlock(self.gfc_dim//2, self.gf_dim, self.gfc_dim, self.tex_sz)
 
     def forward(self, x):
-        x = self.nl_encoder(x)
+        encoder_out = self.nl_encoder(x)
 
-        """
-        lv_m = self.lv_m_layer(x)
-        lv_il = self.lv_il_layer(x)
-        lv_shape = self.lv_shape_layer(x)
-        """
-        lv_tex = self.lv_tex_layer(x)
+        lv_m = self.lv_m_layer(encoder_out)
+        lv_il = self.lv_il_layer(encoder_out)
+        lv_shape = self.lv_shape_layer(encoder_out)
+        lv_tex = self.lv_tex_layer(encoder_out)
+
         albedo = self.albedo_gen(lv_tex)
+        shape1d = self.shape1d_gen(lv_shape)
 
-        return albedo
+        m_full = lv_m * self.std_m + self.mean_m
+        shape_full = shape1d * self.std_shape + self.mean_shape
+
+        return shape_full
 
 
 class Helper():
@@ -111,6 +134,7 @@ if __name__ == "__main__":
             labels = labels.to(device)
 
             tex = nl3dmm(inputs)
+            print(tex.shape)
 
             loss = criterion(tex, tex)
             loss.backward()
