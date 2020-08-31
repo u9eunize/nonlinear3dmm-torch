@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import ops
 
-from _3dmm_utils import *
+from utils import *
 
 def get_shape(tensor):
     static_shape = tensor.shape.as_list()
@@ -26,10 +26,19 @@ ops.NotDifferentiable("ZbufferTriV2Sz224")
 
 
 def warp_texture(texture, m, mshape, output_size=224):
+    '''
+        Render image
+        Parameters
+            texture:    [batch, 192, 224, 3]
+            m:          [batch, 8]
+            mshape:     [batch , VERTEXU_NUM * 3]
+        Returns
+            image: [batch, x, t, c]
+    '''
     def flatten(x):
         return tf.reshape(x, [-1])
 
-    n_size = get_shape(texture)
+    n_size = get_shape(texture) #
     n_size = n_size[0]
 
     s = output_size   
@@ -482,147 +491,120 @@ def bilinear_sampler(img, x, y):
 
 def generate_shade(il, m, mshape, texture_size = [192, 224], is_with_normal=False):
     '''
-    print("get_shape(il) ")
-    print(get_shape(il) )
-    print("get_shape(m) ")
-    print(get_shape(m) )
-    print("get_shape(mshape) ")
-    print(get_shape(mshape) )
+        빛, projection matric, shape로 texture를 입힐 shading map 렌더링
+
+        Parameters
+            il:             [batch, 27]
+            m:              [batch, 8]
+            mshape:         [batch, VERTEX_NUM * 3]
+            texture_size:   [192, 224]
+            is_with_normal: False
+        Returns
+            image: [batch, 192, 224, 3]
     '''
 
-    n_size = get_shape(il)       
-    n_size = n_size[0]
+    n_size = get_shape(il)  # [batch, 27]
+    n_size = n_size[0]  # batch
 
-    # Tri, tri2vt
-    tri = load_3DMM_tri()
-    vertex_tri = load_3DMM_vertex_tri()
-    vt2pixel_u, vt2pixel_v = load_3DMM_vt2pixel()
-    tri_2d = load_3DMM_tri_2d()
-    tri_2d_barycoord = load_3DMM_tri_2d_barycoord()
-    
-        
-    
-    tri_const = tf.constant(tri, tf.int32)
-    vertex_tri_const = tf.constant(vertex_tri, tf.int32)
+    # load 3DMM files
+    tri                     = load_3DMM_tri()   # [3, TRI_NUM + 1]
+    vertex_tri              = load_3DMM_vertex_tri() # [8, VERTEX_NUM]
+    vt2pixel_u, vt2pixel_v  = load_3DMM_vt2pixel() # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
+    tri_2d                  = load_3DMM_tri_2d() # [192, 224] (Fragment shader)
+    tri_2d_barycoord        = load_3DMM_tri_2d_barycoord() # [192, 224, 3]
 
-    
-    tri_2d_const = tf.constant(tri_2d, tf.int32)
-    tri_2d_const_flat = tf.reshape(tri_2d_const, shape=[-1,1])
+    # 삼각형의 각 vertex별로 나눈 것
+    tri_const     = tf.constant(tri, tf.int32)  # [3, TRI_NUM + 1]
+    tri2vt1_const = tf.constant(tri[0, :], tf.int32)  # [TRI_NUM + 1, ]
+    tri2vt2_const = tf.constant(tri[1, :], tf.int32)  # [TRI_NUM + 1, ]
+    tri2vt3_const = tf.constant(tri[2, :], tf.int32)  # [TRI_NUM + 1, ]
 
-    tri2vt1_const = tf.constant(tri[0,:], tf.int32)
-    tri2vt2_const = tf.constant(tri[1,:], tf.int32)
-    tri2vt3_const = tf.constant(tri[2,:], tf.int32)
+    # 텐서로...
+    vertex_tri_const    = tf.constant(vertex_tri, tf.int32)    # [8, VERTEX_NUM]
+    tri_2d_const        = tf.constant(tri_2d, tf.int32)    # [192, 224]
+    tri_2d_const_flat   = tf.reshape(tri_2d_const, shape=[-1,1])  # [192 * 224, ]
 
-    vt1 = tf.gather( tri2vt1_const,  tri_2d_const_flat ) 
-    vt2 = tf.gather( tri2vt2_const,  tri_2d_const_flat ) 
-    vt3 = tf.gather( tri2vt3_const,  tri_2d_const_flat )
+    # 2d 이미지 픽셀에 해당하는 vertex들을 추출(vertex to pixel)
+    # 픽셀에 박힐 vertex만 추출한다는 거임!
+    vt1 = tf.gather( tri2vt1_const,  tri_2d_const_flat )    # [192 * 224, 1]
+    vt2 = tf.gather( tri2vt2_const,  tri_2d_const_flat )    # [192 * 224, 1]
+    vt3 = tf.gather( tri2vt3_const,  tri_2d_const_flat )    # [192 * 224, 1]
 
-    vt1_coeff = tf.reshape(tf.constant(tri_2d_barycoord[:,:,0], tf.float32), shape=[-1,1])
-    vt2_coeff = tf.reshape(tf.constant(tri_2d_barycoord[:,:,1], tf.float32), shape=[-1,1])
-    vt3_coeff = tf.reshape(tf.constant(tri_2d_barycoord[:,:,2], tf.float32), shape=[-1,1])
+    # 최종적으로 normal vector에 곱해져서 색을 정할 때 사용되는 상수    vt1_coeff = tf.reshape(tf.constant(tri_2d_barycoord[:,:,0], tf.float32), shape=[-1,1])  # [192 * 224, 1]
+    vt1_coeff = tf.reshape(tf.constant(tri_2d_barycoord[:, :, 0], tf.float32), shape=[-1, 1])  # [192 * 224, 1]
+    vt2_coeff = tf.reshape(tf.constant(tri_2d_barycoord[:, :, 1], tf.float32), shape=[-1, 1])  # [192 * 224, 1]
+    vt3_coeff = tf.reshape(tf.constant(tri_2d_barycoord[:, :, 2], tf.float32), shape=[-1, 1])  # [192 * 224, 1]
 
+    # 단순히 batch 단위로 나눈 것수
+    m_single     = tf.split(axis = 0, num_or_size_splits = n_size, value = m)   # [1, 8] x batch
+    shape_single = tf.split(axis = 0, num_or_size_splits = n_size, value = mshape)  # [1, VERTEX_NUM * 3] x batch
 
-
-    #mshape = mshape * tf.constant(self.std_shape) + tf.constant(self.mean_shape)
-
-    m_single     = tf.split(axis = 0, num_or_size_splits = n_size, value = m)
-    shape_single = tf.split(axis = 0, num_or_size_splits = n_size, value = mshape)
-
-    #def get_normal_flat(shape_single):
-    #    vertex3d_rs = tf.transpose(tf.reshape( shape_single, shape = [-1, 3] ))
-    #    normal, normalf = compute_normal(vertex3d_rs, tri_const, vertex_tri_const)
-    #    normalf_flat = tf.gather_nd(normalf, tri_2d_const_flat)
-    #    normalf_flats.append(normalf_flat)
-
-  
-    #normalf_flats = tf.map_fn( lambda ss: get_normal_flat(ss), shape_single  )
-    
+    # normal vector들을 추출해보자
     normalf_flats = []
     for i in range(n_size):
-        m_i = tf.transpose(tf.reshape(m_single[i], [4,2]))
-        
-        m_i_row1 = tf.nn.l2_normalize(m_i[0,0:3], dim = 0)
-        m_i_row2 = tf.nn.l2_normalize(m_i[1,0:3], dim = 0)
-        m_i_row3 = tf.cross(m_i_row1, m_i_row2)
-        m_i = tf.concat([ tf.expand_dims(m_i_row1, 0), tf.expand_dims(m_i_row2, 0), tf.expand_dims(m_i_row3, 0)], axis = 0)
+        # m은 projection parameter로 2개의 rotation 벡터를 포함
+        m_i = tf.transpose(tf.reshape(m_single[i], [4,2]))  # [4, 2]
+        # local space의 벡터
+        m_i_row1 = tf.nn.l2_normalize(m_i[0,0:3], dim = 0)  # [3, ]
+        # world space의 벡터
+        m_i_row2 = tf.nn.l2_normalize(m_i[1,0:3], dim = 0)  # [3, ]
+        # local space와 world space 모두 수직인 cross product 벡터
+        m_i_row3 = tf.cross(m_i_row1, m_i_row2) # [3, ]
+        # ??????????????????????????????????????????????????? 이게 뭘까??
+        m_i = tf.concat([ tf.expand_dims(m_i_row1, 0), tf.expand_dims(m_i_row2, 0), tf.expand_dims(m_i_row3, 0)], axis = 0) # [3, 3]
 
+        # 1개의 shape에 대하여 진행할거임
+        vertex3d_rs = tf.transpose(tf.reshape( shape_single[i], shape = [-1, 3] ))   # [3, VERTEX_NUM]
 
+        # vertex마다의 normal vector, triangle마다의 normal vector를 return
+        normal, normalf = _DEPRECATED_compute_normal(vertex3d_rs, tri_const, vertex_tri_const)  # [VERTEX, 3], [TRI_NUM, 3]
 
+        # normal vector를 projection에 맞게 rotation 시킴
+        normal = tf.transpose(normal)   # [3, VERTEX_NUM]
+        rotated_normal = tf.matmul(m_i, normal, False, False)   # [3, VERTEX_NUM]
+        rotated_normal = tf.transpose(rotated_normal)   # [VERTEX_NUM, 3]
 
-        '''
-        m_i_row1 = tf.nn.l2_normalize(m_i[0,0:3], dim = 0)
-        m_i_row2 = tf.nn.l2_normalize(m_i[1,0:3], dim = 0)
-        m_i_row3 = tf.concat([tf.reshape(tf.cross(m_i_row1, m_i_row2), shape = [1, 3]), tf.zeros([1, 1])], axis = 1)
-                  
-        m_i = tf.concat([m_i, m_i_row3], axis = 0)
-        print('m_i.shape()')
-        print(m_i.get_shape())
-        '''
+        # vertex에 해당하는 pixel 값들을 추출
+        normal_flat_vt1 = tf.gather_nd(rotated_normal, vt1) # [192 x 224, 3]
+        normal_flat_vt2 = tf.gather_nd(rotated_normal, vt2) # [192 x 224, 3]
+        normal_flat_vt3 = tf.gather_nd(rotated_normal, vt3) # [192 x 224, 3]
 
-        vertex3d_rs = tf.transpose(tf.reshape( shape_single[i], shape = [-1, 3] ))
-
-        normal, normalf = _DEPRECATED_compute_normal(vertex3d_rs, tri_const, vertex_tri_const)
-
-
-        ###
-        '''
-        normalf = tf.transpose(normalf)
-        rotated_normalf = tf.matmul(m_i, normalf, False, False)
-        rotated_normalf = tf.transpose(rotated_normalf)
-
-        normalf_flat = tf.gather_nd(rotated_normalf, tri_2d_const_flat) 
-        normalf_flats.append(normalf_flat)
-        '''
-
-
-
-
-        ###
-        normal = tf.transpose(normal)
-        rotated_normal = tf.matmul(m_i, normal, False, False)
-        rotated_normal = tf.transpose(rotated_normal)
-        normal_flat_vt1 = tf.gather_nd(rotated_normal, vt1)
-        normal_flat_vt2 = tf.gather_nd(rotated_normal, vt2)
-        normal_flat_vt3 = tf.gather_nd(rotated_normal, vt3)
-        
-        normalf_flat = normal_flat_vt1*vt1_coeff + normal_flat_vt2*vt2_coeff + normal_flat_vt3*vt3_coeff
+        # barycentric coordinate로 변경
+        normalf_flat = normal_flat_vt1 * vt1_coeff + normal_flat_vt2 * vt2_coeff + normal_flat_vt3 * vt3_coeff    # [192 x 224, 3]
         normalf_flats.append(normalf_flat)
 
+    # batch들을 합친 것
+    normalf_flats = tf.stack(normalf_flats) # [batch, 192 x 224, 3]
 
-
-
-    normalf_flats = tf.stack(normalf_flats)
-    
-    #print("normalf_flats.get_shape()")
-    #print(normalf_flats.get_shape())
-
-    #print("il.get_shape()")
-    #print(il.get_shape())
-
-    shade = shading(il, normalf_flats)
-
-    #print("shade.get_shape()")
-    #print(shade.get_shape())
+    # 명암조절 map
+    shade = shading(il, normalf_flats)  # [batch, 192 x 224, 3]
 
     if is_with_normal:
         return tf.reshape(shade, shape = [-1, texture_size[0], texture_size[1], 3]), tf.reshape(normalf_flats, shape = [-1, texture_size[0], texture_size[1], 3]), 
 
-
-
-    return tf.reshape(shade, shape = [-1, texture_size[0], texture_size[1], 3])
+    return tf.reshape(shade, shape = [-1, texture_size[0], texture_size[1], 3]) # [batch, 192, 224, 3]
 
 
 
 def shading(L, normal):
+    '''
+        빛과 triangle 각도에 따른 명암 계산
 
+        Parameters
+            L:      [batch, 27]
+            normal: [batch, 192 * 224, 3]
+        Returns
+            normal_map: [batch, 192, 224, 3]
+    '''
     
-    shape = normal.get_shape().as_list()
+    shape = normal.get_shape().as_list() # [batch, 192 * 224, 3]
     
-    normal_x, normal_y, normal_z = tf.split(tf.expand_dims(normal, -1), axis=2, num_or_size_splits=3)
+    normal_x, normal_y, normal_z = tf.split(tf.expand_dims(normal, -1), axis=2, num_or_size_splits=3) # [batch, 192 *224, 1, 1] x XYZ_space
     pi = math.pi
 
-    sh=[0]*9
-    sh[0] = 1/math.sqrt(4*pi) * tf.ones_like(normal_x)
+    # ㅁㄴㅇㄹ 몰라ㅏㅏ
+    sh    = [0]*9
+    sh[0] = 1/math.sqrt(4*pi) * tf.ones_like(normal_x) #
     sh[1] = ((2*pi)/3)*(math.sqrt(3/(4*pi)))* normal_z
     sh[2] = ((2*pi)/3)*(math.sqrt(3/(4*pi)))* normal_y
     sh[3] = ((2*pi)/3)*(math.sqrt(3/(4*pi)))* normal_x
@@ -632,7 +614,7 @@ def shading(L, normal):
     sh[7] = (pi/4)*(3)  *(math.sqrt(5/(12*pi)))*(normal_x*normal_y)
     sh[8] = (pi/4)*(3/2)*(math.sqrt(5/(12*pi)))*( tf.square(normal_x)-tf.square(normal_y))
 
-    sh = tf.concat(sh, axis=3)
+    sh = tf.concat(sh, axis=3) # [batch, 192 * 224, 1, 9]
     print('sh.get_shape()')
     print(sh.get_shape())
 
@@ -824,25 +806,32 @@ def _DEPRECATED_compute_landmarks(m, mshape, output_size=224):
     return tf.stack(landmarks_u), tf.stack(landmarks_v)
 
 def _DEPRECATED_compute_normal(vertex, tri, vertex_tri):
-    # Unit normals to the faces
-    # vertex : 3xvertex_num
-    # tri : 3xtri_num
+    '''
+        vertex, triangle 마다의 normal vector를 구해줌
 
-    vertex = tf.transpose(vertex)
+        Parameters
+            vertex:     [3, VERTEX_NUM]
+            tri:        [3, TRI_NUM + 1]
+            vertex_tri  [8, VERTEX_NUM]
+        Returns
+            normal:     [3, VERTEX_NUM]
+            normalf:    [3, TRI_NUM + 1]
+    '''
 
-    vt1_indices, vt2_indices, vt3_indices = tf.split(tf.transpose(tri), num_or_size_splits = 3, axis = 1)
-    
+    # vertex들을 분리
+    vt1_indices, vt2_indices, vt3_indices = tf.split(tf.transpose(tri), num_or_size_splits = 3, axis = 1) # [VERTEX_NUM, 1]
 
-    vt1 = tf.gather_nd(vertex, vt1_indices)
-    #print('get_shape(vt1)')
-    #print(get_shape(vt1))
-    vt2 = tf.gather_nd(vertex, vt2_indices)
-    vt3 = tf.gather_nd(vertex, vt3_indices)
+    # shape에서의 vertex들이 3DMM에서 정의한 triangle에 매칭되는 좌표들을 추출
+    vertex = tf.transpose(vertex)  # [VERTEX_NUM, 3]
+    vt1 = tf.gather_nd(vertex, vt1_indices) # [TRI_NUM, 3]
+    vt2 = tf.gather_nd(vertex, vt2_indices) # [TRI_NUM, 3]
+    vt3 = tf.gather_nd(vertex, vt3_indices) # [TRI_NUM, 3]
 
-
+    # triangle의 normal vector를 추출
     normalf = tf.cross(vt2 - vt1, vt3 - vt1)
     normalf = tf.nn.l2_normalize(normalf, dim = 1)
 
+    #
     mask = tf.tile( tf.expand_dims(  tf.not_equal(vertex_tri, tri.shape[1] - 1), 2), multiples = [1, 1, 3])
     mask = tf.cast( mask, vertex.dtype  )
     vertex_tri = tf.reshape(vertex_tri, shape = [-1, 1])
@@ -850,15 +839,6 @@ def _DEPRECATED_compute_normal(vertex, tri, vertex_tri):
 
     normal = tf.reduce_sum( tf.multiply( normal, mask ),  axis = 0)
     normal = tf.nn.l2_normalize(normal, dim = 1)
-
-
-    #print('get_shape(normalf)')
-    #print(get_shape(normalf))
-
-
-    #print('get_shape(normal)')
-    #print(get_shape(normal))
-
 
     # enforce that the normal are outward
     v = vertex - tf.reduce_mean(vertex,0)
@@ -873,6 +853,53 @@ def _DEPRECATED_compute_normal(vertex, tri, vertex_tri):
 
     return normal, normalf
 
+def _DEPRECATED_compute_normal_torch(vertex, tri, vertex_tri):
+    '''
+        vertex, triangle 마다의 normal vector를 구해줌
+
+        Parameters
+            vertex:     [3, VERTEX_NUM]
+            tri:        [3, TRI_NUM + 1]
+            vertex_tri  [8, VERTEX_NUM]
+        Returns
+            normal:     [3, VERTEX_NUM]
+            normalf:    [3, TRI_NUM + 1]
+    '''
+
+    # vertex들을 분리
+    vt1_indices, vt2_indices, vt3_indices = tf.split(tf.transpose(tri), num_or_size_splits = 3, axis = 1) # [VERTEX_NUM, 1]
+
+    # shape에서의 vertex들이 3DMM에서 정의한 triangle에 매칭되는 좌표들을 추출
+    vertex = tf.transpose(vertex)  # [VERTEX_NUM, 3]
+    vt1 = tf.gather_nd(vertex, vt1_indices) # [TRI_NUM, 3]
+    vt2 = tf.gather_nd(vertex, vt2_indices) # [TRI_NUM, 3]
+    vt3 = tf.gather_nd(vertex, vt3_indices) # [TRI_NUM, 3]
+
+    # triangle의 normal vector를 추출
+    normalf = tf.cross(vt2 - vt1, vt3 - vt1)
+    normalf = tf.nn.l2_normalize(normalf, dim = 1)
+
+    #
+    mask = tf.tile( tf.expand_dims(  tf.not_equal(vertex_tri, tri.shape[1] - 1), 2), multiples = [1, 1, 3])
+    mask = tf.cast( mask, vertex.dtype  )
+    vertex_tri = tf.reshape(vertex_tri, shape = [-1, 1])
+    normal = tf.reshape(tf.gather_nd(normalf, vertex_tri), shape = [8, -1, 3])
+
+    normal = tf.reduce_sum( tf.multiply( normal, mask ),  axis = 0)
+    normal = tf.nn.l2_normalize(normal, dim = 1)
+
+    # enforce that the normal are outward
+    v = vertex - tf.reduce_mean(vertex,0)
+    s = tf.reduce_sum( tf.multiply(v, normal), 0 )
+
+    count_s_greater_0 = tf.count_nonzero( tf.greater(s, 0) )
+    count_s_less_0 = tf.count_nonzero( tf.less(s, 0) )
+
+    sign = 2 * tf.cast(tf.greater(count_s_greater_0, count_s_less_0), tf.float32) - 1
+    normal = tf.multiply(normal, sign)
+    normalf = tf.multiply(normalf, sign)
+
+    return normal, normalf
 
 def unwarp_texture(image, m, mshape, output_size=224, is_reduce = False):
     #TO Do: correct the mask
