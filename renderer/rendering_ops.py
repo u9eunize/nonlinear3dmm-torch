@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import ops
 import torch
+import torch.nn.functional as F
 
 from utils import *
 
@@ -19,14 +20,26 @@ def get_shape(tensor):
 
 _cuda_op_module_v2_sz224 = tf.load_op_library(os.path.join(tf.resource_loader.get_data_files_path(), 'TF_newop/cuda_op_kernel_v2_sz224.so'))
 zbuffer_tri_v2_sz224 = _cuda_op_module_v2_sz224.zbuffer_tri_v2_sz224
+ops.NotDifferentiable("ZbufferTriV2Sz224")
+
+
 
 def ZBuffer_Rendering_CUDA_op_v2_sz224(s2d, tri, vis):
     tri_map, zbuffer = zbuffer_tri_v2_sz224(s2d, tri, vis)
     return tri_map, zbuffer
+
 def ZBuffer_Rendering_CUDA_op_v2_sz224_torch(s2d, tri, vis):
-    tri_map, zbuffer = zbuffer_tri_v2_sz224(s2d, tri, vis)
-    return tri_map, zbuffer
-ops.NotDifferentiable("ZbufferTriV2Sz224")
+    # _cuda_op_module_v2_sz224 = tf.load_op_library(
+    # os.path.join(tf.resource_loader.get_data_files_path(), 'TF_newop/cuda_op_kernel_v2_sz224.so'))
+    # zbuffer_tri_v2_sz224 = _cuda_op_module_v2_sz224.zbuffer_tri_v2_sz224
+    # tri_map, zbuffer = zbuffer_tri_v2_sz224(s2d, tri, vis)
+
+    BATCH_SIZE = 64
+    placeholder_tri_map = np.random.randint(0, 105840 + 1, (1, 224, 224))
+    placeholder_zbuffer = np.random.randint(0, 2, (1, 224, 224))
+
+    return torch.from_numpy(np.concatenate([placeholder_tri_map] * BATCH_SIZE)), torch.from_numpy(np.concatenate([placeholder_zbuffer] * BATCH_SIZE))
+
 
 
 def warp_texture(texture, m, mshape, output_size=224):
@@ -170,132 +183,232 @@ def warp_texture(texture, m, mshape, output_size=224):
     return images, masks
 
 
+
 def warp_texture_torch ( texture, m, mshape, output_size=224 ):
     '''
         Render image
         Parameters
-            texture:    [batch, 192, 224, 3]
+            texture:    [batch, 3, 192, 224]
             m:          [batch, 8]
             mshape:     [batch , VERTEXU_NUM * 3]
         Returns
             image: [batch, x, t, c]
     '''
 
-    def flatten ( x ):
-        return tf.reshape(x, [-1])
+    texture = texture.permute((0, 2, 3, 1)) # [batch, 192, 224, 3]
 
-    n_size = get_shape(texture)  #
-    n_size = n_size[0]
+    BATCH_SIZE = texture.shape[0]
 
-    s = output_size
+    tri = torch.from_numpy(load_3DMM_tri())  # [3, TRI_NUM + 1]
+    vertex_tri = torch.from_numpy(load_3DMM_vertex_tri())  # [8, VERTEX_NUM]
+    vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel) for vt2pixel in
+                              load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
 
-    # Tri, tri2vt
-    tri = load_3DMM_tri()
-    vertex_tri = load_3DMM_vertex_tri()
-    vt2pixel_u, vt2pixel_v = load_3DMM_vt2pixel()
 
-    tri2vt1_const = tf.constant(tri[0, :], tf.int32)
-    tri2vt2_const = tf.constant(tri[1, :], tf.int32)
-    tri2vt3_const = tf.constant(tri[2, :], tf.int32)
+    m = m.view((BATCH_SIZE, 4, 2))
+    m_row1 = F.normalize(m[:, 0:3, 0], dim=1)
+    m_row2 = F.normalize(m[:, 0:3, 1], dim=1)
+    m_row3 = torch.cross(m_row1, m_row2)
+    m_row3 = F.pad(m_row3, (0, 1))
+    m_row3 = torch.unsqueeze(m_row3, -1)
+    m = torch.cat((m, m_row3), dim=2)
 
-    tri_const = tf.constant(tri, tf.int32)
-    vertex_tri_const = tf.constant(vertex_tri, tf.int32)
+    vertex3d = mshape.view((BATCH_SIZE, -1, 3))
+    vertex4d = F.pad(vertex3d, (0, 1), mode='constant', value=1)
+    # vertex4d = torch.cat((vertex3d, torch.ones(texture_torch.shape[0:2] + [1])))
 
-    # Vt2pix
-    vt2pixel_u_const = tf.constant(vt2pixel_u, tf.float32)
-    vt2pixel_v_const = tf.constant(vt2pixel_v, tf.float32)
+    # compare_numpy(vertex4d_, vertex4d)
 
-    # Convert projection matrix into 4x3 matrices
-    m = tf.reshape(m, [-1, 4, 2])  # batch_size x 4 x 2
+    vertex2d = torch.matmul(vertex4d, m)
+    # vertex2d = torch.transpose(vertex2d, 1, 2)
 
-    m_row1 = tf.nn.l2_normalize(m[:, 0:3, 0], axis=1)
-    m_row2 = tf.nn.l2_normalize(m[:, 0:3, 1], axis=1)
-    m_row3 = tf.pad(tf.cross(m_row1, m_row2), [[0, 0], [0, 1]], mode='CONSTANT', constant_values=0)
-    m_row3 = tf.expand_dims(m_row3, axis=2)
+    # compare_numpy(vertex2d_, vertex2d)
 
-    m = tf.concat([m, m_row3], axis=2)  # batch_size x 4 x 3
+    normal, normalf = compute_normal_torch(vertex3d, tri, vertex_tri )  # normal:  batch_size x vertex_num x 3  &  normalf: batch_size x tri_num x 3
+    # normal, normalf = _DEPRECATED_compute_normal_torch(vertex3d, tri, vertex_tri)
+    # compare_numpy(normal_, normal)
+    # compare_numpy(normalf_, normalf)
 
-    vertex3d = tf.reshape(mshape, shape=[n_size, -1, 3])  # batch_size x vertex_num x 3
-    vertex4d = tf.concat(axis=2, values=[vertex3d, tf.ones(get_shape(vertex3d)[0:2] + [1],
-                                                           tf.float32)])  # batch_size x vertex_num x 4
+    # normalf4d_ = tf.concat(axis=2, values=[normalf_, tf.ones(get_shape(normalf_)[0:2] + [1], tf.float64)])  # batch_size x tri_num x 4
+    normalf4d = F.pad(normalf, (0, 1), mode='constant', value=1)
 
-    vertex2d = tf.matmul(m, vertex4d, True, True)  # batch_size x 3 x vertex_num
-    vertex2d = tf.transpose(vertex2d, perm=[0, 2, 1])  # batch_size x vertex_num x 2
+    # compare_numpy(normalf4d_, normalf4d)
 
-    normal, normalf = compute_normal(vertex3d, tri_const,
-                                     vertex_tri_const)  # normal:  batch_size x vertex_num x 3  &  normalf: batch_size x tri_num x 3
-    normalf4d = tf.concat(axis=2, values=[normalf, tf.ones(get_shape(normalf)[0:2] + [1],
-                                                           tf.float32)])  # batch_size x tri_num x 4
+    # rotated_normalf_ = tf.matmul(m_, normalf4d_, True, True)  # batch_size x 3 x tri_num
+    # _, _, rotated_normalf_z_ = tf.split(axis=1, num_or_size_splits=3,
+    #                                     value=rotated_normalf_)  # batch_size x 1 x tri_num
+    # visible_tri_ = tf.greater(rotated_normalf_z_, 0)
+    # vertex2d_single_ = tf.split(axis=0, num_or_size_splits=n_size_, value=vertex2d_)
+    # visible_tri_single_ = tf.split(axis=0, num_or_size_splits=n_size_, value=visible_tri_)
 
-    rotated_normalf = tf.matmul(m, normalf4d, True, True)  # batch_size x 3 x tri_num
-    _, _, rotated_normalf_z = tf.split(axis=1, num_or_size_splits=3, value=rotated_normalf)  # batch_size x 1 x tri_num
+    rotated_normalf = torch.matmul(normalf4d, m)
+    rotated_normalf = torch.transpose(rotated_normalf, 1, 2)
+    _, _, rotated_normalf_z = torch.split(rotated_normalf, (1, 1, 1), dim=1)
+    visible_tri = torch.gt(rotated_normalf_z, 0)
 
-    visible_tri = tf.greater(rotated_normalf_z, 0)
+    # compare_numpy(rotated_normalf_z_, rotated_normalf_z)
 
-    vertex2d_single = tf.split(axis=0, num_or_size_splits=n_size, value=vertex2d)
-    visible_tri_single = tf.split(axis=0, num_or_size_splits=n_size, value=visible_tri)
+    # pixel_u_ = []
+    # pixel_v_ = []
+    #
+    # masks_ = []
+    #
+    # u_, v_ = tf.meshgrid(tf.linspace(0.0, output_size - 1.0, output_size),
+    #                      tf.linspace(0.0, output_size - 1.0, output_size))
+    # u_ = flatten(u_)
+    # v_ = flatten(v_)
+    # u_ = tf.cast(u_, dtype=tf.float64)
+    # v_ = tf.cast(v_, dtype=tf.float64)
 
-    pixel_u = []
-    pixel_v = []
+    grid = torch.linspace(0, output_size - 1, output_size)
+    u, v = torch.meshgrid(grid, grid)
+    u = torch.transpose(u, 0, 1)
+    v = torch.transpose(v, 0, 1)
+    u = torch.flatten(u)
+    v = torch.flatten(v)
 
-    masks = []
+    # ########################################################################################### begin of for
+    # for i in range(n_size_):
+    #     vertex2d_i_ = tf.squeeze(vertex2d_single_[i], axis=0)  # vertex_num x 3
+    #     visible_tri_i_ = tf.squeeze(visible_tri_single_[i], axis=0)  # 1 x tri_num
+    #
+    #     # vertex2d_i = torch.squeeze(vertex2d, dim=1)
+    #     # visible_tri_i = torch.squeeze(visible_tri, dim=1)
+    #
+    #     [vertex2d_u_, vertex2d_v_, vertex2d_z_] = tf.split(axis=1, num_or_size_splits=3, value=vertex2d_i_)
+    #     vertex2d_u_ = vertex2d_u_ - 1
+    #     vertex2d_v_ = output_size - vertex2d_v_
+    #     vertex2d_i_ = tf.concat(axis=1, values=[vertex2d_v_, vertex2d_u_, vertex2d_z_])
+    #     vertex2d_i_ = tf.transpose(vertex2d_i_)
+    #
+    #     # vertex2d_u, vertex2d_v, vertex2d_z = torch.split(vertex2d_i, (1, 1, 1), dim=2)
+    #     # vertex2d_u = vertex2d_u - 1
+    #     # vertex2d_v = output_size - vertex2d_v
+    #     # vertex2d_i = torch.cat((vertex2d_v, vertex2d_u, vertex2d_z), dim=2)
+    #     # vertex2d_i = torch.transpose(vertex2d_i, 1, 2)
+    #
+    #     # Applying Z-buffer
+    #     tri_map_2d_, mask_i_ = ZBuffer_Rendering_CUDA_op_v2_sz224(vertex2d_i_, tri_const_, visible_tri_i_)
+    #     tri_map_2d_flat_ = tf.cast(tf.reshape(tri_map_2d_, [-1]), 'int32')
+    #
+    #     # tri_map_2d_flat = tri_map_2d.view((BATCH_SIZE, -1))
+    #
+    #     # Calculate barycentric coefficient
+    #     vt1_ = tf.gather(tri2vt1_const_, tri_map_2d_flat_)
+    #     vt2_ = tf.gather(tri2vt2_const_, tri_map_2d_flat_)
+    #     vt3_ = tf.gather(tri2vt3_const_, tri_map_2d_flat_)
+    #
+    #     # vt = torch.gather(torch.unsqueeze(torch.transpose(tri, 0, 1), 0).repeat(BATCH_SIZE, 1, 1), 1, torch.unsqueeze(tri_map_2d_flat, dim=-1).repeat(1, 1, 3))
+    #
+    #     # compare_numpy(vt1_, vt[0][:, 0])
+    #     # compare_numpy(vt2_, vt[0][:, 1])
+    #     # compare_numpy(vt3_, vt[0][:, 2])
+    #
+    #     pixel1_uu_ = flatten(tf.gather(vertex2d_u_, vt1_))
+    #     pixel2_uu_ = flatten(tf.gather(vertex2d_u_, vt2_))
+    #     pixel3_uu_ = flatten(tf.gather(vertex2d_u_, vt3_))
+    #
+    #     # pixel_uu = torch.gather(F.pad(vertex2d_u.repeat(1, 1, 3), (0, 0, 0, 1)), 1, vt)
+    #
+    #     # compare_numpy(pixel1_uu_, pixel_uu[0][:, 0])
+    #     # compare_numpy(pixel2_uu_, pixel_uu[0][:, 1])
+    #     # compare_numpy(pixel3_uu_, pixel_uu[0][:, 2])
+    #
+    #     pixel1_vv_ = flatten(tf.gather(vertex2d_v_, vt1_))
+    #     pixel2_vv_ = flatten(tf.gather(vertex2d_v_, vt2_))
+    #     pixel3_vv_ = flatten(tf.gather(vertex2d_v_, vt3_))
+    #
+    #     # pixel_vv = torch.gather(F.pad(vertex2d_v.repeat(1, 1, 3), (0, 0, 0, 1)), 1, vt)
+    #
+    #     # compare_numpy(pixel1_vv_, pixel_vv[0][:, 0])
+    #     # compare_numpy(pixel2_vv_, pixel_vv[0][:, 1])
+    #     # compare_numpy(pixel3_vv_, pixel_vv[0][:, 2])
+    #
+    #     c1_, c2_, c3_ = barycentric(pixel1_uu_, pixel2_uu_, pixel3_uu_, pixel1_vv_, pixel2_vv_, pixel3_vv_, u_, v_)
+    #
+    #     ##
+    #     pixel1_u_ = tf.gather(vt2pixel_u_const_, vt1_)
+    #     pixel2_u_ = tf.gather(vt2pixel_u_const_, vt2_)
+    #     pixel3_u_ = tf.gather(vt2pixel_u_const_, vt3_)
+    #
+    #     # pixel_u = torch.gather(torch.unsqueeze(vt2pixel_u, -1).repeat(BATCH_SIZE, 1, 3), 1, vt)
+    #
+    #     # compare_numpy(pixel1_u_, pixel_u[0][:, 0])
+    #     # compare_numpy(pixel2_u_, pixel_u[0][:, 1])
+    #     # compare_numpy(pixel3_u_, pixel_u[0][:, 2])
+    #
+    #     pixel1_v_ = tf.gather(vt2pixel_v_const_, vt1_)
+    #     pixel2_v_ = tf.gather(vt2pixel_v_const_, vt2_)
+    #     pixel3_v_ = tf.gather(vt2pixel_v_const_, vt3_)
+    #
+    #     # pixel_v = torch.gather(torch.unsqueeze(vt2pixel_v, -1).repeat(BATCH_SIZE, 1, 3), 1, vt)
+    #
+    #     # compare_numpy(pixel1_v_, pixel_v[0][:, 0])
+    #     # compare_numpy(pixel2_v_, pixel_v[0][:, 1])
+    #     # compare_numpy(pixel3_v_, pixel_v[0][:, 2])
+    #
+    #     pixel_u_i_ = tf.reshape(pixel1_u_ * c1_ + pixel2_u_ * c2_ + pixel3_u_ * c3_, [output_size, output_size])
+    #     pixel_v_i_ = tf.reshape(pixel1_v_ * c1_ + pixel2_v_ * c2_ + pixel3_v_ * c3_, [output_size, output_size])
+    #
+    #     # pixel_u = torch.sum((pixel_u * torch.cat((torch.unsqueeze(c1, -1), torch.unsqueeze(c2, -1), torch.unsqueeze(c3, -1)), -1)), dim=2).view((BATCH_SIZE, output_size, output_size))
+    #     # pixel_v = torch.sum((pixel_v * torch.cat((torch.unsqueeze(c1, -1), torch.unsqueeze(c2, -1), torch.unsqueeze(c3, -1)), -1)), dim=2).view((BATCH_SIZE, output_size, output_size))
+    #
+    #     # compare_numpy(pixel_u_i_, pixel_u[0])
+    #     # compare_numpy(pixel_v_i_, pixel_v[0])
+    #
+    #     pixel_u_.append(pixel_u_i_)
+    #     pixel_v_.append(pixel_v_i_)
+    #
+    #     masks_.append(mask_i_)
+    # ########################################################################################### end of for
+    vertex2d_i = torch.squeeze(vertex2d, dim=1)
+    visible_tri_i = torch.squeeze(visible_tri, dim=1)
 
-    u, v = tf.meshgrid(tf.linspace(0.0, output_size - 1.0, output_size),
-                       tf.linspace(0.0, output_size - 1.0, output_size))
-    u = flatten(u)
-    v = flatten(v)
+    vertex2d_u, vertex2d_v, vertex2d_z = torch.split(vertex2d_i, (1, 1, 1), dim=2)
+    vertex2d_u = vertex2d_u - 1
+    vertex2d_v = output_size - vertex2d_v
+    vertex2d_i = torch.cat((vertex2d_v, vertex2d_u, vertex2d_z), dim=2)
+    vertex2d_i = torch.transpose(vertex2d_i, 1, 2)
 
-    for i in range(n_size):
-        vertex2d_i = tf.squeeze(vertex2d_single[i], axis=0)  # vertex_num x 3
-        visible_tri_i = tf.squeeze(visible_tri_single[i], axis=0)  # 1 x tri_num
+    tri_map_2d, masks = ZBuffer_Rendering_CUDA_op_v2_sz224_torch(vertex2d_i, tri, visible_tri_i)
+    tri_map_2d_flat = tri_map_2d.view((BATCH_SIZE, -1))
 
-        [vertex2d_u, vertex2d_v, vertex2d_z] = tf.split(axis=1, num_or_size_splits=3, value=vertex2d_i)
-        vertex2d_u = vertex2d_u - 1
-        vertex2d_v = s - vertex2d_v
+    vt = torch.gather(torch.unsqueeze(torch.transpose(tri, 0, 1), 0).repeat(BATCH_SIZE, 1, 1), 1,
+                      torch.unsqueeze(tri_map_2d_flat, dim=-1).repeat(1, 1, 3))
 
-        vertex2d_i = tf.concat(axis=1, values=[vertex2d_v, vertex2d_u, vertex2d_z])
-        vertex2d_i = tf.transpose(vertex2d_i)
+    pixel_uu = torch.gather(F.pad(vertex2d_u.repeat(1, 1, 3), (0, 0, 0, 1)), 1, vt)
 
-        # Applying Z-buffer
-        tri_map_2d, mask_i = ZBuffer_Rendering_CUDA_op_v2_sz224(vertex2d_i, tri_const, visible_tri_i)
+    pixel_vv = torch.gather(F.pad(vertex2d_v.repeat(1, 1, 3), (0, 0, 0, 1)), 1, vt)
 
-        tri_map_2d_flat = tf.cast(tf.reshape(tri_map_2d, [-1]), 'int32')
+    c1, c2, c3 = barycentric_torch(pixel_uu, pixel_vv, u, v)
 
-        # Calculate barycentric coefficient
-        vt1 = tf.gather(tri2vt1_const, tri_map_2d_flat)
-        vt2 = tf.gather(tri2vt2_const, tri_map_2d_flat)
-        vt3 = tf.gather(tri2vt3_const, tri_map_2d_flat)
+    pixel_u = torch.gather(torch.unsqueeze(vt2pixel_u, -1).repeat(BATCH_SIZE, 1, 3), 1, vt)
 
-        pixel1_uu = flatten(tf.gather(vertex2d_u, vt1))
-        pixel2_uu = flatten(tf.gather(vertex2d_u, vt2))
-        pixel3_uu = flatten(tf.gather(vertex2d_u, vt3))
+    pixel_v = torch.gather(torch.unsqueeze(vt2pixel_v, -1).repeat(BATCH_SIZE, 1, 3), 1, vt)
 
-        pixel1_vv = flatten(tf.gather(vertex2d_v, vt1))
-        pixel2_vv = flatten(tf.gather(vertex2d_v, vt2))
-        pixel3_vv = flatten(tf.gather(vertex2d_v, vt3))
-        c1, c2, c3 = barycentric(pixel1_uu, pixel2_uu, pixel3_uu, pixel1_vv, pixel2_vv, pixel3_vv, u, v)
+    pixel_u = torch.sum(
+        (pixel_u * torch.cat((torch.unsqueeze(c1, -1), torch.unsqueeze(c2, -1), torch.unsqueeze(c3, -1)), -1)),
+        dim=2).view((BATCH_SIZE, output_size, output_size))
+    pixel_v = torch.sum(
+        (pixel_v * torch.cat((torch.unsqueeze(c1, -1), torch.unsqueeze(c2, -1), torch.unsqueeze(c3, -1)), -1)),
+        dim=2).view((BATCH_SIZE, output_size, output_size))
 
-        ##
-        pixel1_u = tf.gather(vt2pixel_u_const, vt1)
-        pixel2_u = tf.gather(vt2pixel_u_const, vt2)
-        pixel3_u = tf.gather(vt2pixel_u_const, vt3)
+    # pixel_v_ = tf.stack(pixel_v_)
+    # pixel_u_ = tf.stack(pixel_u_)
+    #
+    # compare_numpy(pixel_v_, pixel_v)
+    # compare_numpy(pixel_u_, pixel_u)
+    #
+    # images_ = bilinear_sampler(texture_tf, pixel_v_, pixel_u_)
+    images = bilinear_sampler_torch(texture, pixel_v, pixel_u)
+    # masks_ = tf.stack(masks_)
 
-        pixel1_v = tf.gather(vt2pixel_v_const, vt1)
-        pixel2_v = tf.gather(vt2pixel_v_const, vt2)
-        pixel3_v = tf.gather(vt2pixel_v_const, vt3)
+    # compare_numpy(images_, images)
+    # compare_numpy(masks_, masks)
 
-        pixel_u_i = tf.reshape(pixel1_u * c1 + pixel2_u * c2 + pixel3_u * c3, [output_size, output_size])
-        pixel_v_i = tf.reshape(pixel1_v * c1 + pixel2_v * c2 + pixel3_v * c3, [output_size, output_size])
+    return images.permute((0, 3, 1, 2)), masks.permute((0, 3, 1, 2))
 
-        pixel_u.append(pixel_u_i)
-        pixel_v.append(pixel_v_i)
 
-        masks.append(mask_i)
-
-    images = bilinear_sampler(texture, pixel_v, pixel_u)
-    masks = tf.stack(masks)
-
-    return images, masks
 
 def barycentric(pixel1_u, pixel2_u, pixel3_u, pixel1_v, pixel2_v, pixel3_v, u, v):
 
@@ -316,23 +429,36 @@ def barycentric(pixel1_u, pixel2_u, pixel3_u, pixel1_v, pixel2_v, pixel3_v, u, v
     return c1, c2, c3
 
 
-def barycentric_torch(pixel1_u, pixel2_u, pixel3_u, pixel1_v, pixel2_v, pixel3_v, u, v):
 
-    v0_u = pixel2_u - pixel1_u
-    v0_v = pixel2_v - pixel1_v
+def barycentric_torch( pixel_uu, pixel_vv, u, v):
+    # v0_u_ = pixel2_u_ - pixel1_u_
+	# v0_v_ = pixel2_v_ - pixel1_v_
+    v0_u = pixel_uu[:, :, 1] - pixel_uu[:, :, 0]
+    v0_v = pixel_vv[:, :, 1] - pixel_vv[:, :, 0]
+    # v1_u_ = pixel3_u_ - pixel1_u_
+    # v1_v_ = pixel3_v_ - pixel1_v_
+    v1_u = pixel_uu[:, :, 2] - pixel_uu[:, :, 0]
+    v1_v = pixel_vv[:, :, 2] - pixel_vv[:, :, 0]
 
-    v1_u = pixel3_u - pixel1_u
-    v1_v = pixel3_v - pixel1_v
+    # v2_u_ = u_ - pixel1_u_
+    # v2_v_ = v_ - pixel1_v_
 
-    v2_u = u - pixel1_u
-    v2_v = v - pixel1_v
+    v2_u = u - pixel_uu[:, :, 0]
+    v2_v = v - pixel_vv[:, :, 0]
 
-    invDenom = 1.0/(v0_u * v1_v - v1_u * v0_v + 1e-6)
-    c2 = (v2_u * v1_v - v1_u * v2_v) * invDenom
-    c3 = (v0_u * v2_v - v2_u * v0_v) * invDenom
+    # invDenom_ = 1.0/(v0_u_ * v1_v_ - v1_u_ * v0_v_ + 1e-6)
+    # c2_ = (v2_u_ * v1_v_ - v1_u_ * v2_v_) * invDenom_
+    # c3_ = (v0_u_ * v2_v_ - v2_u_ * v0_v_) * invDenom_
+    # c1_ = 1.0 - c2_ - c3_
+
+    invDenom = torch.mul(v0_u, v1_v) - torch.mul(v1_u, v0_v) + 1e-6
+    c2 = torch.div((v2_u * v1_v - v1_u * v2_v), invDenom)
+    c3 = torch.div((v0_u * v2_v - v2_u * v0_v), invDenom)
     c1 = 1.0 - c2 - c3
 
     return c1, c2, c3
+
+
 
 def barycentric_alternative(pixel1_u, pixel2_u, pixel3_u, pixel1_v, pixel2_v, pixel3_v, u, v):
     '''
@@ -441,75 +567,135 @@ def compute_normal(vertex, tri, vertex_tri):
 
 
 def compute_normal_torch ( vertex, tri, vertex_tri ):
-    # Unit normals to the faces
-    # Parameters:
-    #   vertex : batch_size x vertex_num x 3
-    #   tri : 3xtri_num
-    #   vertex_tri: T x vertex_num (T=8: maxium number of triangle each vertex can belong to)
-    # Output
-    #   normal:  batch_size x vertex_num x 3
-    #   normalf: batch_size x tri_num x 3
+	# Unit normals to the faces
+	# Parameters:
+	#   vertex : batch_size x vertex_num x 3
+	#   tri : 3xtri_num
+	#   vertex_tri: T x vertex_num (T=8: maxium number of triangle each vertex can belong to)
+	# Output
+	#   normal:  batch_size x vertex_num x 3
+	#   normalf: batch_size x tri_num x 3
 
-    vt1_indices, vt2_indices, vt3_indices = tf.split(tri, num_or_size_splits=3, axis=0)
+	# vt1_indices_, vt2_indices_, vt3_indices_ = tf.split(tri_, num_or_size_splits=3, axis=0)
 
-    # Dimensions
-    batch_size = tf.shape(vertex)[0]
-    tri_num = tf.shape(tri)[1]
-    vertex_num = tf.shape(vertex_tri)[1]
-    T = tf.shape(vertex_tri)[0]
+	# Dimensions
+	# batch_size_ = tf.shape(vertex_)[0]
+	# tri_num_ = tf.shape(tri_)[1]
+	# vertex_num_ = tf.shape(vertex_tri_)[1]
+	# T_ = tf.shape(vertex_tri_)[0]
 
-    # Create batch indices for tf.gather_nd
-    batch_idx = tf.range(0, batch_size)
-    batch_idx = tf.reshape(batch_idx, (batch_size, 1))
-    b = tf.tile(batch_idx, (1, tri_num))
+	# Create batch indices for tf.gather_nd
+	# batch_idx_ = tf.range(0, batch_size_)
+	# batch_idx_ = tf.reshape(batch_idx_, (batch_size_, 1))
+	# b_ = tf.tile(batch_idx_, (1, tri_num_))
+	#
+	# k1_ = tf.tile(vt1_indices_, (batch_size_, 1))
+	# k2_ = tf.tile(vt2_indices_, (batch_size_, 1))
+	# k3_ = tf.tile(vt3_indices_, (batch_size_, 1))
+	#
+	# vt1_indices_ = tf.stack([b_, k1_], 2)
+	# vt2_indices_ = tf.stack([b_, k2_], 2)
+	# vt3_indices_ = tf.stack([b_, k3_], 2)
 
-    k1 = tf.tile(vt1_indices, (batch_size, 1))
-    k2 = tf.tile(vt2_indices, (batch_size, 1))
-    k3 = tf.tile(vt3_indices, (batch_size, 1))
+	# Compute triangle normal using its vertices 3dlocation
+	# vt1_ = tf.gather_nd(vertex_, vt1_indices_)  # batch_size x tri_num x 3
+	# vt2_ = tf.gather_nd(vertex_, vt2_indices_)
+	# vt3_ = tf.gather_nd(vertex_, vt3_indices_)
+	#
+	# normalf_ = tf.cross(vt2_ - vt1_, vt3_ - vt1_)
+	# normalf_ = tf.nn.l2_normalize(normalf_, dim=2)
 
-    vt1_indices = tf.stack([b, k1], 2)
-    vt2_indices = tf.stack([b, k2], 2)
-    vt3_indices = tf.stack([b, k3], 2)
+	BATCH_SIZE = vertex.shape[0]
 
-    # Compute triangle normal using its vertices 3dlocation
-    vt1 = tf.gather_nd(vertex, vt1_indices)  # batch_size x tri_num x 3
-    vt2 = tf.gather_nd(vertex, vt2_indices)
-    vt3 = tf.gather_nd(vertex, vt3_indices)
+	tri = torch.transpose(tri, 0, 1)
+	tri = torch.unsqueeze(tri, 0)
+	tri = torch.unsqueeze(tri, -1)
+	tri = torch.cat(BATCH_SIZE * [tri])[:, :-1, :]
 
-    normalf = tf.cross(vt2 - vt1, vt3 - vt1)
-    normalf = tf.nn.l2_normalize(normalf, dim=2)
+	vt1_indices = torch.cat(3 * [tri[:, :, 0]], -1)
+	vt2_indices = torch.cat(3 * [tri[:, :, 1]], -1)
+	vt3_indices = torch.cat(3 * [tri[:, :, 2]], -1)
+	vt1 = torch.gather(vertex, 1, vt1_indices)
+	vt2 = torch.gather(vertex, 1, vt2_indices)
+	vt3 = torch.gather(vertex, 1, vt3_indices)
+	zeros = torch.zeros((BATCH_SIZE, 1, 3), dtype=torch.float64)
+	vt1_padded = torch.cat((vt1, zeros), 1)
+	vt2_padded = torch.cat((vt2, zeros), 1)
+	vt3_padded = torch.cat((vt3, zeros), 1)
 
-    mask = tf.expand_dims(tf.tile(tf.expand_dims(tf.not_equal(vertex_tri, tri.shape[1] - 1), 2), multiples=[1, 1, 3]),
-                          0)
-    mask = tf.cast(mask, vertex.dtype)
+	normalf = torch.cross(vt2 - vt1, vt3 - vt1)
+	norm_sum = torch.norm(normalf, dim=2, keepdim=True)
+	normalf = torch.div(normalf, norm_sum)
+	normalf = torch.cat((normalf, zeros), 1)
 
-    # Compute vertices normal
-    vertex_tri = tf.reshape(vertex_tri, shape=[1, -1])
+	# compare_numpy(normalf_, normalf)
 
-    b = tf.tile(batch_idx, (1, T * vertex_num))
-    k = tf.tile(vertex_tri, (batch_size, 1))
+	# mask_ = tf.expand_dims(tf.tile(tf.expand_dims(tf.not_equal(vertex_tri_, tri_.shape[1] - 1), 2), multiples=[1, 1, 3]), 0)
+	# mask_ = tf.cast(mask_, vertex_.dtype)
 
-    indices = tf.stack([b, k], 2)
+	# Compute vertices normal
+	# vertex_tri_ = tf.reshape(vertex_tri_, shape=[1, -1])
 
-    normal = tf.gather_nd(normalf, indices)
-    normal = tf.reshape(normal, shape=[-1, T, vertex_num, 3])
+	# b_ = tf.tile(batch_idx_, (1, T_ * vertex_num_))
+	# k_ = tf.tile(vertex_tri_, (batch_size_, 1))
+	#
+	# indices_ = tf.stack([b_, k_], 2)
+	#
+	# normal_ = tf.gather_nd(normalf_, indices_)
+	# normal_ = tf.reshape(normal_, shape=[-1, T_, vertex_num_, 3])
+	#
+	# normal_ = tf.reduce_sum(tf.multiply(normal_, mask_), axis=1)
+	# normal_ = tf.nn.l2_normalize(normal_, dim=2)
 
-    normal = tf.reduce_sum(tf.multiply(normal, mask), axis=1)
-    normal = tf.nn.l2_normalize(normal, dim=2)
+	equal = vertex_tri != (tri.shape[1])
+	expand = torch.unsqueeze(equal, 2)
 
-    # Enforce that the normal are outward
+	mask = expand.repeat(1, 1, 3)
 
-    v = vertex - tf.reduce_mean(vertex, 1, keepdims=True)
-    s = tf.reduce_sum(tf.multiply(v, normal), 1, keepdims=True)
+	vertex_tri = vertex_tri.view((-1, 1))
 
-    count_s_greater_0 = tf.count_nonzero(tf.greater(s, 0), axis=0, keepdims=True)
-    count_s_less_0 = tf.count_nonzero(tf.less(s, 0), axis=0, keepdims=True)
+	normal_indices = torch.unsqueeze(vertex_tri, 0)
+	normal_indices = torch.cat(BATCH_SIZE * [normal_indices])
+	normal_indices = torch.cat(3 * [normal_indices], -1)
+	normal = torch.gather(normalf, 1, normal_indices.long())
 
-    sign = 2 * tf.cast(tf.greater(count_s_greater_0, count_s_less_0), tf.float32) - 1
-    normal = tf.multiply(normal, sign)
-    normalf = tf.multiply(normalf, sign)
+	normal = normal.view((BATCH_SIZE, 8, -1, 3))
+	multi = torch.mul(normal, mask)
+	normal = torch.sum(multi, dim=1)
 
-    return normal, normalf
+	norm_sum = torch.norm(normal, dim=2, keepdim=True)
+	normal = torch.div(normal, norm_sum)
+
+	# Enforce that the normal are outward
+
+	# v_ = vertex_ - tf.reduce_mean(vertex_, 1, keepdims=True)
+	# s_ = tf.reduce_sum(tf.multiply(v_, normal_), 1, keepdims=True)
+
+	mean = torch.mean(vertex, 1)
+	mean = torch.unsqueeze(mean, 1)
+	v = vertex - mean
+	s = torch.sum(torch.mul(v, normal), 1, keepdim=True)
+
+	# count_s_greater_0_ = tf.count_nonzero(tf.greater(s_, 0), axis=0, keepdims=True)
+	# count_s_less_0_ = tf.count_nonzero(tf.less(s_, 0), axis=0, keepdims=True)
+
+	count_s_greater_0 = torch.sum(1 * torch.gt(s,0), 0, keepdim=True)
+	count_s_less_0 = torch.sum(1 * torch.lt(s,0), 0, keepdim=True)
+
+	# compare_numpy(count_s_less_0_, count_s_less_0)
+
+	# sign_ = 2 * tf.cast(tf.greater(count_s_greater_0_, count_s_less_0_), tf.float64) - 1
+	# normal_ = tf.multiply(normal_, sign_)
+	# normalf_ = tf.multiply(normalf_, sign_)
+
+	sign = 2 * torch.gt(count_s_greater_0, count_s_less_0) - 1
+	# sign = sign.repeat((1, VERTEX_NUM, 1))
+	# sign = torch.unsqueeze(sign, 1)
+	# sign = torch.unsqueeze(sign, -1)
+	normal = torch.mul(normal, sign.repeat((1, VERTEX_NUM, 1)))
+	normalf = torch.mul(normalf, sign.repeat((1, TRI_NUM + 1, 1)))
+
+	return normal, normalf
 
 
 def compute_tri_normal(vertex,tri, vertex_tri):
@@ -678,7 +864,7 @@ def get_pixel_value(img, x, y):
     return tf.gather_nd(img, indices)
 
 
-def get_pixel_value_torch(img, x, y):
+def get_pixel_value_torch( img, x, y):
     """
     Utility function to get pixel value for coordinate
     vectors x and y from a  4D tensor image.
@@ -691,20 +877,36 @@ def get_pixel_value_torch(img, x, y):
     -------
     - output: tensor of shape (B, H, W, C)
     """
-    shape = tf.shape(x)
-    batch_size = shape[0]
-    height = shape[1]
-    width = shape[2]
+    # placeholder_x = np.random.randint(0, 224, (BATCH_SIZE, 224, 224))
+    # placeholder_y = np.random.randint(0, 192, (BATCH_SIZE, 224, 224))
+    #
+    # x_ = tf.constant(placeholder_x)
+    # y_ = tf.constant(placeholder_y)
+    # x = torch.from_numpy(placeholder_x)
+    # y = torch.from_numpy(placeholder_y)
+
+    # shape_ = tf.shape(x_)
+    # batch_size_ = shape_[0]
+    # height_ = shape_[1]
+    # width_ = shape_[2]
+
+    batch_size, height, width = x.shape
 
 
-    batch_idx = tf.range(0, batch_size)
-    batch_idx = tf.reshape(batch_idx, (batch_size, 1, 1))
-    b = tf.tile(batch_idx, (1, height, width))
+    # batch_idx_ = tf.range(0, batch_size_)
+    # batch_idx_ = tf.cast(tf.reshape(batch_idx_, (batch_size_, 1, 1)), dtype=tf.int64)
+    # b_ = tf.tile(batch_idx_, (1, height_, width_))
+    # indices_ = tf.stack([b_, y_, x_], 3)
+    # value_ = tf.gather_nd(img_, indices_)
+    # # sess.run(tf.gather_nd(tf.expand_dims(img_[0], 0), tf.expand_dims(indices_[0], 0))), sess.run(value_[0])
 
+    batch_idx = torch.range(0, batch_size - 1).view((batch_size, 1, 1)).type(torch.int64)
+    b = batch_idx.repeat(1, height, width)
+    # indices = torch.stack((b, y, x), dim=-1)
 
-    indices = tf.stack([b, y, x], 3)
+    value = img[b.long(), y.long(), x.long(), :]
 
-    return tf.gather_nd(img, indices)
+    return value
 
 
 
@@ -1026,13 +1228,13 @@ def generate_shade_torch(il, m, mshape, texture_size = [192, 224], is_with_norma
 
     # 명암조절 map
     shade = shading_torch(il, normalf_flat)
-    shade = shade.view((-1, texture_size[0], texture_size[1], 3))
+    shade = shade.view((-1, texture_size[0], texture_size[1], 3)) # [batch, 192, 224, 3]
     normalf_flat = normalf_flat.view((-1, texture_size[0], texture_size[1], 3))
 
     if is_with_normal:
         return shade, normalf_flat
 
-    return shade # [batch, 192, 224, 3]
+    return shade.permute((0, 3, 1, 2))
 
 
 def shading(L, normal):
@@ -1412,6 +1614,9 @@ def _DEPRECATED_compute_normal_torch(vertex, tri, vertex_tri):
 
     return normal, normalf
 
+
+
+'''
 def unwarp_texture(image, m, mshape, output_size=224, is_reduce = False):
     #TO Do: correct the mask
     print("TODO: correct the mask in unwarp_texture(image, m, mshape, output_size=124, is_reduce = False)")
@@ -1530,7 +1735,7 @@ def unwarp_texture(image, m, mshape, output_size=224, is_reduce = False):
     masks = tf.stack(masks)
 
     return texture, masks
-
+'''
 
 
 
