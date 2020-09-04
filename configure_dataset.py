@@ -1,10 +1,8 @@
 import torch
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-import numpy as np
 from config import _300W_LP_DIR
-from os import cpu_count
-from os.path import join, isdir, basename, dirname
+from os.path import join, isdir, basename
 from PIL import Image
 from os import makedirs
 from glob import glob
@@ -26,8 +24,10 @@ class NonlinearDataset(Dataset):
 			1. split raw data into train, test, and validation dataset and
 			2. load each dataset item
 	'''
-	def __init__( self, phase, dataset_dir=_300W_LP_DIR ):
+	def __init__( self, phase, dataset_dir=_300W_LP_DIR):
 		print("Loading dataset ...")
+		self.fdtype = np.float32
+
 		# initialize attributes
 		self.dataset_dir = dataset_dir
 		self.transform = transforms.Compose([
@@ -43,7 +43,7 @@ class NonlinearDataset(Dataset):
 		mu_exp, w_exp = load_Basel_basic('exp')
 
 		self.mean_shape = mu_shape + mu_exp
-		self.std_shape = np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM)
+		self.std_shape = np.tile(np.array([1e4, 1e4, 1e4], dtype=self.fdtype), VERTEX_NUM)
 
 		self.w_shape = w_shape
 		self.w_exp = w_exp
@@ -90,14 +90,16 @@ class NonlinearDataset(Dataset):
 		texture_tensor  = self.transform(texture)
 
 		# set label data
-		delta_m = np.zeros(8)
+		delta_m = np.zeros(8, dtype=self.fdtype)
 		delta_m[6] = np.divide(ty, self.std_m[6])
 		delta_m[7] = np.divide(32 - tx, self.std_m[7])
 
 		m_label = self.all_m[idx] - delta_m
 		batch_shape_para    = self.all_shape_para[idx, :]
 		batch_exp_para      = self.all_exp_para[idx, :]
-		shape_label         = np.divide( np.matmul(batch_shape_para, np.transpose(self.w_shape)) + np.matmul(batch_exp_para, np.transpose(self.w_exp)), self.std_shape)
+		shape_label         = np.divide(np.matmul(batch_shape_para, np.transpose(self.w_shape)) +
+										np.matmul(batch_exp_para, np.transpose(self.w_exp)),
+										self.std_shape)
 
 		# set random albedo indices
 		indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CONST_PIXELS_NUM])
@@ -135,7 +137,11 @@ class NonlinearDataset(Dataset):
 			Returns
 				splited: Bool (True if splited before, otherwise False)
 		'''
-		return isdir(join(self.dataset_dir, 'train')) and isdir(join(self.dataset_dir, 'valid')) and isdir(join(self.dataset_dir, 'test'))
+		return (
+			isdir(join(self.dataset_dir, 'train')) and
+			isdir(join(self.dataset_dir, 'valid')) and
+			isdir(join(self.dataset_dir, 'test'))
+		)
 
 
 	def split_dataset( self ):
@@ -172,7 +178,7 @@ class NonlinearDataset(Dataset):
 
 		all_images = np.concatenate(all_images, axis=0)
 		all_paras = np.concatenate(all_paras, axis=0)
-		assert (all_images.shape[0] == all_paras.shape[0]), "Number of samples must be the same between images and paras"
+		assert all_images.shape[0] == all_paras.shape[0], "Number of samples must be the same between images and paras"
 
 		# random sample the files
 		total_len = all_images.shape[0]
@@ -200,7 +206,12 @@ class NonlinearDataset(Dataset):
 
 			# copy image and mask_img files, duplicate mask and texture files
 			for idx, (image_path, para) in enumerate(zip(image_paths, paras)):
-				if idx % 100 == 0: print(f"        Splitting {phase[0]} dataset progress: {idx/image_paths.shape[0] * 100:.2f}% ({basename(image_path)})")
+				if idx % 100 == 0:
+					print("        Splitting {} dataset progress: {:.2f}% ({})".format(
+						phase[0],
+						idx / image_paths.shape[0] * 100,
+						basename(image_path)
+					))
 				target_name = join(self.dataset_dir, phase[0], image_path.split('.')[0])
 
 				# copy image and mask image files
@@ -293,15 +304,16 @@ class NonlinearDataset(Dataset):
 
 
 def main():
+	import time
 	print(torch.cuda.is_available())
-	dataloader = DataLoader(NonlinearDataset(phase='test'), batch_size=64, shuffle=True, num_workers=0)
-
+	dataloader = DataLoader(NonlinearDataset(phase='test'), batch_size=10, shuffle=True, num_workers=0)
+	start = time.time()
 	for idx, samples in enumerate(dataloader):
 		if idx > 10:
 			break
 		print(f'{idx/len(dataloader) * 100:.2f}% : {samples["image"][0].shape}, {samples["mask_img"][0].shape}')
-
-
+		print(time.time() - start)
+		start = time.time()
 
 
 if __name__ == "__main__":
