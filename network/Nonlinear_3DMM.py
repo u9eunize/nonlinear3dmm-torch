@@ -147,7 +147,7 @@ class Nonlinear3DMMHelper:
     def train(self, num_epochs, batch_size, learning_rate, betas):
         nl3dmm = Nonlinear3DMM().to(self.device)
 
-        start_epoch = self.load(nl3dmm, MODEL_PATH)
+        nl3dmm, start_epoch = self.load(nl3dmm, MODEL_PATH)
 
         dataset = NonlinearDataset(phase='train')
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1)
@@ -357,9 +357,9 @@ class Nonlinear3DMMHelper:
             return 0
         print(f"loading {ckpt_name}...")
         model.load_state_dict(torch.load(ckpt_name))
-        model.eval()
+        model = model.train(True)
         print("DONE")
-        return number + 1
+        return model, number + 1
 
     def get_checkpoint_dir(self, path, number):
         return os.path.join(path, f"ckpt_{number}")
