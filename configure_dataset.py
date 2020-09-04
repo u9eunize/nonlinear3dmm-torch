@@ -16,7 +16,7 @@ from utils import *
 VERTEX_NUM  = 53215
 TRI_NUM     = 105840
 N           = VERTEX_NUM * 3
-
+CONST_PIXELS_NUM = 20
 
 
 class NonlinearDataset(Dataset):
@@ -37,13 +37,7 @@ class NonlinearDataset(Dataset):
 		# load mean and std shape
 		self.mean_m = np.load(join(self.dataset_dir, 'mean_m.npy'))
 		self.std_m = np.load(join(self.dataset_dir, 'std_m.npy'))
-
-		self.ty = 32 - np.random.randint(0, 32 + 1)
-		self.tx = 32 - np.random.randint(0, 32 + 1)
-
-		self.delta_m = np.zeros(8)
-		self.delta_m[6] = np.divide(self.ty, self.std_m[6])
-		self.delta_m[7] = np.divide(32 - self.tx, self.std_m[7])
+		self.const_alb_mask = load_const_alb_mask()
 
 		mu_shape, w_shape = load_Basel_basic('shape')
 		mu_exp, w_exp = load_Basel_basic('exp')
@@ -69,28 +63,50 @@ class NonlinearDataset(Dataset):
 
 
 	def __getitem__( self, idx ):
+		# set random crop index
+		ty = np.random.randint(0, 32 + 1)
+		tx = np.random.randint(0, 32 + 1)
+
 		# load image
 		img_name    = self.image_filenames[idx]
 		img         = Image.open(img_name)
+		img         = transforms.functional.crop(img, ty, tx, 224, 224)
 		img_tensor  = self.transform(img)
+
 		# load mask
-		mask_name = self.mask_filenames[idx]
-		mask = Image.open(mask_name)
+		mask_name   = self.mask_filenames[idx]
+		mask        = Image.open(mask_name)
 		mask_tensor = self.transform(mask)
+
 		# load mask image
 		mask_img_name   = self.mask_img_filenames[idx]
 		mask_img        = Image.open(mask_img_name)
+		mask_img        = transforms.functional.crop(mask_img, ty, tx, 224, 224)
 		mask_img_tensor = self.transform(mask_img)
+
 		# load texture
 		texture_name    = self.texture_filenames[idx]
 		texture         = Image.open(texture_name)
 		texture_tensor  = self.transform(texture)
 
 		# set label data
-		m_label = self.all_m[idx] - self.delta_m
+		delta_m = np.zeros(8)
+		delta_m[6] = np.divide(ty, self.std_m[6])
+		delta_m[7] = np.divide(32 - tx, self.std_m[7])
+
+		m_label = self.all_m[idx] - delta_m
 		batch_shape_para    = self.all_shape_para[idx, :]
 		batch_exp_para      = self.all_exp_para[idx, :]
 		shape_label         = np.divide( np.matmul(batch_shape_para, np.transpose(self.w_shape)) + np.matmul(batch_exp_para, np.transpose(self.w_exp)), self.std_shape)
+
+		# set random albedo indices
+		indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CONST_PIXELS_NUM])
+		indices2 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CONST_PIXELS_NUM])
+
+		albedo_indices_x1 = np.reshape(self.const_alb_mask[indices1, 1], [CONST_PIXELS_NUM, 1])
+		albedo_indices_y1 = np.reshape(self.const_alb_mask[indices1, 0], [CONST_PIXELS_NUM, 1])
+		albedo_indices_x2 = np.reshape(self.const_alb_mask[indices2, 1], [CONST_PIXELS_NUM, 1])
+		albedo_indices_y2 = np.reshape(self.const_alb_mask[indices2, 0], [CONST_PIXELS_NUM, 1])
 
 		sample = {
 				'image_name'    : self.image_filenames[idx],
@@ -101,8 +117,13 @@ class NonlinearDataset(Dataset):
 
 				'm_label'       : m_label,
 				'shape_label'   : shape_label,
-				'height_offset' : self.tx,
-				'width_offset'  : self.ty,
+
+				'albedo_indices': [
+					albedo_indices_x1,
+					albedo_indices_y1,
+					albedo_indices_x2,
+					albedo_indices_y2
+				],
 		}
 
 		return sample
@@ -276,9 +297,9 @@ def main():
 	dataloader = DataLoader(NonlinearDataset(phase='test'), batch_size=64, shuffle=True, num_workers=0)
 
 	for idx, samples in enumerate(dataloader):
-		if idx > 2:
+		if idx > 10:
 			break
-		print(f'{idx/len(dataloader) * 100:.2f}% : {samples["image_name"]}')
+		print(f'{idx/len(dataloader) * 100:.2f}% : {samples["image"][0].shape}, {samples["mask_img"][0].shape}')
 
 
 
