@@ -138,36 +138,11 @@ class Nonlinear3DMMHelper:
         self.vt2pixel_u = torch.tensor(self.vt2pixel_u[:-1], dtype=dtype).to(self.device)
         self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=dtype).to(self.device)
 
-    def save(self, model, path, number):
-        if not os.path.isdir(path):
-            os.mkdir(path)
-        if not os.path.isdir(self.get_checkpoint_dir(path, number)):
-            os.mkdir(self.get_checkpoint_dir(path, number))
-        torch.save(model.state_dict(), self.get_checkpoint_name(path, number))
+    def eval(self):
+        pass
 
-    def load(self, model, path, number=-1):
-        if number == -1:
-            number = 0
-            if not os.path.isdir(path):
-                os.mkdir(path)
-            for ckpt_name in os.listdir(path):
-                number = max(number, max(map(int, re.findall(r"\d+", ckpt_name))))
-        ckpt_name = self.get_checkpoint_name(path, number)
-
-        if not os.path.isfile(ckpt_name):
-            print(f"no checkpoint! path: {path}")
-            return 0
-        print(f"loading {ckpt_name}...")
-        model.load_state_dict(torch.load(ckpt_name))
-        model.eval()
-        print("DONE")
-        return number + 1
-
-    def get_checkpoint_dir(self, path, number):
-        return os.path.join(path, f"ckpt_{number}")
-
-    def get_checkpoint_name(self, path, number):
-        return os.path.join(f"{self.get_checkpoint_dir(path, number)}", f"model_ckpt_{number}.pt")
+    def predict(self):
+        pass
 
     def train(self, num_epochs, batch_size, learning_rate, betas):
         nl3dmm = Nonlinear3DMM().to(self.device)
@@ -266,7 +241,6 @@ class Nonlinear3DMMHelper:
         # print(time.time() - tic, "after ready texture")
 
         g_loss = g_loss_shape + g_loss_m  # default loss
-        g_loss_with_landmark = g_loss
 
         kwargs = {
             "batch_size": batch_size,
@@ -289,15 +263,17 @@ class Nonlinear3DMMHelper:
         if "reconstruction" not in self.losses and "texture" not in self.losses:
             self.losses.append("texture")
 
+        g_loss_with_landmark = 0
         for loss_name in self.losses:
             loss_fn = self.__getattribute__(loss_name+"_loss")
             result = loss_fn(**kwargs)
 
             if loss_name == "landmark":
-                g_loss_with_landmark += result
+                g_loss_with_landmark = result
             else:
                 g_loss += result
 
+        g_loss_with_landmark = g_loss_with_landmark + g_loss
         return g_loss, g_loss_with_landmark
 
     def landmark_loss(self, batch_size, landmark_u, landmark_u_labels, landmark_v, landmark_v_labels, **kwargs):
@@ -360,11 +336,37 @@ class Nonlinear3DMMHelper:
 
         return (loss_local_albedo_u + loss_local_albedo_v) * 10
 
-    def eval(self):
-        pass
+    def save(self, model, path, number):
+        if not os.path.isdir(path):
+            os.mkdir(path)
+        if not os.path.isdir(self.get_checkpoint_dir(path, number)):
+            os.mkdir(self.get_checkpoint_dir(path, number))
+        torch.save(model.state_dict(), self.get_checkpoint_name(path, number))
 
-    def predict(self):
-        pass
+    def load(self, model, path, number=-1):
+        if number == -1:
+            number = 0
+            if not os.path.isdir(path):
+                os.mkdir(path)
+            for ckpt_name in os.listdir(path):
+                number = max(number, max(map(int, re.findall(r"\d+", ckpt_name))))
+        ckpt_name = self.get_checkpoint_name(path, number)
+
+        if not os.path.isfile(ckpt_name):
+            print(f"no checkpoint! path: {path}")
+            return 0
+        print(f"loading {ckpt_name}...")
+        model.load_state_dict(torch.load(ckpt_name))
+        model.eval()
+        print("DONE")
+        return number + 1
+
+    def get_checkpoint_dir(self, path, number):
+        return os.path.join(path, f"ckpt_{number}")
+
+    def get_checkpoint_name(self, path, number):
+        return os.path.join(f"{self.get_checkpoint_dir(path, number)}", f"model_ckpt_{number}.pt")
+
 
 
 if __name__ == "__main__":
@@ -379,7 +381,7 @@ if __name__ == "__main__":
     ], device='cuda' if torch.cuda.is_available() else 'cpu')
     helper.train(
         num_epochs=10,
-        batch_size=5,
+        batch_size=20,
         learning_rate=0.0002,
         betas=(0.5, 0.999)
     )
