@@ -34,17 +34,17 @@ def bilinear_interpolate(image, x, y):
     wc = (x-x0) * (y1-y)
     wd = (x-x0) * (y-y0)
 
-    wa = wa.repeat(B, C, 1).unsqueeze(3)
-    wb = wb.repeat(B, C, 1).unsqueeze(3)
-    wc = wc.repeat(B, C, 1).unsqueeze(3)
-    wd = wd.repeat(B, C, 1).unsqueeze(3)
+    wa = wa.repeat(B, C, 1).unsqueeze(3).to(image.device)
+    wb = wb.repeat(B, C, 1).unsqueeze(3).to(image.device)
+    wc = wc.repeat(B, C, 1).unsqueeze(3).to(image.device)
+    wd = wd.repeat(B, C, 1).unsqueeze(3).to(image.device)
 
     return sum([wa * Ia, wb * Ib, wc * Ic, wd * Id])
 
 
 def generate_shade(il, m, mshape, texture_size, is_with_normal=False):
 
-    return torch.rand([mshape.shape[0], 3, texture_size[0], texture_size[1]])
+    return torch.rand([mshape.shape[0], 3, texture_size[0], texture_size[1]]).to("cuda")
     bat_sz = il.shape[0]
 
     tri = torch.tensor(load_3DMM_tri()).long()
@@ -94,8 +94,8 @@ def generate_shade(il, m, mshape, texture_size, is_with_normal=False):
 def warp_texture(texture, m, mshape, output_size=224):
     images = texture
     masks = mshape
-    return (torch.rand(images.shape[0], 3, output_size, output_size),
-            torch.rand(images.shape[0], output_size, output_size))
+    return (torch.rand(images.shape[0], 3, output_size, output_size).to("cuda"),
+            torch.rand(images.shape[0], output_size, output_size).to("cuda"))
 
 kpts = load_3DMM_kpts()
 
@@ -117,7 +117,7 @@ def compute_landmarks(m, shape, output_size=224):
 
     vertex3d = shape.view(n_size, -1, 3)
     vertex3d = vertex3d[:, kpts.reshape(-1), :]
-    vertex4d = torch.cat((vertex3d, torch.ones(list(vertex3d.shape[0:2]) + [1]).float()), dim=2)
+    vertex4d = torch.cat((vertex3d, torch.ones(list(vertex3d.shape[0:2]) + [1]).float().to(vertex3d.device)), dim=2)
 
     m = m.view(n_size, 4, 2)
     vertex2d = torch.matmul(torch.transpose(m, 1, 2), torch.transpose(vertex4d, 1, 2))                                                             # batch_size x 2 x kpts_num

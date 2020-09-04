@@ -117,14 +117,14 @@ class NonlinearDataset(Dataset):
 				'mask_img'      : mask_img_tensor,
 				'texture'       : texture_tensor,
 
-				'm_label'       : m_label,
-				'shape_label'   : shape_label,
+				'm_label'       : torch.tensor(m_label),
+				'shape_label'   : torch.tensor(shape_label),
 
 				'albedo_indices': [
-					albedo_indices_x1,
-					albedo_indices_y1,
-					albedo_indices_x2,
-					albedo_indices_y2
+					torch.tensor(albedo_indices_x1),
+					torch.tensor(albedo_indices_y1),
+					torch.tensor(albedo_indices_x2),
+					torch.tensor(albedo_indices_y2)
 				],
 		}
 

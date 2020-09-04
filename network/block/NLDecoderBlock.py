@@ -30,8 +30,7 @@ class NLDecoderBlock(nn.Module):
         if not isinstance(in_sz, np.ndarray):
             in_sz = np.array(in_sz)
 
-        #self.main = nn.Sequential(
-        self.layers = [
+        self.main = nn.Sequential(
             self._make_layer(gf_dim * 5, 2, in_sz * 2),
             self._make_layer(gf_dim * 8, 1),
 
@@ -52,12 +51,10 @@ class NLDecoderBlock(nn.Module):
 
             nn.ConvTranspose2d(self.in_dim, out_dim, 3, stride=1, padding=1),
             nn.Tanh()
-        ]
+        )
 
     def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-        return x
+        return self.main(x)
 
     def _make_layer(self, out_dim, stride, output_size=None):
         if output_size is not None:

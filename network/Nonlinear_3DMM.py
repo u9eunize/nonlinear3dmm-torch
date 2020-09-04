@@ -1,17 +1,19 @@
-import torch
-from torch import nn
-import torch.nn.functional as F
+import time
+import os
+import re
 
 from network.block import *
 from rendering_ops import *
 from ops import *
 from torch.utils.data import DataLoader
 from configure_dataset import NonlinearDataset
+from datetime import datetime
 
 
 TRI_NUM = 105840
 VERTEX_NUM = 53215
 CONST_PIXELS_NUM = 20
+MODEL_PATH = "./checkpoint"
 
 
 class Nonlinear3DMM(nn.Module):
@@ -76,11 +78,25 @@ class Nonlinear3DMM(nn.Module):
 
         return lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d
 
+    def to(self, device, *args, **kwargs):
+        ret = super(Nonlinear3DMM, self).to(device, *args, **kwargs)
+
+        self.mean_shape = self.mean_shape.to(device)
+        self.std_shape = self.std_shape.to(device)
+
+        self.mean_m = self.mean_m.to(device)
+        self.std_m = self.std_m.to(device)
+
+        self.w_shape = self.w_shape.to(device)
+        self.w_exp = self.w_exp.to(device)
+        return ret
+
 
 class Nonlinear3DMMHelper:
 
-    def __init__(self, losses):
+    def __init__(self, losses, device='cpu'):
         dtype = torch.float
+        self.device = device
 
         # TODO parameterize
         self.tex_sz = (192, 224)
@@ -96,79 +112,124 @@ class Nonlinear3DMMHelper:
         self.shape_loss = "l2"
         self.tex_loss = "l1"
 
-        self.nl_network = Nonlinear3DMM()
+        self.nl_network = Nonlinear3DMM().to(self.device)
 
         self.uv_tri, self.uv_mask = load_3DMM_tri_2d(with_mask=True)
+        self.uv_tri = torch.tensor(self.uv_tri).to(self.device)
+        self.uv_mask = torch.tensor(self.uv_mask).to(self.device)
 
         # Basis
         mu_shape, w_shape = load_Basel_basic('shape')
         mu_exp, w_exp = load_Basel_basic('exp')
 
-        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype)
-        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM), dtype=dtype)
+        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype).to(self.device)
+        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM), dtype=dtype).to(self.device)
         # self.std_shape  = np.load('std_shape.npy')
 
-        self.mean_m = torch.tensor(np.load('dataset/mean_m.npy'), dtype=dtype)
-        self.std_m = torch.tensor(np.load('dataset/std_m.npy'), dtype=dtype)
+        self.mean_m = torch.tensor(np.load('dataset/mean_m.npy'), dtype=dtype).to(self.device)
+        self.std_m = torch.tensor(np.load('dataset/std_m.npy'), dtype=dtype).to(self.device)
 
-        self.w_shape = torch.tensor(w_shape, dtype=dtype)
-        self.w_exp = torch.tensor(w_exp, dtype=dtype)
+        self.w_shape = torch.tensor(w_shape, dtype=dtype).to(self.device)
+        self.w_exp = torch.tensor(w_exp, dtype=dtype).to(self.device)
 
         # generate shape1d
         self.vt2pixel_u, self.vt2pixel_v = load_3DMM_vt2pixel()
 
-        self.vt2pixel_u = torch.tensor(self.vt2pixel_u[:-1], dtype=torch.float32)
-        self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=torch.float32)
+        self.vt2pixel_u = torch.tensor(self.vt2pixel_u[:-1], dtype=dtype).to(self.device)
+        self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=dtype).to(self.device)
 
-    def train(self, num_epochs, batch_size):
-        import time
+    def save(self, model, path, number):
+        if not os.path.isdir(path):
+            os.mkdir(path)
+        if not os.path.isdir(self.get_checkpoint_dir(path, number)):
+            os.mkdir(self.get_checkpoint_dir(path, number))
+        torch.save(model.state_dict(), self.get_checkpoint_name(path, number))
 
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    def load(self, model, path, number=-1):
+        if number == -1:
+            number = 0
+            if not os.path.isdir(path):
+                os.mkdir(path)
+            for ckpt_name in os.listdir(path):
+                number = max(number, max(map(int, re.findall(r"\d+", ckpt_name))))
+        ckpt_name = self.get_checkpoint_name(path, number)
 
-        nl3dmm = Nonlinear3DMM()
+        if not os.path.isfile(ckpt_name):
+            print(f"no checkpoint! path: {path}")
+            return 0
+        print(f"loading {ckpt_name}...")
+        model.load_state_dict(torch.load(ckpt_name))
+        model.eval()
+        print("DONE")
+        return number + 1
 
-        optimizer = torch.optim.Adam(nl3dmm.parameters(), lr=0.0002, betas=(0.5, 0.999))
-        dataloader = DataLoader(NonlinearDataset(phase='train'),
-                                batch_size=batch_size, shuffle=True, num_workers=0)
+    def get_checkpoint_dir(self, path, number):
+        return os.path.join(path, f"ckpt_{number}")
 
-        start = time.time()
-        for epoch in range(num_epochs):
+    def get_checkpoint_name(self, path, number):
+        return os.path.join(f"{self.get_checkpoint_dir(path, number)}", f"model_ckpt_{number}.pt")
+
+    def train(self, num_epochs, batch_size, learning_rate, betas):
+        nl3dmm = Nonlinear3DMM().to(self.device)
+
+        start_epoch = self.load(nl3dmm, MODEL_PATH)
+
+        dataset = NonlinearDataset(phase='train')
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+
+        encoder_optimizer = torch.optim.Adam(nl3dmm.nl_encoder.parameters(), lr=learning_rate, betas=betas)
+        global_optimizer = torch.optim.Adam(nl3dmm.parameters(), lr=learning_rate, betas=betas)
+
+        for epoch in range(start_epoch, num_epochs):
+
             # For each batch in the dataloader
             for idx, samples in enumerate(dataloader, 0):
                 loss, g_loss_wlandmark = self.train_step(
-                    input_images=samples["image"],
-                    input_masks=samples["mask_img"],
-                    input_texture_labels=samples["texture"],
-                    input_texture_masks=samples["mask"],
-                    input_m_labels=samples["m_label"],
-                    input_shape_labels=samples["shape_label"],
-                    input_albedo_indexes=samples["albedo_indices"]
+                    input_images=samples["image"].to(self.device),
+                    input_masks=samples["mask_img"].to(self.device),
+                    input_texture_labels=samples["texture"].to(self.device),
+                    input_texture_masks=samples["mask"].to(self.device),
+                    input_m_labels=samples["m_label"].to(self.device),
+                    input_shape_labels=samples["shape_label"].to(self.device),
+                    input_albedo_indexes=list(map(lambda a: a.to(self.device), samples["albedo_indices"]))
                 )
+
                 if idx % 2 == 0:
+                    global_optimizer.zero_grad()
                     loss.backward()
+                    global_optimizer.step()
                 else:
+                    encoder_optimizer.zero_grad()
                     g_loss_wlandmark.backward()
+                    encoder_optimizer.step()
 
-                print(
-                    f'{idx / len(dataloader) * 100:.2f}% : {samples["image"][0].shape}, {samples["mask_img"][0].shape}')
-                print(time.time() - start)
-                start = time.time()
+                if idx % 50 == 0:
+                    print(datetime.now(), end=" ")
+                    print(f"[{epoch}] {idx * batch_size}/{len(dataset)} ({(idx * batch_size)/len(dataset) * 100:.2f}%) "
+                          f"g_loss: {loss:.6f}, "
+                          f"landmark_loss: {g_loss_wlandmark:.6f}")
 
-                optimizer.step()
+            self.save(nl3dmm, MODEL_PATH, epoch)
 
     def train_step(self, input_images, input_masks, input_texture_labels, input_texture_masks,
                    input_m_labels, input_shape_labels, input_albedo_indexes):
         """
         input_albedo_indexes = [x1,y1,x2,y2]
         """
+
+        tic = time.time()
         batch_size = input_images.shape[0]
+        # print(time.time() - tic, "start train_step")
 
         lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d = self.nl_network(input_images)
+
+        # print(time.time() - tic, "after nl_network")
 
         # calculate shape1d
         bat_sz = shape2d.shape[0]
         shape1d = bilinear_interpolate(shape2d, self.vt2pixel_u, self.vt2pixel_v)
         shape1d = shape1d.view(bat_sz, -1)
+        # print(time.time() - tic, "after bilinear_interpolate")
 
         m_full = lv_m * self.std_m + self.mean_m
         shape_full = shape1d * self.std_shape + self.mean_shape
@@ -191,6 +252,8 @@ class Nonlinear3DMMHelper:
         landmark_u_labels, landmark_v_labels = compute_landmarks(m_labels_full, shape_labels_full,
                                                                  output_size=self.img_sz)
 
+        # print(time.time() - tic, "after renderer")
+
         # ---------------- Losses -------------------------
         # ready texture mask
         tex_vis_mask = (~input_texture_labels.eq((torch.ones_like(input_texture_labels) * -1))).float()
@@ -199,6 +262,8 @@ class Nonlinear3DMMHelper:
 
         g_loss_shape = 10 * norm_loss(shape1d, input_shape_labels, loss_type=self.shape_loss)
         g_loss_m = 5 * norm_loss(lv_m, input_m_labels, loss_type="l2")
+
+        # print(time.time() - tic, "after ready texture")
 
         g_loss = g_loss_shape + g_loss_m  # default loss
         g_loss_with_landmark = g_loss
@@ -242,9 +307,9 @@ class Nonlinear3DMMHelper:
         return landmark_mse_mean / self.landmark_num / batch_size / 50
 
     def batchwise_white_shading_loss(self, shade, **kwargs):
-        uv_mask = torch.tensor(self.uv_mask).unsqueeze(0).unsqueeze(0)
+        uv_mask = self.uv_mask.unsqueeze(0).unsqueeze(0)
         mean_shade = torch.mean(shade * uv_mask, dim=[0, 2, 3]) * 16384 / 10379
-        g_loss_white_shading = 10 * norm_loss(mean_shade, 0.99 * torch.ones(mean_shade.shape).float(), loss_type="l2")
+        g_loss_white_shading = 10 * norm_loss(mean_shade, 0.99 * torch.ones(mean_shade.shape).float().to(self.device), loss_type="l2")
         return g_loss_white_shading
 
     def reconstruction_loss(self, batch_size, input_images, g_images, g_images_mask, **kwargs):
@@ -301,71 +366,6 @@ class Nonlinear3DMMHelper:
     def predict(self):
         pass
 
-        """
-        if self.is_using_landmark:
-            landmark_mse_mean = (
-                        torch.mean(norm_loss(landmark_u, landmark_u_labels, loss_type="l2", reduce_mean=False)) +
-                        torch.mean(norm_loss(landmark_v, landmark_v_labels, loss_type="l2", reduce_mean=False)))
-            g_landmark_loss = landmark_mse_mean / self.landmark_num / batch_size / 50
-            g_loss_wlandmark = g_loss + g_landmark_loss
-        else:
-            g_loss_wlandmark = g_loss
-
-        if self.is_batchwise_white_shading:
-            uv_mask = torch.tensor(self.uv_mask).unsqueeze(0).unsqueeze(0)
-            mean_shade = torch.mean(shade * uv_mask, dim=[0, 2, 3]) * 16384 / 10379
-            g_loss_white_shading = 10 * norm_loss(mean_shade, 0.99 * torch.ones([1, 3]).float(), loss_type="l2")
-
-            g_loss += g_loss_white_shading
-
-        if self.is_using_recon:
-            g_loss_recon = 10 * (norm_loss(G_images, input_images, loss_type=self.tex_loss) /
-                                 (torch.sum(G_images_mask) / (batch_size * self.image_size * self.image_size)))
-            g_loss += g_loss_recon
-        else:
-            g_loss_texture = norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
-                                       loss_type=self.tex_loss) / tex_ratio
-            g_loss += g_loss_texture
-
-        if self.is_smoothness:
-            g_loss_smoothness = 1000 * norm_loss((shape2d[:, :, :-2, 1:-1] + shape2d[:, :, 2:, 1:-1] +
-                                                  shape2d[:, :, 1:-1, :-2] + shape2d[:, :, 1:-1, 2:]) / 4.0,
-                                                 shape2d[:, :, 1:-1, 1:-1], loss_type=self.shape_loss)
-            g_loss += g_loss_smoothness
-
-        if self.is_using_symetry:
-            albedo_flip = torch.flip(albedo, dims=[3])
-            flip_diff = torch.max(torch.abs(albedo - albedo_flip), torch.ones_like(albedo) * 0.05)
-            g_loss_symetry = norm_loss(flip_diff, torch.zeros_like(flip_diff), loss_type=self.tex_loss)
-            g_loss += g_loss_symetry
-
-        if self.is_const_albedo:
-            albedo_1 = get_pixel_value(albedo, input_albedo_indexes[0], input_albedo_indexes[1])
-            albedo_2 = get_pixel_value(albedo, input_albedo_indexes[2], input_albedo_indexes[3])
-            diff = torch.max(torch.abs(albedo_1 - albedo_2), torch.ones_like(albedo_1) * 0.05)
-            g_loss_albedo_const = 5 * norm_loss(diff, torch.zeros_like(diff), loss_type=self.tex_loss)
-            g_loss += g_loss_albedo_const
-
-        if self.is_const_local_albedo:
-            chromaticity = (input_texture_labels + 1) / 2.0
-            chromaticity = torch.div(chromaticity, torch.sum(chromaticity, dim=1, keepdim=True) + 1e-6)
-
-            u_diff = -15 * torch.norm(chromaticity[:, :, :-1, :] - chromaticity[:, :, 1:, :], dim=1, keepdim=True)
-            w_u = (torch.exp(u_diff) * tex_vis_mask[:, :, :-1, :]).detach()
-            u_albedo_norm = norm_loss(albedo[:, :, :-1, :], albedo[:, :, 1:, :],
-                                      loss_type="l2,1", p=0.8, reduce_mean=False) * w_u
-            loss_local_albedo_u = torch.mean(u_albedo_norm) / torch.sum(w_u + 1e-6)
-
-            v_diff = -15 * torch.norm(chromaticity[:, :, :, :-1] - chromaticity[:, :, :, 1:], dim=1, keepdim=True)
-            w_v = (torch.exp(v_diff) * tex_vis_mask[:, :, :, :-1]).detach()
-            v_albedo_norm = norm_loss(albedo[:, :, :, :-1], albedo[:, :, :, 1:],
-                                      loss_type="l2,1", p=0.8, reduce_mean=False) * w_v
-            loss_local_albedo_v = torch.mean(v_albedo_norm) / torch.sum(w_v + 1e-6)
-
-            g_loss += (loss_local_albedo_u + loss_local_albedo_v) * 10
-        return g_loss, g_loss_wlandmark
-        """
-
 
 if __name__ == "__main__":
     helper = Nonlinear3DMMHelper([
@@ -376,6 +376,12 @@ if __name__ == "__main__":
         'reconstruction',
         'smoothness',
         'symmetry'
-    ])
-    helper.train(1, 10)
+    ], device='cuda' if torch.cuda.is_available() else 'cpu')
+    helper.train(
+        num_epochs=10,
+        batch_size=5,
+        learning_rate=0.0002,
+        betas=(0.5, 0.999)
+    )
+
 
