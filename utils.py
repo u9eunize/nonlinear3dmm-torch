@@ -6,10 +6,13 @@ from __future__ import division
 import math
 import numpy as np
 from config import _3DMM_DEFINITION_DIR
+import torch
+from torchvision.utils import save_image
 
 VERTEX_NUM = 53215
 TRI_NUM = 105840
 N = VERTEX_NUM * 3
+OUTPUT_SIZE = 224
 
 
 def load_3DMM_tri ():
@@ -131,4 +134,56 @@ def load_3DMM_tri_2d_barycoord ():
 	tri_2d_barycoord = tri_2d_barycoord.reshape(192, 224, 3)
 
 	return tri_2d_barycoord
+
+
+
+def inverse_transform(images):
+	return (images+1.)/2.
+
+
+def merge(images, size):
+	h, w = images.shape[1], images.shape[2]
+	nn = images.shape[0]
+
+	if size[1] < 0:
+		size[1] = int(math.ceil(nn/size[0]))
+	if size[0] < 0:
+		size[0] = int(math.ceil(nn/size[1]))
+
+
+	if (images.ndim == 4):
+		img = np.zeros((h * size[0], w * size[1], 3))
+		for idx, image in enumerate(images):
+			i = idx % size[1]
+			j = idx // size[1]
+			img[j*h:j*h+h, i*w:i*w+w, :] = image
+	else:
+		img = images
+
+
+	return img
+
+
+
+def imsave ( images, size, path ):
+	img = merge(images, size)
+	img = torch.Tensor(img)
+	img = img.permute((2, 0, 1))
+	# plt.imshow(img)
+	# plt.show()
+	return save_image(img, path)
+
+
+def save_images(images, size, image_path, inverse = True):
+	if len(size) == 1:
+		size= [size, -1]
+	if size[1] == -1:
+		size[1] = int(math.ceil(images.shape[0]/size[0]))
+	if size[0] == -1:
+		size[0] = int(math.ceil(images.shape[0]/size[1]))
+	if (inverse):
+		images = inverse_transform(images)
+
+	return imsave(images, size, image_path)
+
 
