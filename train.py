@@ -262,8 +262,8 @@ class Nonlinear3DMMHelper:
         g_loss_recon = 10 * (norm_loss(g_images, input_images, loss_type=self.tex_loss) /
                              (torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)))
 
-        self.reconstruction_loss_input = g_images
-        self.reconstruction_loss_generate = input_images
+        self.reconstruction_loss_input = input_images
+        self.reconstruction_loss_generate = g_images
         self.writer.add_scalar("reconstruction_loss", g_loss_recon, self.global_step)
         return g_loss_recon
 
