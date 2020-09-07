@@ -4,9 +4,9 @@ from torch import nn
 
 
 
-class Encoder_shasha(nn.Module):
+class Encoder(nn.Module):
     def __init__(self, in_dim, gf_dim, gfc_dim_m, gfc_dim_il, gfc_dim_shape, gfc_dim_tex, out_dim_m, out_dim_il):
-        super(Encoder_shasha, self).__init__()
+        super(Encoder, self).__init__()
         self.ngpu = 1
         self.in_dim = in_dim
         self.ngf = gf_dim

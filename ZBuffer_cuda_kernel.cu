@@ -176,7 +176,7 @@ std::vector<torch::Tensor> ZBuffer_cuda_forward(
 
     // Initialize<<32, 256>>(output, zbuffer, tri_num - 1, img_sz);
     AT_DISPATCH_FLOATING_TYPES(s2d.type(), "ZBuffer_forward_cuda", ([&] {
-        Initialize<scalar_t><<<32, 256>>> (
+        Initialize<scalar_t><<<32, 224>>> (
             output.data<scalar_t>(),
             zbuffer.data<scalar_t>(),
             tri_num,
@@ -185,7 +185,7 @@ std::vector<torch::Tensor> ZBuffer_cuda_forward(
     }));
 
     AT_DISPATCH_FLOATING_TYPES(s2d.type(), "ZBuffer_forward_cuda", ([&] {
-        ZBuffer_cuda_forward_kernel<scalar_t><<<1, 1>>> (
+        ZBuffer_cuda_forward_kernel<scalar_t><<<32, 224>>> (
             s2d.data<scalar_t>(),
             tri.data<scalar_t>(),
             vis.data<scalar_t>(),
@@ -198,7 +198,7 @@ std::vector<torch::Tensor> ZBuffer_cuda_forward(
     }));
 
     AT_DISPATCH_FLOATING_TYPES(s2d.type(), "ZBuffer_forward_cuda", ([&] {
-        ConvertToMask<scalar_t><<<32, 256>>> (
+        ConvertToMask<scalar_t><<<32, 224>>> (
             zbuffer.data<scalar_t>(),
             img_sz
         );
