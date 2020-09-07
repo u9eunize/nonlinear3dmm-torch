@@ -73,7 +73,7 @@ class Nonlinear3DMMHelper:
 
         start_epoch = self.load(nl3dmm, MODEL_PATH)
 
-        dataset = NonlinearDataset(phase='train')
+        dataset = NonlinearDataset(phase='test', frac=0.01)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1)
 
         encoder_optimizer = torch.optim.Adam(nl3dmm.nl_encoder.parameters(), lr=learning_rate, betas=betas)
@@ -308,8 +308,8 @@ if __name__ == "__main__":
         'symmetry'
     ], device='cuda' if torch.cuda.is_available() else 'cpu')
     helper.train(
-        num_epochs=50,
-        batch_size=20,
+        num_epochs=2,
+        batch_size=4,
         learning_rate=0.0002,
         betas=(0.5, 0.999)
     )

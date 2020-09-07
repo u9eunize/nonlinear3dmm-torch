@@ -588,135 +588,137 @@ def barycentric_torch( pixel_uu, pixel_vv, u, v):
 
 
 def compute_normal_torch ( vertex, tri, vertex_tri ):
-	# Unit normals to the faces
-	# Parameters:
-	#   vertex : batch_size x vertex_num x 3
-	#   tri : 3xtri_num
-	#   vertex_tri: T x vertex_num (T=8: maxium number of triangle each vertex can belong to)
-	# Output
-	#   normal:  batch_size x vertex_num x 3
-	#   normalf: batch_size x tri_num x 3
+    # Unit normals to the faces
+    # Parameters:
+    #   vertex : batch_size x vertex_num x 3
+    #   tri : 3xtri_num
+    #   vertex_tri: T x vertex_num (T=8: maxium number of triangle each vertex can belong to)
+    # Output
+    #   normal:  batch_size x vertex_num x 3
+    #   normalf: batch_size x tri_num x 3
 
-	# vt1_indices_, vt2_indices_, vt3_indices_ = tf.split(tri_, num_or_size_splits=3, axis=0)
+    # vt1_indices_, vt2_indices_, vt3_indices_ = tf.split(tri_, num_or_size_splits=3, axis=0)
 
-	# Dimensions
-	# batch_size_ = tf.shape(vertex_)[0]
-	# tri_num_ = tf.shape(tri_)[1]
-	# vertex_num_ = tf.shape(vertex_tri_)[1]
-	# T_ = tf.shape(vertex_tri_)[0]
+    # Dimensions
+    # batch_size_ = tf.shape(vertex_)[0]
+    # tri_num_ = tf.shape(tri_)[1]
+    # vertex_num_ = tf.shape(vertex_tri_)[1]
+    # T_ = tf.shape(vertex_tri_)[0]
 
-	# Create batch indices for tf.gather_nd
-	# batch_idx_ = tf.range(0, batch_size_)
-	# batch_idx_ = tf.reshape(batch_idx_, (batch_size_, 1))
-	# b_ = tf.tile(batch_idx_, (1, tri_num_))
-	#
-	# k1_ = tf.tile(vt1_indices_, (batch_size_, 1))
-	# k2_ = tf.tile(vt2_indices_, (batch_size_, 1))
-	# k3_ = tf.tile(vt3_indices_, (batch_size_, 1))
-	#
-	# vt1_indices_ = tf.stack([b_, k1_], 2)
-	# vt2_indices_ = tf.stack([b_, k2_], 2)
-	# vt3_indices_ = tf.stack([b_, k3_], 2)
+    # Create batch indices for tf.gather_nd
+    # batch_idx_ = tf.range(0, batch_size_)
+    # batch_idx_ = tf.reshape(batch_idx_, (batch_size_, 1))
+    # b_ = tf.tile(batch_idx_, (1, tri_num_))
+    #
+    # k1_ = tf.tile(vt1_indices_, (batch_size_, 1))
+    # k2_ = tf.tile(vt2_indices_, (batch_size_, 1))
+    # k3_ = tf.tile(vt3_indices_, (batch_size_, 1))
+    #
+    # vt1_indices_ = tf.stack([b_, k1_], 2)
+    # vt2_indices_ = tf.stack([b_, k2_], 2)
+    # vt3_indices_ = tf.stack([b_, k3_], 2)
 
-	# Compute triangle normal using its vertices 3dlocation
-	# vt1_ = tf.gather_nd(vertex_, vt1_indices_)  # batch_size x tri_num x 3
-	# vt2_ = tf.gather_nd(vertex_, vt2_indices_)
-	# vt3_ = tf.gather_nd(vertex_, vt3_indices_)
-	#
-	# normalf_ = tf.cross(vt2_ - vt1_, vt3_ - vt1_)
-	# normalf_ = tf.nn.l2_normalize(normalf_, dim=2)
+    # Compute triangle normal using its vertices 3dlocation
+    # vt1_ = tf.gather_nd(vertex_, vt1_indices_)  # batch_size x tri_num x 3
+    # vt2_ = tf.gather_nd(vertex_, vt2_indices_)
+    # vt3_ = tf.gather_nd(vertex_, vt3_indices_)
+    #
+    # normalf_ = tf.cross(vt2_ - vt1_, vt3_ - vt1_)
+    # normalf_ = tf.nn.l2_normalize(normalf_, dim=2)
 
-	BATCH_SIZE = vertex.shape[0]
+    BATCH_SIZE = vertex.shape[0]
 
-	tri = torch.transpose(tri, 0, 1)
-	tri = torch.unsqueeze(tri, 0)
-	tri = torch.unsqueeze(tri, -1)
-	tri = torch.cat(BATCH_SIZE * [tri])[:, :-1, :]
+    tri = torch.transpose(tri, 0, 1)
+    tri = torch.unsqueeze(tri, 0)
+    tri = torch.unsqueeze(tri, -1)
+    tri = torch.cat(BATCH_SIZE * [tri])[:, :-1, :]
 
-	vt1_indices = torch.cat(3 * [tri[:, :, 0]], -1).cuda()
-	vt2_indices = torch.cat(3 * [tri[:, :, 1]], -1).cuda()
-	vt3_indices = torch.cat(3 * [tri[:, :, 2]], -1).cuda()
-	vt1 = torch.gather(vertex, 1, vt1_indices)
-	vt2 = torch.gather(vertex, 1, vt2_indices)
-	vt3 = torch.gather(vertex, 1, vt3_indices)
-	zeros = torch.zeros((BATCH_SIZE, 1, 3)).cuda()
-	vt1_padded = torch.cat((vt1, zeros), 1)
-	vt2_padded = torch.cat((vt2, zeros), 1)
-	vt3_padded = torch.cat((vt3, zeros), 1)
+    vt1_indices = torch.cat(3 * [tri[:, :, 0]], -1).cuda()
+    vt2_indices = torch.cat(3 * [tri[:, :, 1]], -1).cuda()
+    vt3_indices = torch.cat(3 * [tri[:, :, 2]], -1).cuda()
+    vt1 = torch.gather(vertex, 1, vt1_indices)
+    vt2 = torch.gather(vertex, 1, vt2_indices)
+    vt3 = torch.gather(vertex, 1, vt3_indices)
+    zeros = torch.zeros((BATCH_SIZE, 1, 3)).cuda()
+    vt1_padded = torch.cat((vt1, zeros), 1)
+    vt2_padded = torch.cat((vt2, zeros), 1)
+    vt3_padded = torch.cat((vt3, zeros), 1)
 
-	normalf = torch.cross(vt2 - vt1, vt3 - vt1)
-	norm_sum = torch.norm(normalf, dim=2, keepdim=True)
-	normalf = torch.div(normalf, norm_sum)
-	normalf = torch.cat((normalf, zeros), 1)
+    normalf = torch.cross(vt2 - vt1, vt3 - vt1)
+    normalf = F.normalize(normalf, dim=2)
+    normalf = torch.cat((normalf, zeros), 1)
 
-	# compare_numpy(normalf_, normalf)
+    # compare_numpy(normalf_, normalf)
 
-	# mask_ = tf.expand_dims(tf.tile(tf.expand_dims(tf.not_equal(vertex_tri_, tri_.shape[1] - 1), 2), multiples=[1, 1, 3]), 0)
-	# mask_ = tf.cast(mask_, vertex_.dtype)
+    # mask_ = tf.expand_dims(tf.tile(tf.expand_dims(tf.not_equal(vertex_tri_, tri_.shape[1] - 1), 2), multiples=[1, 1, 3]), 0)
+    # mask_ = tf.cast(mask_, vertex_.dtype)
 
-	# Compute vertices normal
-	# vertex_tri_ = tf.reshape(vertex_tri_, shape=[1, -1])
+    # Compute vertices normal
+    # vertex_tri_ = tf.reshape(vertex_tri_, shape=[1, -1])
 
-	# b_ = tf.tile(batch_idx_, (1, T_ * vertex_num_))
-	# k_ = tf.tile(vertex_tri_, (batch_size_, 1))
-	#
-	# indices_ = tf.stack([b_, k_], 2)
-	#
-	# normal_ = tf.gather_nd(normalf_, indices_)
-	# normal_ = tf.reshape(normal_, shape=[-1, T_, vertex_num_, 3])
-	#
-	# normal_ = tf.reduce_sum(tf.multiply(normal_, mask_), axis=1)
-	# normal_ = tf.nn.l2_normalize(normal_, dim=2)
+    # b_ = tf.tile(batch_idx_, (1, T_ * vertex_num_))
+    # k_ = tf.tile(vertex_tri_, (batch_size_, 1))
+    #
+    # indices_ = tf.stack([b_, k_], 2)
+    #
+    # normal_ = tf.gather_nd(normalf_, indices_)
+    # normal_ = tf.reshape(normal_, shape=[-1, T_, vertex_num_, 3])
+    #
+    # normal_ = tf.reduce_sum(tf.multiply(normal_, mask_), axis=1)
+    # normal_ = tf.nn.l2_normalize(normal_, dim=2)
 
-	equal = vertex_tri != (tri.shape[1])
-	expand = torch.unsqueeze(equal, 2)
+    equal = vertex_tri != (tri.shape[1])
+    expand = torch.unsqueeze(equal, 2)
 
-	mask = expand.repeat(1, 1, 3).cuda()
+    mask = expand.repeat(1, 1, 3).cuda()
 
-	vertex_tri = vertex_tri.view((-1, 1))
+    vertex_tri = vertex_tri.view((-1, 1))
 
-	normal_indices = torch.unsqueeze(vertex_tri, 0)
-	normal_indices = torch.cat(BATCH_SIZE * [normal_indices])
-	normal_indices = torch.cat(3 * [normal_indices], -1).cuda()
-	normal = torch.gather(normalf, 1, normal_indices.long())
+    normal_indices = torch.unsqueeze(vertex_tri, 0)
+    normal_indices = torch.cat(BATCH_SIZE * [normal_indices])
+    normal_indices = torch.cat(3 * [normal_indices], -1).cuda()
+    normal = torch.gather(normalf, 1, normal_indices.long())
 
-	normal = normal.view((BATCH_SIZE, 8, -1, 3))
-	multi = torch.mul(normal, mask)
-	normal = torch.sum(multi, dim=1)
+    normal = normal.view((BATCH_SIZE, 8, -1, 3))
+    multi = torch.mul(normal, mask)
+    normal = torch.sum(multi, dim=1)
 
-	norm_sum = torch.norm(normal, dim=2, keepdim=True)
-	normal = torch.div(normal, norm_sum)
+    # norm_sum = torch.norm(normal, dim=2, keepdim=True)
+    # normal = torch.div(normal, norm_sum)
 
-	# Enforce that the normal are outward
+    normal = F.normalize(normal, dim=2)
 
-	# v_ = vertex_ - tf.reduce_mean(vertex_, 1, keepdims=True)
-	# s_ = tf.reduce_sum(tf.multiply(v_, normal_), 1, keepdims=True)
+    # Enforce that the normal are outward
 
-	mean = torch.mean(vertex, 1)
-	mean = torch.unsqueeze(mean, 1)
-	v = vertex - mean
-	s = torch.sum(torch.mul(v, normal), 1, keepdim=True)
+    # v_ = vertex_ - tf.reduce_mean(vertex_, 1, keepdims=True)
+    # s_ = tf.reduce_sum(tf.multiply(v_, normal_), 1, keepdims=True)
 
-	# count_s_greater_0_ = tf.count_nonzero(tf.greater(s_, 0), axis=0, keepdims=True)
-	# count_s_less_0_ = tf.count_nonzero(tf.less(s_, 0), axis=0, keepdims=True)
+    mean = torch.mean(vertex, 1)
+    mean = torch.unsqueeze(mean, 1)
+    v = vertex - mean
+    s = torch.sum(torch.mul(v, normal), 1, keepdim=True)
 
-	count_s_greater_0 = torch.sum(1 * torch.gt(s,0), 0, keepdim=True)
-	count_s_less_0 = torch.sum(1 * torch.lt(s,0), 0, keepdim=True)
+    # count_s_greater_0_ = tf.count_nonzero(tf.greater(s_, 0), axis=0, keepdims=True)
+    # count_s_less_0_ = tf.count_nonzero(tf.less(s_, 0), axis=0, keepdims=True)
 
-	# compare_numpy(count_s_less_0_, count_s_less_0)
+    count_s_greater_0 = torch.sum(1 * torch.gt(s, 0), 0, keepdim=True)
+    count_s_less_0 = torch.sum(1 * torch.lt(s, 0), 0, keepdim=True)
 
-	# sign_ = 2 * tf.cast(tf.greater(count_s_greater_0_, count_s_less_0_), tf.float64) - 1
-	# normal_ = tf.multiply(normal_, sign_)
-	# normalf_ = tf.multiply(normalf_, sign_)
+    # compare_numpy(count_s_less_0_, count_s_less_0)
 
-	sign = 2 * torch.gt(count_s_greater_0, count_s_less_0) - 1
-	# sign = sign.repeat((1, VERTEX_NUM, 1))
-	# sign = torch.unsqueeze(sign, 1)
-	# sign = torch.unsqueeze(sign, -1)
-	normal = torch.mul(normal, sign.repeat((1, VERTEX_NUM, 1)))
-	normalf = torch.mul(normalf, sign.repeat((1, TRI_NUM + 1, 1)))
+    # sign_ = 2 * tf.cast(tf.greater(count_s_greater_0_, count_s_less_0_), tf.float64) - 1
+    # normal_ = tf.multiply(normal_, sign_)
+    # normalf_ = tf.multiply(normalf_, sign_)
 
-	return normal, normalf
+    sign = 2 * torch.gt(count_s_greater_0, count_s_less_0) - 1
+    # sign = sign.repeat((1, VERTEX_NUM, 1))
+    # sign = torch.unsqueeze(sign, 1)
+    # sign = torch.unsqueeze(sign, -1)
+    normal = torch.mul(normal, sign.repeat((1, VERTEX_NUM, 1)))
+    normalf = torch.mul(normalf, sign.repeat((1, TRI_NUM + 1, 1)))
+
+    return normal, normalf
+
 
 
 # def compute_tri_normal(vertex,tri, vertex_tri):
@@ -1253,8 +1255,9 @@ def generate_shade_torch(il, m, mshape, texture_size = [192, 224], is_with_norma
 
     # 단순히 batch 단위로 나눈 것수
     m_i = m.view((BATCH_SIZE, 4, 2))[:, 0:3, :]
-    l2_sum = torch.norm(m_i, dim=(1), keepdim=True)
-    m_i_row = torch.div(m_i, l2_sum)
+    # l2_sum = torch.norm(m_i, dim=(1), keepdim=True)
+    # m_i_row = torch.div(m_i, l2_sum)
+    m_i_row = F.normalize(m_i, dim=1)
     m_cross = torch.cross(m_i_row[:, :, 0], m_i_row[:, :, 1])
     m_cross = torch.unsqueeze(m_cross, -1)
     m_i = torch.cat((m_i_row, m_cross), dim=2)
