@@ -3,6 +3,69 @@ from torch import nn
 from torch import nn
 
 
+
+class Encoder_shasha(nn.Module):
+    def __init__(self, in_dim, gf_dim, gfc_dim_m, gfc_dim_il, gfc_dim_shape, gfc_dim_tex, out_dim_m, out_dim_il):
+        super(Encoder_shasha, self).__init__()
+        self.ngpu = 1
+        self.in_dim = in_dim
+        self.ngf = gf_dim
+
+        self.main = nn.Sequential(
+            self._make_layer(gf_dim * 1, 7, 2),
+            self._make_layer(gf_dim * 2, 3, 1),
+
+            self._make_layer(gf_dim * 2, 3, 2),
+            self._make_layer(gf_dim * 2, 3, 1),
+            self._make_layer(gf_dim * 4, 3, 1),
+
+            self._make_layer(gf_dim * 4, 3, 2),
+            self._make_layer(gf_dim * 3, 3, 1),
+            self._make_layer(gf_dim * 6, 3, 1),
+
+            self._make_layer(gf_dim * 6, 3, 2),
+            self._make_layer(gf_dim * 4, 3, 1),
+            self._make_layer(gf_dim * 8, 3, 1),
+
+            self._make_layer(gf_dim * 8, 3, 2),
+            self._make_layer(gf_dim * 5, 3, 1)
+        )
+
+        in_dim = gf_dim * 5
+        self.m = NLEmbeddingBlock(in_dim, gfc_dim_m, out_dim_m)
+        self.il = NLEmbeddingBlock(in_dim, gfc_dim_il, out_dim_il)
+        self.shape = NLEmbeddingBlock(in_dim, gfc_dim_shape)
+        self.tex = NLEmbeddingBlock(in_dim, gfc_dim_tex)
+
+
+    def forward(self, x):
+        if x.is_cuda and self.ngpu > 1:
+            output = nn.parallel.data_parallel(self.main, x, range(self.ngpu))
+        else:
+            output = self.main(x)
+
+        m = self.m(output)
+        il = self.il(output)
+        shape = self.shape(output)
+        tex = self.tex(output)
+        return m, il, shape, tex
+
+    def _make_layer(self, out_dim, kernel_size, stride):
+        layers = [
+            # original parameter: padding = same, now zeros
+            nn.Conv2d(self.in_dim, out_dim, kernel_size, stride=stride, padding=int((kernel_size - 1) / 2)),
+            nn.BatchNorm2d(out_dim),
+            nn.ELU(inplace=True)  # inplace 옵션 주는 것은 의문
+        ]
+        self.in_dim = out_dim
+        return nn.Sequential(*layers)
+
+
+
+
+
+
+
 class NLEmbeddingBlock(nn.Module):
     def __init__(self, in_dim, out_dim, fc_dim=None):
         super(NLEmbeddingBlock, self).__init__()

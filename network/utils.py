@@ -18,7 +18,7 @@ OUTPUT_SIZE = 224
 def load_3DMM_tri ():
 	# Triangle definition (i.e. from Basel model)
 
-	# print ('Loading 3DMM tri ...')
+	print ('Loading 3DMM tri ...')
 
 	fd = open(_3DMM_DEFINITION_DIR + '3DMM_tri.dat')
 	tri = np.fromfile(file=fd, dtype=np.int32)
@@ -29,14 +29,14 @@ def load_3DMM_tri ():
 	tri = tri - 1
 	tri = np.append(tri, [[VERTEX_NUM], [VERTEX_NUM], [VERTEX_NUM]], axis=1)
 
-	# print('   DONE')
+	print('   DONE')
 	return tri
 
 
 def load_3DMM_vertex_tri ():
 	# Vertex to triangle mapping (list of all trianlge containing the cureent vertex)
 
-	# print('Loading 3DMM vertex tri ...')
+	print('Loading 3DMM vertex tri ...')
 
 	fd = open(_3DMM_DEFINITION_DIR + '3DMM_vertex_tri.dat')
 	vertex_tri = np.fromfile(file=fd, dtype=np.int32)
@@ -47,7 +47,7 @@ def load_3DMM_vertex_tri ():
 	vertex_tri[vertex_tri == 0] = TRI_NUM + 1
 	vertex_tri = vertex_tri - 1
 
-	# print('    DONE')
+	print('    DONE')
 	return vertex_tri
 
 
@@ -70,7 +70,7 @@ def load_3DMM_vt2pixel ():
 def load_3DMM_kpts ():
 	# 68 keypoints indices
 
-	# print('Loading 3DMM keypoints ...')
+	print('Loading 3DMM keypoints ...')
 
 	fd = open(_3DMM_DEFINITION_DIR + '3DMM_keypoints.dat')
 	kpts = np.fromfile(file=fd, dtype=np.int32)
@@ -100,7 +100,7 @@ def load_3DMM_tri_2d ( with_mask=False ):
 
 def load_Basel_basic ( element, is_reduce=False ):
 	fn = _3DMM_DEFINITION_DIR + '3DMM_' + element + '_basis.dat'
-	# print('Loading ' + fn + ' ...')
+	print('Loading ' + fn + ' ...')
 
 	fd = open(fn)
 	all_paras = np.fromfile(file=fd, dtype=np.float32)
@@ -111,7 +111,7 @@ def load_Basel_basic ( element, is_reduce=False ):
 	mu = all_paras[:, 0]
 	w = all_paras[:, 1:]
 
-	# print('    DONE')
+	print('    DONE')
 
 	return mu, w
 

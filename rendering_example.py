@@ -21,12 +21,14 @@ def main():
     vertex_num = 53215
 
     data = np.load('sample_data.npz')
-    texture = torch.from_numpy(data['sample_texture']).cuda().double()
-    shape = torch.from_numpy(data['sample_shape']).cuda().double()
-    m = torch.from_numpy(data['sample_m']).cuda().double()
+    texture = torch.from_numpy(data['sample_texture']).cuda().float()
+    shape = torch.from_numpy(data['sample_shape']).cuda().float()
+    m = torch.from_numpy(data['sample_m']).cuda().float()
     # print(m.shape)
+    texture = texture.permute((0, 3, 1, 2))
     images, foreground_mask = warp_texture_torch(texture, m, shape)
     images = images.cpu()
+    images = images.permute((0, 2, 3, 1))
     foreground_mask = foreground_mask.cpu()
     save_images(images, [4, -1], './rendered_img.png')
     save_images(data['sample_texture'], [4, -1], './texture.png')

@@ -4,7 +4,7 @@ from torch.utils.data import Dataset, DataLoader
 from config import _300W_LP_DIR
 from os.path import join, isdir, basename
 from PIL import Image
-from os import makedirs
+from os import makedirs, cpu_count
 from glob import glob
 import random
 import shutil
@@ -24,9 +24,10 @@ class NonlinearDataset(Dataset):
 			1. split raw data into train, test, and validation dataset and
 			2. load each dataset item
 	'''
-	def __init__( self, phase, dataset_dir=_300W_LP_DIR):
+	def __init__( self, phase, frac=0.1, dataset_dir=_300W_LP_DIR):
 		print("Loading dataset ...")
 		self.fdtype = np.float32
+		self.frac = frac
 
 		# initialize attributes
 		self.dataset_dir = dataset_dir
@@ -59,7 +60,7 @@ class NonlinearDataset(Dataset):
 
 
 	def __len__( self ):
-		return self.image_filenames.shape[0]
+		return int(self.image_filenames.shape[0] * self.frac)
 
 
 	def __getitem__( self, idx ):
@@ -306,13 +307,14 @@ class NonlinearDataset(Dataset):
 def main():
 	import time
 	print(torch.cuda.is_available())
-	dataloader = DataLoader(NonlinearDataset(phase='test'), batch_size=10, shuffle=True, num_workers=0)
+	dataloader = DataLoader(NonlinearDataset(phase='test', frac=0.1), batch_size=10, shuffle=True, num_workers=cpu_count())
 	start = time.time()
+	print(len(dataloader))
 	for idx, samples in enumerate(dataloader):
 		if idx > 10:
 			break
-		print(f'{idx/len(dataloader) * 100:.2f}% : {samples["image"][0].shape}, {samples["mask_img"][0].shape}')
-		print(time.time() - start)
+		print(f'{idx/len(dataloader) * 100:.2f}% : {samples["image"][0]}')
+		# print(time.time() - start)
 		start = time.time()
 
 

@@ -259,7 +259,7 @@ def warp_texture_torch ( texture, m, mshape, output_size=224 ):
     # vertex2d_single_ = tf.split(axis=0, num_or_size_splits=n_size_, value=vertex2d_)
     # visible_tri_single_ = tf.split(axis=0, num_or_size_splits=n_size_, value=visible_tri_)
 
-    rotated_normalf = torch.matmul(normalf4d, m)
+    rotated_normalf = torch.matmul(normalf4d, m.double())
     rotated_normalf = torch.transpose(rotated_normalf, 1, 2)
     _, _, rotated_normalf_z = torch.split(rotated_normalf, (1, 1, 1), dim=1)
     visible_tri = torch.gt(rotated_normalf_z, 0)
@@ -380,7 +380,7 @@ def warp_texture_torch ( texture, m, mshape, output_size=224 ):
     #     masks_.append(mask_i_)
     # ########################################################################################### end of for
     vertex2d_i = torch.squeeze(vertex2d, dim=1)
-    visible_tri_i = torch.squeeze(visible_tri, dim=1)
+    visible_tri_i = torch.squeeze(visible_tri, dim=1).double()
 
     vertex2d_u, vertex2d_v, vertex2d_z = torch.split(vertex2d_i, (1, 1, 1), dim=2)
     vertex2d_u = vertex2d_u - 1
@@ -419,7 +419,6 @@ def warp_texture_torch ( texture, m, mshape, output_size=224 ):
     # compare_numpy(pixel_u_, pixel_u)
     #
     # images_ = bilinear_sampler(texture_tf, pixel_v_, pixel_u_)
-    # texture = texture.permute((0, 3, 1, 2))
     images = bilinear_sampler_torch(texture, pixel_v, pixel_u)
     # masks_ = tf.stack(masks_)
 
@@ -427,7 +426,7 @@ def warp_texture_torch ( texture, m, mshape, output_size=224 ):
     # compare_numpy(masks_, masks)
 
     # return images.permute((0, 3, 1, 2)), masks.permute((0, 3, 1, 2))
-    return images.permute((0, 3, 1, 2)), masks
+    return images, masks
 
 
 
@@ -639,7 +638,7 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
 	vt1 = torch.gather(vertex, 1, vt1_indices)
 	vt2 = torch.gather(vertex, 1, vt2_indices)
 	vt3 = torch.gather(vertex, 1, vt3_indices)
-	zeros = torch.zeros((BATCH_SIZE, 1, 3)).cuda()
+	zeros = torch.zeros((BATCH_SIZE, 1, 3), dtype=torch.float64).cuda()
 	vt1_padded = torch.cat((vt1, zeros), 1)
 	vt2_padded = torch.cat((vt2, zeros), 1)
 	vt3_padded = torch.cat((vt3, zeros), 1)
@@ -792,7 +791,7 @@ def compute_landmarks_torch(m, shape, output_size):
     vertex3d = shape.view((n_size, -1, 3))
     indices1 = torch.arange(0, n_size).long()
     vertex3d = vertex3d[indices1, kpts.long(), :].permute((1, 0, 2))
-    vertex4d = torch.cat((vertex3d, torch.ones((vertex3d.shape[0], vertex3d.shape[1], 1)).cuda()), dim=2)
+    vertex4d = torch.cat((vertex3d, torch.ones((vertex3d.shape[0], vertex3d.shape[1], 1))), dim=2)
 
     m = m.view((n_size, 4, 2))
     vertex2d = torch.matmul(vertex4d, m)
@@ -913,7 +912,7 @@ def get_pixel_value_torch( img, x, y):
     b = batch_idx.repeat(1, height, width)
     # indices = torch.stack((b, y, x), dim=-1)
 
-    value = img[b.long(), :, y.long(), x.long()]
+    value = img[b.long(), y.long(), x.long(), :]
 
     return value
 
@@ -1013,9 +1012,8 @@ def bilinear_sampler_torch ( img, x, y ):
     # W_ = tf.shape(img_)[2]
     # C_ = tf.shape(img_)[3]
 
-    # B, H, W, C = img.shape
+    B, H, W, C = img.shape
 
-    B, C, H, W = img.shape
     # max_y_ = tf.cast(H_ - 1, 'int64')
     # max_x_ = tf.cast(W_ - 1, 'int64')
     # zero_ = tf.zeros([], dtype='int64')
@@ -1078,10 +1076,10 @@ def bilinear_sampler_torch ( img, x, y ):
     # y0_ = tf.cast(y0_, 'float64')
     # y1_ = tf.cast(y1_, 'float64')
 
-    x0 = x0.float()
-    x1 = x1.float()
-    y0 = y0.float()
-    y1 = y1.float()
+    x0 = x0.double()
+    x1 = x1.double()
+    y0 = y0.double()
+    y1 = y1.double()
 
     # calculate deltas
     # wa_ = (x1_ - x_) * (y1_ - y_)
@@ -1231,7 +1229,7 @@ def generate_shade_torch(il, m, mshape, texture_size = [192, 224], is_with_norma
     vertex_tri = torch.from_numpy(load_3DMM_vertex_tri())  # [8, VERTEX_NUM]
     vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel) for vt2pixel in load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
     tri_2d = torch.from_numpy(load_3DMM_tri_2d())  # [192, 224] (Fragment shader)
-    tri_2d_barycoord = torch.from_numpy(load_3DMM_tri_2d_barycoord()).cuda()  # [192, 224, 3]
+    tri_2d_barycoord = torch.from_numpy(load_3DMM_tri_2d_barycoord())  # [192, 224, 3]
 
     # 삼각형의 각 vertex별로 나눈 것
     tri2vt1 = tri[0, :]
@@ -1244,7 +1242,7 @@ def generate_shade_torch(il, m, mshape, texture_size = [192, 224], is_with_norma
 
     # 2d 이미지 픽셀에 해당하는 vertex들을 추출(vertex to pixel)
     # 픽셀에 박힐 vertex만 추출한다는 거임!
-    vt = torch.gather(tri, 1, tri_2d_flat_concat.long()).cuda()
+    vt = torch.gather(tri, 1, tri_2d_flat_concat.long())
 
     # 최종적으로 normal vector에 곱해져서 색을 정할 때 사용되는 상수    vt1_coeff = tf.reshape(tf.constant(tri_2d_barycoord[:,:,0], tf.float32), shape=[-1,1])  # [192 * 224, 1]
     vt1_coeff = tri_2d_barycoord[:, :, 0].view((-1, 1))
@@ -1275,8 +1273,7 @@ def generate_shade_torch(il, m, mshape, texture_size = [192, 224], is_with_norma
     vt1 = vt[:, 0, :]
     vt2 = vt[:, 1, :]
     vt3 = vt[:, 2, :]
-    zeros = torch.zeros((BATCH_SIZE, 1, 3)).cuda()
-
+    zeros = torch.zeros((BATCH_SIZE, 1, 3), dtype=torch.double)
     rotated_normal = torch.cat((rotated_normal, zeros), dim=1)
     normal_flat_vt1 = torch.gather(rotated_normal, 1, vt1)
     normal_flat_vt2 = torch.gather(rotated_normal, 1, vt2)
@@ -1372,7 +1369,7 @@ def shading_torch ( L, normal):
     normal_z = normal[:, :, 2]
 
     pi = math.pi
-    sh = torch.zeros(BATCH_SIZE, shape[1], 1, 9).cuda()
+    sh = torch.zeros(BATCH_SIZE, shape[1], 1, 9, dtype=torch.double)
     sh[:, :, :, 0] = 1 / math.sqrt(4 * pi) * torch.ones_like(normal_x)  #
     sh[:, :, :, 1] = ((2 * pi) / 3) * (math.sqrt(3 / (4 * pi))) * normal_z
     sh[:, :, :, 2] = ((2 * pi) / 3) * (math.sqrt(3 / (4 * pi))) * normal_y

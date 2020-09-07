@@ -49,7 +49,9 @@ class Nonlinear3DMM(nn.Module):
         self.w_shape = torch.tensor(w_shape, dtype=dtype)
         self.w_exp = torch.tensor(w_exp, dtype=dtype)
 
+
         # encoder
+        '''
         self.nl_encoder = NLEncoderBlock(self.nz, self.gf_dim)
         self.in_dim = self.nl_encoder.in_dim
 
@@ -58,11 +60,17 @@ class Nonlinear3DMM(nn.Module):
         self.lv_il_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 5, fc_dim=self.il_dim)
         self.lv_shape_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 2)
         self.lv_tex_layer = NLEmbeddingBlock(self.in_dim, self.gfc_dim // 2)
+        '''
+
+        ###################################### encoder shasha
+        self.nl_encoder = Encoder_shasha(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2, self.gfc_dim // 2, self.m_dim, self.il_dim)
+        self.in_dim = self.nl_encoder.in_dim
 
         self.albedo_gen = NLAlbedoDecoderBlock(self.gfc_dim//2, self.gf_dim, self.tex_sz)
         self.shape_gen = NLShapeDecoderBlock(self.gfc_dim//2, self.gf_dim, self.gfc_dim, self.tex_sz)
 
     def forward(self, input_images):
+        '''
         # encoding
         encoder_out = self.nl_encoder(input_images)
 
@@ -71,6 +79,8 @@ class Nonlinear3DMM(nn.Module):
         lv_il = self.lv_il_layer(encoder_out)
         lv_shape = self.lv_shape_layer(encoder_out)
         lv_tex = self.lv_tex_layer(encoder_out)
+        '''
+        lv_m, lv_il, lv_shape, lv_tex = self.nl_encoder(input_images)
 
         # generate albedo and shape
         albedo = self.albedo_gen(lv_tex)
