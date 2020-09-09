@@ -13,13 +13,15 @@ from torch.utils.tensorboard import SummaryWriter
 MODEL_PATH = "./checkpoint"
 
 
-
 class Nonlinear3DMMHelper:
 
-    def __init__(self, losses, device='cpu'):
+    def __init__(self, losses: list, device='cpu', name="test_writer", using_default_loss=True):
         dtype = torch.float
         self.device = device
-        self.writer = SummaryWriter("runs/test_writer")
+        self.name = name
+        self.writer = SummaryWriter("runs/" +  self.name)
+        self.default_loss = ["shape", "m"]
+        self.state_file_root_name = os.path.join(MODEL_PATH, self.name)
 
         # TODO parameterize
         self.tex_sz = (192, 224)
@@ -28,14 +30,21 @@ class Nonlinear3DMMHelper:
         self.landmark_num = 68
         self.losses = losses
         self.available_losses = list(filter(lambda a: a.endswith("_loss"), dir(self)))
+        self.shape_loss_name = "l2"
+        self.tex_loss_name = "l1"
+
+        print("**** using ****")
+        if using_default_loss:
+            self.losses += self.default_loss
+
+        if "reconstruction" not in self.losses and "texture" not in self.losses:
+            self.losses.append("texture")
 
         for loss_name in losses:
             assert loss_name + "_loss" in self.available_losses, loss_name + "_loss is not supported"
+            print(loss_name)
 
-        self.shape_loss = "l2"
-        self.tex_loss = "l1"
-
-        self.nl_network = Nonlinear3DMM().to(self.device)
+        self.net = Nonlinear3DMM()
 
         self.uv_tri, self.uv_mask = load_3DMM_tri_2d(with_mask=True)
         self.uv_tri = torch.tensor(self.uv_tri).to(self.device)
@@ -55,18 +64,16 @@ class Nonlinear3DMMHelper:
         self.w_shape = torch.tensor(w_shape, dtype=dtype).to(self.device)
         self.w_exp = torch.tensor(w_exp, dtype=dtype).to(self.device)
 
-        # generate shape1d
-        self.vt2pixel_u, self.vt2pixel_v = load_3DMM_vt2pixel()
-
-        self.vt2pixel_u = torch.tensor(self.vt2pixel_u[:-1], dtype=dtype).to(self.device)
-        self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=dtype).to(self.device)
-
         # for log
         self.global_step = 0
         self.reconstruction_loss_input = None
         self.reconstruction_loss_generate = None
         self.texture_loss_input = None
         self.texture_loss_generate = None
+        self.images_input = None
+        self.images_generate = None
+        self.image_masks_input = None
+        self.image_masks_generate = None
 
     def eval(self):
         pass
@@ -75,24 +82,28 @@ class Nonlinear3DMMHelper:
         pass
 
     def train(self, num_epochs, batch_size, learning_rate, betas):
-        nl3dmm = Nonlinear3DMM().to(self.device)
-
-        nl3dmm, start_epoch = self.load(nl3dmm, MODEL_PATH)
-
         dataset = NonlinearDataset(phase='train')
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+        dataloader = DataLoader(dataset,
+                                batch_size=batch_size,
+                                shuffle=True,
+                                num_workers=1)
+
+        self.net.to(self.device)
+
+        encoder_optimizer = torch.optim.Adam(self.net.nl_encoder.parameters(), lr=learning_rate, betas=betas)
+        global_optimizer = torch.optim.Adam(self.net.parameters(), lr=learning_rate, betas=betas)
+
+        self.net, global_optimizer, encoder_optimizer, start_epoch = self.load(
+            self.net, global_optimizer, encoder_optimizer, path=self.state_file_root_name
+        )
+
+        self.net.to(self.device)
 
         _, samples = next(enumerate(dataloader, 0))
+        self.writer.add_graph(self.net, samples["image"].to(self.device))
 
-        self.writer.add_graph(nl3dmm, samples["image"].to(self.device))
+        self.global_step = start_epoch * len(dataloader)
 
-        encoder_optimizer = torch.optim.Adam(nl3dmm.nl_encoder.parameters(), lr=learning_rate, betas=betas)
-        global_optimizer = torch.optim.Adam(nl3dmm.parameters(), lr=learning_rate, betas=betas)
-
-        self.global_step = start_epoch * len(dataset)
-
-        global_loss = 0
-        global_loss_with_landmark = 0
         for epoch in range(start_epoch, num_epochs):
             # For each batch in the dataloader
             for idx, samples in enumerate(dataloader, 0):
@@ -111,26 +122,51 @@ class Nonlinear3DMMHelper:
                 self.writer.flush()
 
                 if idx % 2 == 0:
+
                     global_optimizer.zero_grad()
+                    # print([p.grad for p in self.nl_network.parameters()])
                     global_loss.backward()
                     global_optimizer.step()
+                    # print([(np.max(p.cpu().detach().numpy())) for p in
+                    #        self.nl_network.parameters()])
+                    # print([((torch.max(p.grad).cpu().numpy().item(),
+                    #          torch.min(p.grad).cpu().numpy().item()) if p.grad is not None else "None") for p in
+                    #        self.nl_network.parameters()])
+
                 else:
                     encoder_optimizer.zero_grad()
+                    # print([p.grad for p in self.nl_network.parameters()])
                     global_loss_with_landmark.backward()
                     encoder_optimizer.step()
+                    # print([((torch.max(p.grad).cpu().numpy().item(),
+                    #          torch.min(p.grad).cpu().numpy().item()) if p.grad is not None else "None") for p in
+                    #        self.nl_network.parameters()])
 
-
-                if idx % 10 == 0:
+                if idx % 20 == 0:
                     print(datetime.now(), end=" ")
                     print(f"[{epoch}] {idx * batch_size}/{len(dataset)} "
                           f"({(idx * batch_size)/(len(dataset)) * 100:.2f}%) "
                           f"g_loss: {global_loss:.6f}, "
                           f"landmark_loss: {global_loss_with_landmark:.6f}")
 
+                    if self.image_masks_input is not None:
+                        self.writer.add_images("image_masks_input_step_20",
+                                               self.image_masks_input, self.global_step)
+                        self.writer.add_images("image_masks_generate_step_20",
+                                               self.image_masks_generate.unsqueeze(1), self.global_step)
+                    if self.images_input is not None:
+                        self.writer.add_images("images_input_step_20",
+                                               self.images_input, self.global_step)
+                        self.writer.add_images("images_generate_step_20",
+                                               self.images_generate, self.global_step)
+                    if self.texture_loss_generate is not None:
+                        self.writer.add_images("texture_loss_input_per_step_20",
+                                               self.texture_loss_input, self.global_step)
+                        self.writer.add_images("texture_loss_generate_per_step_20",
+                                               self.texture_loss_generate, self.global_step)
+
                 self.global_step += 1
 
-            self.writer.add_scalar("global_loss_per_epoch", global_loss, epoch)
-            self.writer.add_scalar("global_landmark_loss_per_epoch", global_loss_with_landmark, epoch)
             if self.reconstruction_loss_generate is not None:
                 self.writer.add_images("reconstruction_loss_input_per_epoch",
                                        self.reconstruction_loss_input, epoch)
@@ -142,95 +178,56 @@ class Nonlinear3DMMHelper:
                 self.writer.add_images("texture_loss_generate_per_epoch",
                                        self.texture_loss_generate, epoch)
 
-            self.save(nl3dmm, MODEL_PATH, epoch)
+            self.save(self.net, global_optimizer, encoder_optimizer, epoch, self.state_file_root_name)
 
-    def train_step(self, input_images, input_masks, input_texture_labels, input_texture_masks,
-                   input_m_labels, input_shape_labels, input_albedo_indexes):
-        """
-        input_albedo_indexes = [x1,y1,x2,y2]
-        """
 
-        tic = time.time()
-        batch_size = input_images.shape[0]
-        # print(time.time() - tic, "start train_step")
+    def renderer(self, lv_m, lv_il, albedo, shape2d, shape1d, inputs):
+        batch_size = shape2d.shape[0]
 
-        lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d = self.nl_network(input_images)
-
-        # print(time.time() - tic, "after nl_network")
-
-        # calculate shape1d
-        bat_sz = shape2d.shape[0]
-        vt2pixel_u = self.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
-        vt2pixel_v = self.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
-
-        shape1d = bilinear_sampler_torch(shape2d, vt2pixel_u, vt2pixel_v)
-        shape1d = shape1d.view(bat_sz, -1)
-        # print(time.time() - tic, "after bilinear_interpolate")
+        input_masks = inputs["input_masks"]
+        input_images = inputs["input_images"]
+        input_texture_masks = inputs["input_texture_masks"]
+        input_texture_labels = inputs["input_texture_labels"]
 
         m_full = lv_m * self.std_m + self.mean_m
         shape_full = shape1d * self.std_shape + self.mean_shape
 
-        # shade = generate_shade_torch(lv_il, lv_m, shape1d, self.tex_sz)
         shade = generate_shade_torch(lv_il, m_full, shape1d, self.tex_sz)
-        tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1
+        tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
 
-        g_images, g_images_mask = warp_texture_torch(tex, m_full, shape_full, output_size=self.img_sz)
-
-        #  tf.multiply(input_masks_300W, tf.expand_dims(g_images_300W_mask, -1))
-        g_images_mask = input_masks * g_images_mask.unsqueeze(1).repeat(1, 3, 1, 1)
-        g_images = g_images * g_images_mask + input_images * (torch.ones_like(g_images_mask) - g_images_mask)
-
-        # landmark
-        m_full = lv_m * self.std_m + self.mean_m
-        shape_full = shape1d * self.std_shape + self.mean_shape
-        m_labels_full = input_m_labels * self.std_m + self.mean_m
-        shape_labels_full = input_shape_labels * self.std_shape + self.mean_shape
-        landmark_u, landmark_v = compute_landmarks_torch(m_full, shape_full, output_size=self.img_sz)
-        landmark_u_labels, landmark_v_labels = compute_landmarks_torch(m_labels_full, shape_labels_full,
-                                                                       output_size=self.img_sz)
-
-        # print(time.time() - tic, "after renderer")
-
-        # ---------------- Losses -------------------------
-        # ready texture mask
         tex_vis_mask = (~input_texture_labels.eq((torch.ones_like(input_texture_labels) * -1))).float()
         tex_vis_mask = tex_vis_mask * input_texture_masks
         tex_ratio = torch.sum(tex_vis_mask) / (batch_size * self.tex_sz[0] * self.tex_sz[1] * self.c_dim)
 
-        g_loss_shape = 10 * norm_loss(shape1d, input_shape_labels, loss_type=self.shape_loss)
-        g_loss_m = 5 * norm_loss(lv_m, input_m_labels, loss_type="l2")
+        g_images, g_images_mask = warp_texture_torch(tex, m_full, shape_full, output_size=self.img_sz)
 
-        # print(time.time() - tic, "after ready texture")
+        self.image_masks_input = input_masks
+        self.image_masks_generate = g_images_mask
 
-        g_loss = g_loss_shape + g_loss_m  # default loss
+        g_images_mask = input_masks * g_images_mask.unsqueeze(1).repeat(1, 3, 1, 1)
+        g_images = g_images * g_images_mask + input_images * (torch.ones_like(g_images_mask) - g_images_mask)
+        self.images_input = input_images
+        self.images_generate = g_images
 
-        self.writer.add_scalar("g_loss_shape", g_loss_shape, self.global_step)
-        self.writer.add_scalar("g_loss_m", g_loss_m, self.global_step)
-
-        kwargs = {
-            "batch_size": batch_size,
-            "landmark_u": landmark_u,
-            "landmark_u_labels": landmark_u_labels,
-            "landmark_v": landmark_v,
-            "landmark_v_labels": landmark_v_labels,
+        param_dict = {
             "shade": shade,
-            "input_images": input_images,
-            "g_images": g_images,
-            "g_images_mask": g_images_mask,
-            "input_texture_labels": input_texture_labels,
             "tex": tex,
             "tex_vis_mask": tex_vis_mask,
             "tex_ratio": tex_ratio,
-            "shape2d": shape2d,
-            "albedo": albedo,
-            "input_albedo_indexes": input_albedo_indexes
-        }
-        if "reconstruction" not in self.losses and "texture" not in self.losses:
-            self.losses.append("texture")
 
+            "g_images": g_images,
+            "g_images_mask": g_images_mask,
+        }
+        return param_dict
+
+    def loss_calculation(self,  **kwargs):
         g_loss_with_landmark = 0
+        g_loss = 0
+
         for loss_name in self.losses:
             loss_fn = self.__getattribute__(loss_name+"_loss")
+            if not hasattr(loss_fn, '__call__'):
+                continue
             result = loss_fn(**kwargs)
 
             if loss_name == "landmark":
@@ -241,7 +238,55 @@ class Nonlinear3DMMHelper:
         g_loss_with_landmark = g_loss_with_landmark + g_loss
         return g_loss, g_loss_with_landmark
 
-    def landmark_loss(self, batch_size, landmark_u, landmark_u_labels, landmark_v, landmark_v_labels, **kwargs):
+    def train_step(self, **inputs):
+        """
+        input_albedo_indexes = [x1,y1,x2,y2]
+        """
+        input_images = inputs["input_images"]
+        batch_size = input_images.shape[0]
+
+        loss_param = {"batch_size": batch_size}
+
+        lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d = self.net(input_images)
+        renderer_dict = self.renderer(lv_m, lv_il, albedo, shape2d, shape1d, inputs)
+
+        network_result = {
+            "lv_m": lv_m,
+            "lv_il": lv_il,
+            "lv_shape": lv_shape,
+            "lv_tex": lv_tex,
+            "albedo": albedo,
+            "shape2d": shape2d,
+            "shape1d": shape1d
+        }
+
+        loss_param.update(inputs)
+        loss_param.update(network_result)
+        loss_param.update(renderer_dict)
+
+        return self.loss_calculation(**loss_param)
+
+    def landmark_calculation(self, mv, sv):
+        m_full = mv * self.std_m + self.mean_m
+        shape_full = sv * self.std_shape + self.mean_shape
+
+        landmark_u, landmark_v = compute_landmarks_torch(m_full, shape_full, output_size=self.img_sz)
+        return landmark_u, landmark_v
+
+    def shape_loss(self, shape1d, input_shape_labels, **kwargs):
+        g_loss_shape = 10 * norm_loss(shape1d, input_shape_labels, loss_type=self.shape_loss_name)
+        self.writer.add_scalar("g_loss_shape", g_loss_shape, self.global_step)
+        return g_loss_shape
+
+    def m_loss(self, lv_m, input_m_labels, **kwargs):
+        g_loss_m = 5 * norm_loss(lv_m, input_m_labels, loss_type="l2")
+        self.writer.add_scalar("g_loss_m", g_loss_m, self.global_step)
+        return g_loss_m
+
+    def landmark_loss(self, batch_size, lv_m, shape1d, input_m_labels, input_shape_labels, **kwargs):
+        landmark_u, landmark_v = self.landmark_calculation(lv_m, shape1d)
+        landmark_u_labels, landmark_v_labels = self.landmark_calculation(input_m_labels, input_shape_labels)
+
         landmark_mse_mean = (
                 torch.mean(norm_loss(landmark_u, landmark_u_labels, loss_type="l2", reduce_mean=False)) +
                 torch.mean(norm_loss(landmark_v, landmark_v_labels, loss_type="l2", reduce_mean=False)))
@@ -259,7 +304,7 @@ class Nonlinear3DMMHelper:
         return g_loss_white_shading
 
     def reconstruction_loss(self, batch_size, input_images, g_images, g_images_mask, **kwargs):
-        g_loss_recon = 10 * (norm_loss(g_images, input_images, loss_type=self.tex_loss) /
+        g_loss_recon = 10 * (norm_loss(g_images, input_images, loss_type=self.tex_loss_name) /
                              (torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)))
 
         self.reconstruction_loss_input = input_images
@@ -268,8 +313,8 @@ class Nonlinear3DMMHelper:
         return g_loss_recon
 
     def texture_loss(self, input_texture_labels, tex, tex_vis_mask, tex_ratio, **kwargs):
-        g_loss_texture = norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
-                                   loss_type=self.tex_loss) / tex_ratio
+        g_loss_texture = 100 * norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
+                                         loss_type=self.tex_loss_name) / tex_ratio
 
         self.writer.add_scalar("texture_loss", g_loss_texture, self.global_step)
         self.texture_loss_input = input_texture_labels * tex_vis_mask
@@ -277,9 +322,9 @@ class Nonlinear3DMMHelper:
         return g_loss_texture
 
     def smoothness_loss(self, shape2d, **kwargs):
-        g_loss_smoothness = 10 * norm_loss((shape2d[:, :, :-2, 1:-1] + shape2d[:, :, 2:, 1:-1] +
-                                            shape2d[:, :, 1:-1, :-2] + shape2d[:, :, 1:-1, 2:]) / 4.0,
-                                            shape2d[:, :, 1:-1, 1:-1], loss_type=self.shape_loss)
+        g_loss_smoothness = 1000 * norm_loss((shape2d[:, :, :-2, 1:-1] + shape2d[:, :, 2:, 1:-1] +
+                                              shape2d[:, :, 1:-1, :-2] + shape2d[:, :, 1:-1, 2:]) / 4.0,
+                                              shape2d[:, :, 1:-1, 1:-1], loss_type=self.shape_loss_name)
 
         self.writer.add_scalar("g_loss_smoothness", g_loss_smoothness, self.global_step)
         return g_loss_smoothness
@@ -287,7 +332,7 @@ class Nonlinear3DMMHelper:
     def symmetry_loss(self, albedo, **kwargs):
         albedo_flip = torch.flip(albedo, dims=[3])
         flip_diff = torch.max(torch.abs(albedo - albedo_flip), torch.ones_like(albedo) * 0.05)
-        g_loss_symmetry = norm_loss(flip_diff, torch.zeros_like(flip_diff), loss_type=self.tex_loss)
+        g_loss_symmetry = norm_loss(flip_diff, torch.zeros_like(flip_diff), loss_type=self.tex_loss_name)
 
         self.writer.add_scalar("g_loss_symmetry", g_loss_symmetry, self.global_step)
         return g_loss_symmetry
@@ -297,7 +342,7 @@ class Nonlinear3DMMHelper:
         albedo_1 = get_pixel_value(albedo, input_albedo_indexes[0], input_albedo_indexes[1])
         albedo_2 = get_pixel_value(albedo, input_albedo_indexes[2], input_albedo_indexes[3])
         diff = torch.max(torch.abs(albedo_1 - albedo_2), torch.ones_like(albedo_1) * 0.05)
-        g_loss_albedo_const = 5 * norm_loss(diff, torch.zeros_like(diff), loss_type=self.tex_loss)
+        g_loss_albedo_const = 5 * norm_loss(diff, torch.zeros_like(diff), loss_type=self.tex_loss_name)
 
         self.writer.add_scalar("g_loss_albedo_const", g_loss_albedo_const, self.global_step)
         return g_loss_albedo_const
@@ -322,30 +367,40 @@ class Nonlinear3DMMHelper:
         self.writer.add_scalar("loss_local_albedo", loss_local_albedo, self.global_step)
         return loss_local_albedo
 
-    def save(self, model, path, number):
-        if not os.path.isdir(path):
-            os.mkdir(path)
-        if not os.path.isdir(self.get_checkpoint_dir(path, number)):
-            os.mkdir(self.get_checkpoint_dir(path, number))
-        torch.save(model.state_dict(), self.get_checkpoint_name(path, number))
+    def save(self, model, global_optimizer, encoder_optimizer, epoch, path="checkpoint/"):
+        dir_path = self.get_checkpoint_dir(path, epoch)
+        if not os.path.isdir(dir_path):
+            os.makedirs(dir_path)
 
-    def load(self, model, path, number=-1):
-        if number == -1:
-            number = 0
+        torch.save({
+            'epoch': epoch+1,
+            'state_dict': model.state_dict(),
+            'global_optimizer': global_optimizer.state_dict(),
+            'encoder_optimizer': encoder_optimizer.state_dict(),
+        }, self.get_checkpoint_name(path, epoch))
+
+    def load(self, model, global_optimizer, encoder_optimizer, start_epoch=-1, path="checkpoint/"):
+        if start_epoch == -1:
+            start_epoch = 0
             if not os.path.isdir(path):
-                os.mkdir(path)
-            for ckpt_name in os.listdir(path):
-                number = max(number, max(map(int, re.findall(r"\d+", ckpt_name))))
-        ckpt_name = self.get_checkpoint_name(path, number)
+                print(f"no checkpoint! path: {path}")
+                return model, global_optimizer, encoder_optimizer, start_epoch
+            for ckpt_dir_name in os.listdir(path):
+                start_epoch = max(start_epoch, max(map(int, re.findall(r"\d+", ckpt_dir_name))))
 
-        if not os.path.isfile(ckpt_name):
-            print(f"no checkpoint! path: {path}")
-            return model, 0
-        print(f"loading {ckpt_name}...")
-        model.load_state_dict(torch.load(ckpt_name))
-        model = model.train(True)
-        print("DONE")
-        return model, number + 1
+        filename = self.get_checkpoint_name(path, start_epoch)
+        if os.path.isfile(filename):
+            print("=> loading checkpoint '{}'".format(filename))
+            checkpoint = torch.load(filename, map_location=self.device)
+            start_epoch = checkpoint['epoch']
+            model.load_state_dict(checkpoint['state_dict'])
+            global_optimizer.load_state_dict(checkpoint['global_optimizer'])
+            encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
+            print("=> loaded checkpoint '{}' (epoch {})".format(filename, checkpoint['epoch']))
+        else:
+            print("=> no checkpoint found at '{}'".format(filename))
+
+        return model, global_optimizer, encoder_optimizer, start_epoch
 
     def get_checkpoint_dir(self, path, number):
         return os.path.join(path, f"ckpt_{number}")
@@ -355,20 +410,31 @@ class Nonlinear3DMMHelper:
 
 
 
-if __name__ == "__main__":
-    helper = Nonlinear3DMMHelper([
-        'batchwise_white_shading',
-        'const_albedo',
-        'const_local_albedo',
-        'landmark',
-        'reconstruction',
-        'texture',
-        'smoothness',
-        'symmetry'
-    ], device='cuda' if torch.cuda.is_available() else 'cpu')
-    helper.train(
-        num_epochs=50,
+
+def pretrained_lr_test(lr, num_epochs=10):
+    pretrained_kwargs = {
+        "losses": [
+            'landmark',
+            'batchwise_white_shading',
+            'texture',
+            'symmetry',
+            'const_albedo',
+            'smoothness'
+        ],
+        "device": 'cuda' if torch.cuda.is_available() else 'cpu',
+        "name": "pretrain-lr-test-" + str(int(round(lr*10000)))
+    }
+    pretrained_helper = Nonlinear3DMMHelper(**pretrained_kwargs)
+    pretrained_helper.train(
+        num_epochs=num_epochs,
         batch_size=15,
-        learning_rate=0.0002,
+        learning_rate=lr,
         betas=(0.5, 0.999)
     )
+if __name__ == "__main__":
+    pretrained_lr_test(0.0002, num_epochs=50)
+    # pretrained_lr_test(0.0002)
+    # pretrained_lr_test(0.0003)
+    # pretrained_lr_test(0.0005)
+    # pretrained_lr_test(0.0008)
+    # pretrained_lr_test(0.001)
