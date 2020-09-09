@@ -14,6 +14,17 @@ import re
 
 MODEL_PATH = "./checkpoint"
 
+debug = True
+if debug:
+    epoch = 2
+    batch = 4
+    phase = 'test'
+    frac = 0.01
+else:
+    epoch = 50
+    batch = 20
+    phase = 'train'
+    frac = 1.0
 
 
 class Nonlinear3DMMHelper:
@@ -70,19 +81,30 @@ class Nonlinear3DMMHelper:
 
     def train(self, num_epochs, batch_size, learning_rate, betas):
         nl3dmm = Nonlinear3DMM().to(self.device)
-
+        # print(nl3dmm.summary)
+        from pytorch_model_summary import summary
+        print(summary(Nonlinear3DMM(), torch.zeros((batch_size, 3, 224, 224)), show_input=False, show_hierarchical=True))
         start_epoch = self.load(nl3dmm, MODEL_PATH)
 
-        dataset = NonlinearDataset(phase='test', frac=0.01)
+        dataset = NonlinearDataset(phase=phase, frac=frac)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1)
 
         encoder_optimizer = torch.optim.Adam(nl3dmm.nl_encoder.parameters(), lr=learning_rate, betas=betas)
         global_optimizer = torch.optim.Adam(nl3dmm.parameters(), lr=learning_rate, betas=betas)
 
+        prevs = [para for para in nl3dmm.parameters()]
+        def diff(a,b):
+            results = []
+            for a_, b_ in zip(a, b):
+                result = torch.sum(a_.data - b_.data)
+                results += [result]
+            return results
+
         for epoch in range(start_epoch, num_epochs):
 
             # For each batch in the dataloader
             for idx, samples in enumerate(dataloader, 0):
+
                 loss, g_loss_wlandmark = self.train_step(
                     input_images=samples["image"].to(self.device),
                     input_masks=samples["mask_img"].to(self.device),
@@ -93,6 +115,9 @@ class Nonlinear3DMMHelper:
                     input_albedo_indexes=list(map(lambda a: a.to(self.device), samples["albedo_indices"]))
                 )
 
+                # print("뀨")
+
+                # print_graph(loss.grad_fn)
                 if idx % 2 == 0:
                     global_optimizer.zero_grad()
                     loss.backward()
@@ -101,6 +126,8 @@ class Nonlinear3DMMHelper:
                     encoder_optimizer.zero_grad()
                     g_loss_wlandmark.backward()
                     encoder_optimizer.step()
+
+
 
                 if idx % 50 == 0:
                     print(datetime.now(), end=" ")
@@ -308,8 +335,8 @@ if __name__ == "__main__":
         'symmetry'
     ], device='cuda' if torch.cuda.is_available() else 'cpu')
     helper.train(
-        num_epochs=2,
-        batch_size=4,
-        learning_rate=0.0002,
+        num_epochs=epoch,
+        batch_size=batch,
+        learning_rate=1.0,
         betas=(0.5, 0.999)
     )

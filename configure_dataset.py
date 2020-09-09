@@ -24,7 +24,7 @@ class NonlinearDataset(Dataset):
 			1. split raw data into train, test, and validation dataset and
 			2. load each dataset item
 	'''
-	def __init__( self, phase, frac=0.1, dataset_dir=_300W_LP_DIR):
+	def __init__( self, phase, frac=1.0, dataset_dir=_300W_LP_DIR):
 		print("Loading dataset ...")
 		self.fdtype = np.float32
 		self.frac = frac
@@ -305,17 +305,20 @@ class NonlinearDataset(Dataset):
 
 
 def main():
-	import time
+	# import time
 	print(torch.cuda.is_available())
-	dataloader = DataLoader(NonlinearDataset(phase='test', frac=0.1), batch_size=10, shuffle=True, num_workers=cpu_count())
-	start = time.time()
+	dataset = NonlinearDataset(phase='train', frac=1.0)
+	print(len(dataset))
+	dataloader = DataLoader(dataset, batch_size=20, shuffle=True, num_workers=cpu_count())
+	# start = time.time()
 	print(len(dataloader))
+	# return
 	for idx, samples in enumerate(dataloader):
-		if idx > 10:
+		if idx > 2:
 			break
 		print(f'{idx/len(dataloader) * 100:.2f}% : {samples["image"][0]}')
 		# print(time.time() - start)
-		start = time.time()
+		# start = time.time()
 
 
 if __name__ == "__main__":

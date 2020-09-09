@@ -136,7 +136,8 @@ class Nonlinear3DMMHelper:
         self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM), dtype=dtype).to(self.device)
         # self.std_shape  = np.load('std_shape.npy')
 
-        self.mean_m = torch.tensor(np.load('dataset/mean_m.npy'), dtype=dtype).to(self.device)
+        selka4.\
+	        f.mean_m = torch.tensor(np.load('dataset/mean_m.npy'), dtype=dtype).to(self.device)
         self.std_m = torch.tensor(np.load('dataset/std_m.npy'), dtype=dtype).to(self.device)
 
         self.w_shape = torch.tensor(w_shape, dtype=dtype).to(self.device)
