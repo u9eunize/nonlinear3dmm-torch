@@ -256,6 +256,13 @@ class NonlinearDataset(Dataset):
 		mask_img_filenames  = list(filter(lambda x: '_mask_img.png' in x, all_files))
 		texture_filenames   = list(filter(lambda x: '_texture.png' in x, all_files))
 
+		image_filenames.sort()
+		mask_filenames.sort()
+		mask_img_filenames.sort()
+		texture_filenames.sort()
+
+		# TODO filename validation check (same prefix)
+
 		self.image_filenames    = np.array(image_filenames)
 		self.mask_filenames     = np.array(mask_filenames)
 		self.mask_img_filenames = np.array(mask_img_filenames)
