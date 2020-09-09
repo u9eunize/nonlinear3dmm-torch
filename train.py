@@ -313,8 +313,8 @@ class Nonlinear3DMMHelper:
         return g_loss_recon
 
     def texture_loss(self, input_texture_labels, tex, tex_vis_mask, tex_ratio, **kwargs):
-        g_loss_texture = 100 * norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
-                                         loss_type=self.tex_loss_name) / tex_ratio
+        g_loss_texture = norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
+                                   loss_type=self.tex_loss_name) / tex_ratio
 
         self.writer.add_scalar("texture_loss", g_loss_texture, self.global_step)
         self.texture_loss_input = input_texture_labels * tex_vis_mask
