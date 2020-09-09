@@ -189,7 +189,7 @@ std::vector<torch::Tensor> ZBuffer_cuda_forward(
             s2d.data<scalar_t>(),
             tri.data<scalar_t>(),
             vis.data<scalar_t>(),
-            tri_num,
+            tri_num + 1,
             vertex_num,
             output.data<scalar_t>(),
             zbuffer.data<scalar_t>(),
