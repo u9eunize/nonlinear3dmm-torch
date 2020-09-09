@@ -16,7 +16,7 @@ MODEL_PATH = "./checkpoint"
 class Nonlinear3DMMHelper:
 
     def __init__(self, losses: list, device='cpu', name="test_writer", using_default_loss=True):
-        dtype = torch.float
+        dtype = torch.float64
         self.device = device
         self.name = name
         self.writer = SummaryWriter("runs/" +  self.name)
@@ -432,7 +432,7 @@ def pretrained_lr_test(lr, num_epochs=10):
         betas=(0.5, 0.999)
     )
 if __name__ == "__main__":
-    pretrained_lr_test(0.0002, num_epochs=50)
+    pretrained_lr_test(0.00005, num_epochs=50)
     # pretrained_lr_test(0.0002)
     # pretrained_lr_test(0.0003)
     # pretrained_lr_test(0.0005)

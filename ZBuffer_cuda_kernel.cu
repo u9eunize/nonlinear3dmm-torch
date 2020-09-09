@@ -161,8 +161,6 @@ std::vector<torch::Tensor> ZBuffer_cuda_forward(
 
     AT_DISPATCH_FLOATING_TYPES(s2d.type(), "ZBuffer_forward_cuda", ([&] {
         Initialize<scalar_t><<<32, 224>>> (
-            output.data<scalar_t>(),
-        Initialize<scalar_t><<<32, 256>>> (
             output.data<int>(),
             zbuffer.data<scalar_t>(),
             tri_num,
