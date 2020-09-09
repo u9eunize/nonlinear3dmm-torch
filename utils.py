@@ -127,7 +127,7 @@ def load_const_alb_mask ():
 
 
 def load_3DMM_tri_2d_barycoord ():
-	fd = open(_3DMM_DEFINITION_DIR + '3DMM_tri_2d_barycoord.dat')
+	fd = open(_3DMM_DEFINITION_DIR + '3DMM_tri_2d_barycoord_reduce.dat')
 	tri_2d_barycoord = np.fromfile(file=fd, dtype=np.float32)
 	fd.close()
 
