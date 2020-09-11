@@ -118,6 +118,7 @@ class Nonlinear3DMMHelper:
                 )
                 self.writer.add_scalar("global_loss", global_loss, self.global_step)
                 self.writer.add_scalar("global_loss_with_landmark", global_loss_with_landmark, self.global_step)
+                self.writer.flush()
 
                 if idx % 2 == 0:
 
@@ -433,7 +434,7 @@ def pretrained_lr_test(lr, name=None, num_epochs=10, start_epoch=-1):
 
 
 if __name__ == "__main__":
-    pretrained_lr_test(1e-4, name="pretraining2", num_epochs=100)
+    pretrained_lr_test(0.0002, num_epochs=50)
     # pretrained_lr_test(0.0002)
     # pretrained_lr_test(0.0003)
     # pretrained_lr_test(0.0005)

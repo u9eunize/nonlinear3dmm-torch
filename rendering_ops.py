@@ -36,28 +36,17 @@ def ZBuffer_Rendering_CUDA_op_v2_sz224_torch(s2d, tri, vis):
     # zbuffer_tri_v2_sz224 = _cuda_op_module_v2_sz224.zbuffer_tri_v2_sz224
     # tri_map, zbuffer = zbuffer_tri_v2_sz224(s2d, tri, vis)
 
-    batch_size = s2d.shape[0]
     s2d = s2d.contiguous()
     # tri = tri.cuda()
-    vis = vis.float()
-    s2d = s2d.float()
-    tri = tri.float()
+
+    # s2d = s2d.double()
+    # tri = tri.int()
     # vis = vis.double()
 
-    maps = []
-    masks = []
 
-    for i in range(batch_size):
-        map, mask = ZBuffer_cuda.forward(s2d[i], tri, vis[i], TRI_NUM, VERTEX_NUM, OUTPUT_SIZE)
-        maps.append(map)
-        masks.append(mask)
+    map, mask = ZBuffer_cuda.forward(s2d, tri.int(), vis, TRI_NUM, VERTEX_NUM, OUTPUT_SIZE)
 
-    maps = torch.stack(maps)
-    masks = torch.stack(masks)
-
-    # return torch.from_numpy(np.concatenate([placeholder_tri_map] * BATCH_SIZE)), torch.from_numpy(np.concatenate([placeholder_zbuffer] * BATCH_SIZE))
-
-    return maps, masks
+    return map, mask
 
 
 # def warp_texture(texture, m, mshape, output_size=224):
@@ -219,8 +208,7 @@ def warp_texture_torch ( texture, m, mshape, output_size=224 ):
 
     tri = torch.from_numpy(load_3DMM_tri()).cuda().long()  # [3, TRI_NUM + 1]
     vertex_tri = torch.from_numpy(load_3DMM_vertex_tri()).cuda()  # [8, VERTEX_NUM]
-    vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel).cuda() for vt2pixel in
-                              load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
+    vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel).cuda() for vt2pixel in load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
 
 
     m = m.view((BATCH_SIZE, 4, 2))
@@ -238,6 +226,9 @@ def warp_texture_torch ( texture, m, mshape, output_size=224 ):
     # compare_numpy(vertex4d_, vertex4d)
 
     vertex2d = torch.matmul(vertex4d, m)
+    # np.save('v2_t', vertex2d.cpu().numpy())
+    # np.save('v4_t', vertex4d.cpu().numpy())
+    # np.save('m_t', m.cpu().numpy())
     # vertex2d = torch.transpose(vertex2d, 1, 2)
 
     # compare_numpy(vertex2d_, vertex2d)
@@ -379,6 +370,7 @@ def warp_texture_torch ( texture, m, mshape, output_size=224 ):
     #
     #     masks_.append(mask_i_)
     # ########################################################################################### end of for
+
     vertex2d_i = torch.squeeze(vertex2d, dim=1)
     visible_tri_i = torch.squeeze(visible_tri, dim=1)
 
@@ -388,7 +380,21 @@ def warp_texture_torch ( texture, m, mshape, output_size=224 ):
     vertex2d_i = torch.cat((vertex2d_v, vertex2d_u, vertex2d_z), dim=2)
     vertex2d_i = torch.transpose(vertex2d_i, 1, 2)
 
-    tri_map_2d, masks = ZBuffer_Rendering_CUDA_op_v2_sz224_torch(vertex2d_i, tri, visible_tri_i)
+    # np.save('i1_t', vertex2d_i.cpu().numpy())
+    # np.save('i2_t', visible_tri.cpu().numpy())
+    # vertex2d_i = torch.from_numpy(np.load('i1.npy')).cuda()
+    tri_map_2d = []
+    masks = []
+    for i in range(BATCH_SIZE):
+        tri_map_2d_i, masks_i = ZBuffer_Rendering_CUDA_op_v2_sz224_torch(vertex2d_i[i].float(), tri, visible_tri[i])
+        tri_map_2d.append(tri_map_2d_i)
+        masks.append(masks_i)
+
+    tri_map_2d = torch.stack(tri_map_2d)
+    masks = torch.stack(masks)
+
+    # np.save('o1_t', tri_map_2d.cpu().numpy())
+    # np.save('o2_t', masks.cpu().numpy())
 
     tri_map_2d_flat = tri_map_2d.view((BATCH_SIZE, -1))
 
@@ -402,15 +408,23 @@ def warp_texture_torch ( texture, m, mshape, output_size=224 ):
     c1, c2, c3 = barycentric_torch(pixel_uu, pixel_vv, u, v)
 
     pixel_u = torch.gather(torch.unsqueeze(vt2pixel_u, -1).repeat(BATCH_SIZE, 1, 3), 1, vt)
-
     pixel_v = torch.gather(torch.unsqueeze(vt2pixel_v, -1).repeat(BATCH_SIZE, 1, 3), 1, vt)
 
-    pixel_u = torch.sum(
-        (pixel_u * torch.cat((torch.unsqueeze(c1, -1), torch.unsqueeze(c2, -1), torch.unsqueeze(c3, -1)), -1)),
-        dim=2).view((BATCH_SIZE, output_size, output_size))
-    pixel_v = torch.sum(
-        (pixel_v * torch.cat((torch.unsqueeze(c1, -1), torch.unsqueeze(c2, -1), torch.unsqueeze(c3, -1)), -1)),
-        dim=2).view((BATCH_SIZE, output_size, output_size))
+    # pixel_u = torch.sum(
+    #     (pixel_u * torch.cat((torch.unsqueeze(c1, -1), torch.unsqueeze(c2, -1), torch.unsqueeze(c3, -1)), -1)),
+    #     dim=2).view((BATCH_SIZE, output_size, output_size))
+    # pixel_v = torch.sum(
+    #     (pixel_v * torch.cat((torch.unsqueeze(c1, -1), torch.unsqueeze(c2, -1), torch.unsqueeze(c3, -1)), -1)),
+    #     dim=2).view((BATCH_SIZE, output_size, output_size))
+
+    pixel1_u, pixel2_u, pixel3_u = torch.split(pixel_u, (1, 1, 1), dim=-1)
+    pixel1_v, pixel2_v, pixel3_v = torch.split(pixel_v, (1, 1, 1), dim=-1)
+
+    pixel_u = torch.squeeze(pixel1_u) * c1 + torch.squeeze(pixel2_u) * c2 + torch.squeeze(pixel3_u) * c3
+    pixel_v = torch.squeeze(pixel1_v) * c1 + torch.squeeze(pixel2_v) * c2 + torch.squeeze(pixel3_v) * c3
+
+    pixel_u = pixel_u.view((BATCH_SIZE, output_size, output_size))
+    pixel_v = pixel_v.view((BATCH_SIZE, output_size, output_size))
 
     # pixel_v_ = tf.stack(pixel_v_)
     # pixel_u_ = tf.stack(pixel_u_)
@@ -472,9 +486,9 @@ def barycentric_torch( pixel_uu, pixel_vv, u, v):
     # c3_ = (v0_u_ * v2_v_ - v2_u_ * v0_v_) * invDenom_
     # c1_ = 1.0 - c2_ - c3_
 
-    invDenom = torch.mul(v0_u, v1_v) - torch.mul(v1_u, v0_v) + 1e-6
-    c2 = torch.div((v2_u * v1_v - v1_u * v2_v), invDenom)
-    c3 = torch.div((v0_u * v2_v - v2_u * v0_v), invDenom)
+    invDenom = (v0_u * v1_v - v1_u * v0_v + 1e-6)
+    c2 = (v2_u * v1_v - v1_u * v2_v) / (invDenom)
+    c3 = (v0_u * v2_v - v2_u * v0_v) / (invDenom)
     c1 = 1.0 - c2 - c3
 
     return c1, c2, c3
@@ -644,9 +658,9 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
     vt2_padded = torch.cat((vt2, zeros), 1)
     vt3_padded = torch.cat((vt3, zeros), 1)
 
-    normalf = torch.cross(vt2 - vt1, vt3 - vt1)
+    normalf = torch.cross(vt2_padded - vt1_padded, vt3_padded - vt1_padded)
     normalf = F.normalize(normalf, dim=2)
-    normalf = torch.cat((normalf, zeros), 1)
+    # normalf = torch.cat((normalf, zeros), 1)
 
     # compare_numpy(normalf_, normalf)
 
