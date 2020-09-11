@@ -81,7 +81,7 @@ class Nonlinear3DMMHelper:
     def predict(self):
         pass
 
-    def train(self, num_epochs, batch_size, learning_rate, betas):
+    def train(self, num_epochs, batch_size, learning_rate, betas, start_epoch=-1, step_log=100):
         dataset = NonlinearDataset(phase='train')
         dataloader = DataLoader(dataset,
                                 batch_size=batch_size,
@@ -94,7 +94,7 @@ class Nonlinear3DMMHelper:
         global_optimizer = torch.optim.Adam(self.net.parameters(), lr=learning_rate, betas=betas)
 
         self.net, global_optimizer, encoder_optimizer, start_epoch = self.load(
-            self.net, global_optimizer, encoder_optimizer, path=self.state_file_root_name
+            self.net, global_optimizer, encoder_optimizer, path=self.state_file_root_name, start_epoch=start_epoch
         )
 
         self.net.to(self.device)
@@ -116,10 +116,8 @@ class Nonlinear3DMMHelper:
                     input_shape_labels=samples["shape_label"].to(self.device),
                     input_albedo_indexes=list(map(lambda a: a.to(self.device), samples["albedo_indices"]))
                 )
-
                 self.writer.add_scalar("global_loss", global_loss, self.global_step)
                 self.writer.add_scalar("global_loss_with_landmark", global_loss_with_landmark, self.global_step)
-                self.writer.flush()
 
                 if idx % 2 == 0:
 
@@ -128,7 +126,7 @@ class Nonlinear3DMMHelper:
                     global_loss.backward()
                     global_optimizer.step()
                     # print([(np.max(p.cpu().detach().numpy())) for p in
-                    #        self.nl_network.parameters()])
+                    #       self.net.nl_encoder.m.parameters()])
                     # print([((torch.max(p.grad).cpu().numpy().item(),
                     #          torch.min(p.grad).cpu().numpy().item()) if p.grad is not None else "None") for p in
                     #        self.nl_network.parameters()])
@@ -142,27 +140,30 @@ class Nonlinear3DMMHelper:
                     #          torch.min(p.grad).cpu().numpy().item()) if p.grad is not None else "None") for p in
                     #        self.nl_network.parameters()])
 
-                if idx % 20 == 0:
-                    print(datetime.now(), end=" ")
-                    print(f"[{epoch}] {idx * batch_size}/{len(dataset)} "
-                          f"({(idx * batch_size)/(len(dataset)) * 100:.2f}%) "
-                          f"g_loss: {global_loss:.6f}, "
-                          f"landmark_loss: {global_loss_with_landmark:.6f}")
+                print(datetime.now(), end=" ")
+                print(f"[{epoch}, {idx:04d}] {idx * batch_size}/{len(dataset)} "
+                      f"({(idx * batch_size)/(len(dataset)) * 100:.2f}%) "
+                      f"g_loss: {global_loss:.6f}, "
+                      f"landmark_loss: {global_loss_with_landmark:.6f}")
 
+                if idx % step_log == 0:
+
+                    #self.add_to_log("global_loss", global_loss)
+                    #self.add_to_log("global_loss_with_landmark", global_loss_with_landmark)
                     if self.image_masks_input is not None:
-                        self.writer.add_images("image_masks_input_step_20",
+                        self.writer.add_images("image_masks_input_step",
                                                self.image_masks_input, self.global_step)
-                        self.writer.add_images("image_masks_generate_step_20",
+                        self.writer.add_images("image_masks_generate_step",
                                                self.image_masks_generate.unsqueeze(1), self.global_step)
                     if self.images_input is not None:
-                        self.writer.add_images("images_input_step_20",
+                        self.writer.add_images("images_input_step",
                                                self.images_input, self.global_step)
-                        self.writer.add_images("images_generate_step_20",
+                        self.writer.add_images("images_generate_step",
                                                self.images_generate, self.global_step)
                     if self.texture_loss_generate is not None:
-                        self.writer.add_images("texture_loss_input_per_step_20",
+                        self.writer.add_images("texture_loss_input_per_step",
                                                self.texture_loss_input, self.global_step)
-                        self.writer.add_images("texture_loss_generate_per_step_20",
+                        self.writer.add_images("texture_loss_generate_per_step",
                                                self.texture_loss_generate, self.global_step)
 
                 self.global_step += 1
@@ -180,7 +181,6 @@ class Nonlinear3DMMHelper:
 
             self.save(self.net, global_optimizer, encoder_optimizer, epoch, self.state_file_root_name)
 
-
     def renderer(self, lv_m, lv_il, albedo, shape2d, shape1d, inputs):
         batch_size = shape2d.shape[0]
 
@@ -192,7 +192,7 @@ class Nonlinear3DMMHelper:
         m_full = lv_m * self.std_m + self.mean_m
         shape_full = shape1d * self.std_shape + self.mean_shape
 
-        shade = generate_shade_torch(lv_il, m_full, shape1d, self.tex_sz)
+        shade = generate_shade_torch(lv_il, m_full, shape_full, self.tex_sz)
         tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
 
         tex_vis_mask = (~input_texture_labels.eq((torch.ones_like(input_texture_labels) * -1))).float()
@@ -203,11 +203,11 @@ class Nonlinear3DMMHelper:
 
         self.image_masks_input = input_masks
         self.image_masks_generate = g_images_mask
+        self.images_input = input_images
+        self.images_generate = g_images
 
         g_images_mask = input_masks * g_images_mask.unsqueeze(1).repeat(1, 3, 1, 1)
         g_images = g_images * g_images_mask + input_images * (torch.ones_like(g_images_mask) - g_images_mask)
-        self.images_input = input_images
-        self.images_generate = g_images
 
         param_dict = {
             "shade": shade,
@@ -279,7 +279,7 @@ class Nonlinear3DMMHelper:
         return g_loss_shape
 
     def m_loss(self, lv_m, input_m_labels, **kwargs):
-        g_loss_m = 5 * norm_loss(lv_m, input_m_labels, loss_type="l2")
+        g_loss_m = 5 * norm_loss(lv_m, input_m_labels, loss_type="l1")
         self.writer.add_scalar("g_loss_m", g_loss_m, self.global_step)
         return g_loss_m
 
@@ -313,8 +313,8 @@ class Nonlinear3DMMHelper:
         return g_loss_recon
 
     def texture_loss(self, input_texture_labels, tex, tex_vis_mask, tex_ratio, **kwargs):
-        g_loss_texture = norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
-                                   loss_type=self.tex_loss_name) / tex_ratio
+        g_loss_texture = 100 * norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
+                                         loss_type=self.tex_loss_name) / tex_ratio
 
         self.writer.add_scalar("texture_loss", g_loss_texture, self.global_step)
         self.texture_loss_input = input_texture_labels * tex_vis_mask
@@ -379,7 +379,7 @@ class Nonlinear3DMMHelper:
             'encoder_optimizer': encoder_optimizer.state_dict(),
         }, self.get_checkpoint_name(path, epoch))
 
-    def load(self, model, global_optimizer, encoder_optimizer, start_epoch=-1, path="checkpoint/"):
+    def load(self, model, global_optimizer=None, encoder_optimizer=None, start_epoch=-1, path="checkpoint/"):
         if start_epoch == -1:
             start_epoch = 0
             if not os.path.isdir(path):
@@ -409,9 +409,7 @@ class Nonlinear3DMMHelper:
         return os.path.join(f"{self.get_checkpoint_dir(path, number)}", f"model_ckpt_{number}.pt")
 
 
-
-
-def pretrained_lr_test(lr, num_epochs=10):
+def pretrained_lr_test(lr, name=None, num_epochs=10, start_epoch=-1):
     pretrained_kwargs = {
         "losses": [
             'landmark',
@@ -422,17 +420,20 @@ def pretrained_lr_test(lr, num_epochs=10):
             'smoothness'
         ],
         "device": 'cuda' if torch.cuda.is_available() else 'cpu',
-        "name": "pretrain-lr-test-" + str(int(round(lr*10000)))
+        "name": "pretrain-tco-test-" + str(int(round(lr*10000))) if name is None else name
     }
     pretrained_helper = Nonlinear3DMMHelper(**pretrained_kwargs)
     pretrained_helper.train(
         num_epochs=num_epochs,
         batch_size=15,
         learning_rate=lr,
-        betas=(0.5, 0.999)
+        betas=(0.5, 0.999),
+        start_epoch=start_epoch
     )
+
+
 if __name__ == "__main__":
-    pretrained_lr_test(0.0002, num_epochs=50)
+    pretrained_lr_test(1e-4, name="pretraining2", num_epochs=100)
     # pretrained_lr_test(0.0002)
     # pretrained_lr_test(0.0003)
     # pretrained_lr_test(0.0005)
