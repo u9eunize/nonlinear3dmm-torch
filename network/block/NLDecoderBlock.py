@@ -2,9 +2,7 @@ from collections import OrderedDict
 
 import torch
 from torch import nn
-from _3dmm_utils import *
 import numpy as np
-from rendering_ops import bilinear_sampler_torch
 
 
 class ConvTranspose2dOutputResize(nn.Module):

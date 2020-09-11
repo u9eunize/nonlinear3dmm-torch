@@ -1,6 +1,5 @@
 from network.block import *
-from rendering_ops import *
-from ops import *
+from renderer.rendering_ops import *
 
 
 TRI_NUM = 105840
