@@ -1,14 +1,15 @@
-from network.Nonlinear_3DMM import Nonlinear3DMM
-from configure_dataset import *
 from pytz import timezone
 from datetime import datetime
-from renderer.rendering_ops import *
-from torch.utils.tensorboard import SummaryWriter
-from loss import Loss
-import config
 from os.path import join
 
+from torch.utils.tensorboard import SummaryWriter
 
+from network.Nonlinear_3DMM import Nonlinear3DMM
+from configure_dataset import *
+from renderer.rendering_ops import *
+from loss import Loss
+import log_utils
+import config
 
 
 class Nonlinear3DMMHelper:
@@ -20,11 +21,20 @@ class Nonlinear3DMMHelper:
         self.name = f'{datetime.now(timezone("Asia/Seoul")).strftime("%Y%m%d_%H%M%S")}'
         if config.PREFIX:
             self.name += f'_{config.PREFIX}'
-        self.writer = SummaryWriter(join(config.LOG_PATH, self.name))
+
+        # Set Logger
+        # self.writer = SummaryWriter(join(config.LOG_PATH, self.name))
+
+        self.logger_train = log_utils.NLLogger(self.name, "train")
+        log_utils.set_logger("nl_train", self.logger_train)
+
+        # self.logger_valid = log_utils.NLLogger(self.name, "valid")
+        # log_utils.set_logger("nl_valid", self.logger_valid)
+
         self.state_file_root_name = join(config.CHECKPOINT_DIR_PATH, self.name)
 
         # Define losses
-        self.loss = Loss(self.losses, self.writer)
+        self.loss = Loss(self.losses, self.logger_train)
 
         # Load model
         self.net = Nonlinear3DMM().to(config.DEVICE)
@@ -38,15 +48,10 @@ class Nonlinear3DMMHelper:
         self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), config.VERTEX_NUM), dtype=dtype).to(config.DEVICE)
 
         self.mean_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype).to(config.DEVICE)
-        self.std_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype).to(config.DEVICE)
+        self.std_m = torch.tensor(np.load(join(config.DATASET_PATH, 'std_m.npy')), dtype=dtype).to(config.DEVICE)
 
         self.w_shape = torch.tensor(w_shape, dtype=dtype).to(config.DEVICE)
         self.w_exp = torch.tensor(w_exp, dtype=dtype).to(config.DEVICE)
-
-
-
-
-
 
 
     def train(self):
@@ -58,12 +63,12 @@ class Nonlinear3DMMHelper:
                                       num_workers=1,
                                       pin_memory=True)
 
-        valid_dataloader = DataLoader(NonlinearDataset(phase='valid', frac=config.DATASET_FRAC),
-                                      batch_size=config.BATCH_SIZE,
-                                      drop_last=True,
-                                      shuffle=False,
-                                      num_workers=1,
-                                      pin_memory=True)
+        # valid_dataloader = DataLoader(NonlinearDataset(phase='valid', frac=config.DATASET_FRAC),
+        #                               batch_size=config.BATCH_SIZE,
+        #                               drop_last=True,
+        #                               shuffle=False,
+        #                               num_workers=1,
+        #                               pin_memory=True)
 
         # test_dataloader = DataLoader(NonlinearDataset(phase='test', frac=config.DATASET_FRAC),
         #                              batch_size=config.BATCH_SIZE,
@@ -84,16 +89,13 @@ class Nonlinear3DMMHelper:
         global_step = start_epoch * len(train_dataloader) + 1
 
         # Write graph to the tensorboard
-        _, samples = next(enumerate(train_dataloader, 0))
-        self.writer.add_graph(self.net, samples["image"].to(config.DEVICE))
-
-
-
+        # _, samples = next(enumerate(train_dataloader, 0))
+        # self.writer.add_graph(self.net, samples["image"].to(config.DEVICE))
 
         for epoch in range(start_epoch, config.EPOCH):
             # For each batch in the dataloader
             for idx, samples in enumerate(train_dataloader, 0):
-                self.train_step(
+                g_loss, g_loss_with_landmark = self.train_step(
                     input_images=samples["image"].to(config.DEVICE),
                     input_masks=samples["mask_img"].to(config.DEVICE),
                     input_texture_labels=samples["texture"].to(config.DEVICE),
@@ -103,38 +105,26 @@ class Nonlinear3DMMHelper:
                     input_albedo_indexes=list(map(lambda a: a.to(config.DEVICE), samples["albedo_indices"]))
                 )
 
-                if global_step % config.LOSS_LOG_INTERVAL == 0:
-                    self.loss.write_losses(global_step, 'train')
-
-                if global_step % config.IMAGE_LOG_INTERVAL == 0:
-                    self.loss.write_images(global_step, 'train')
-
-
                 if idx % 2 == 0:
                     global_optimizer.zero_grad()
-                    self.loss.losses['g_loss'].backward()
+                    g_loss.backward()
                     global_optimizer.step()
                 else:
                     encoder_optimizer.zero_grad()
-                    self.loss.losses['g_loss_with_landmark'].backward()
+                    g_loss_with_landmark.backward()
                     encoder_optimizer.step()
-
 
                 print(datetime.now(), end=" ")
                 print(f"[{epoch}, {idx+1:04d}] {idx * config.BATCH_SIZE}/{len(train_dataloader) * config.BATCH_SIZE} "
-                      f"({(idx * config.BATCH_SIZE)/(len(train_dataloader)) * 100:.2f}%) "
-                      f"g_loss: {self.loss.losses['g_loss']:.6f}, "
-                      f"landmark_loss: {self.loss.losses['g_loss_with_landmark']:.6f}")
-
+                      f"({idx/(len(train_dataloader)) * 100:.2f}%) "
+                      f"g_loss: {g_loss:.6f}, "
+                      f"landmark_loss: {g_loss_with_landmark:.6f}")
 
                 global_step += 1
 
+                self.logger_train.step()
 
             save(self.net, global_optimizer, encoder_optimizer, epoch, self.state_file_root_name)
-
-
-
-
 
     def train_step(self, **inputs):
         """
@@ -145,7 +135,8 @@ class Nonlinear3DMMHelper:
         loss_param = {}
 
         lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d = self.net(input_images)
-        renderer_dict = renderer(lv_m, lv_il, albedo, shape2d, shape1d, inputs, self.std_m, self.mean_m, self.std_shape, self.mean_shape)
+        renderer_dict = renderer(lv_m, lv_il, albedo, shape2d, shape1d, inputs,
+                                 self.std_m, self.mean_m, self.std_shape, self.mean_shape)
 
         network_result = {
             "lv_m": lv_m,
@@ -161,13 +152,14 @@ class Nonlinear3DMMHelper:
         loss_param.update(network_result)
         loss_param.update(renderer_dict)
 
+        # debugging
+        self.logger_train.write_image("shade", loss_param["shade"])
+        self.logger_train.write_image("g_images", loss_param["g_images"],
+                                      [loss_param["g_images_raw"], loss_param["input_images"]])
+        self.logger_train.write_image("g_images_mask", loss_param["g_images_mask"],
+                                      [loss_param["g_images_mask_raw"], loss_param["input_masks"]])
+
         return self.loss(**loss_param)
-
-
-
-
-
-
 
 
 def pretrained_lr_test(name=None, start_epoch=-1):

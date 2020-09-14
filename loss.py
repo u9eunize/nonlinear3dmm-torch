@@ -38,18 +38,20 @@ def norm_loss(predictions, labels, mask=None, loss_type="l1", reduce_mean=True, 
 
 
 class Loss:
-    def __init__(self, loss_names, writer):
+    def __init__(self, loss_names, logger):
         print("**** using ****")
         for loss_name in loss_names:
             print(loss_name)
 
         self.loss_names = loss_names
-        self.writer = writer
+        self.logger = logger
         self.shape_loss_name = "l2"
         self.tex_loss_name = "l1"
         self.landmark_num = 68
         self.img_sz = 224
+
         dtype = torch.float
+
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         mu_shape, w_shape = load_Basel_basic('shape')
@@ -102,118 +104,80 @@ class Loss:
         self.losses['g_loss'] = sum(self.losses.values())
         self.losses['g_loss_with_landmark'] = self.losses['landmark_loss'] + self.losses['g_loss']
 
-        # for image logging
-        self.input_images = input_images
-        self.g_images = g_images
-        self.input_images_mask = input_masks
-        self.g_images_mask = g_images_mask
-
-    def write_losses(self, step, phase):
         for loss_name, loss in self.losses.items():
-            self.writer.add_scalar(f"{loss_name}/{phase}", loss, step)
-        self.writer.flush()
+            self.logger.write_scalar(f"{loss_name}", loss)
 
-    def write_images(self, step, phase):
-        self.writer.add_images(f"images/{phase}",
-                               torch.cat([self.g_images[:config.IMAGE_LOG_NUMBER],
-                                          self.input_images[:config.IMAGE_LOG_NUMBER]], dim=0), step)
-
-        self.writer.add_images(f"image_masks/{phase}",
-                               torch.cat([self.g_images_mask[:config.IMAGE_LOG_NUMBER],
-                                          self.input_images_mask[:config.IMAGE_LOG_NUMBER]], dim=0), step)
-
-        self.writer.add_images(f"textures/{phase}",
-                               torch.cat([self.g_textures[:config.IMAGE_LOG_NUMBER],
-                                          self.input_textures[:config.IMAGE_LOG_NUMBER]], dim=0), step)
-
-        if 'reconstruction' in self.loss_names:
-            self.writer.add_images(f"reconstruction/{phase}",
-                                   torch.cat([self.g_reconstructions[:config.IMAGE_LOG_NUMBER],
-                                              self.input_reconstructions[:config.IMAGE_LOG_NUMBER]], dim=0), step)
-
-        self.writer.flush()
+        return self.losses['g_loss'], self.losses['g_loss_with_landmark']
 
     def shape_loss(self, shape1d, input_shape_labels, **kwargs):
-        g_loss_shape = config.SHAPE_LAMBDA * norm_loss(shape1d, input_shape_labels, loss_type=config.SHAPE_LOSS_TYPE)
-        # self.writer.add_scalar("g_loss_shape", g_loss_shape, self.global_step)
-        return g_loss_shape
+        g_loss_shape = norm_loss(shape1d, input_shape_labels, loss_type=config.SHAPE_LOSS_TYPE)
+        return config.SHAPE_LAMBDA * g_loss_shape
 
     def m_loss(self, lv_m, input_m_labels, **kwargs):
-        g_loss_m = config.M_LAMBDA * norm_loss(lv_m, input_m_labels, loss_type=config.M_LOSS_TYPE)
-        # self.writer.add_scalar("g_loss_m", g_loss_m, self.global_step)
-        return g_loss_m
+        g_loss_m = norm_loss(lv_m, input_m_labels, loss_type=config.M_LOSS_TYPE)
+        return config.M_LAMBDA * g_loss_m
 
     def landmark_loss(self, lv_m, shape1d, input_m_labels, input_shape_labels, **kwargs):
         landmark_u, landmark_v = self.landmark_calculation(lv_m, shape1d)
         landmark_u_labels, landmark_v_labels = self.landmark_calculation(input_m_labels, input_shape_labels)
 
-        landmark_mse_mean = (
-                torch.mean(
-                    norm_loss(landmark_u, landmark_u_labels, loss_type=config.LANDMARK_LOSS_TYPE, reduce_mean=False)) +
-                torch.mean(
-                    norm_loss(landmark_v, landmark_v_labels, loss_type=config.LANDMARK_LOSS_TYPE, reduce_mean=False)))
-        landmark_loss = config.LANDMARK_LAMBDA * landmark_mse_mean / self.landmark_num / config.BATCH_SIZE
+        u_loss = torch.mean(norm_loss(landmark_u, landmark_u_labels,
+                                      loss_type=config.LANDMARK_LOSS_TYPE, reduce_mean=False))
+        v_loss = torch.mean(norm_loss(landmark_v, landmark_v_labels,
+                                      loss_type=config.LANDMARK_LOSS_TYPE, reduce_mean=False))
+        landmark_mse_mean = u_loss + v_loss
+        landmark_loss = landmark_mse_mean / self.landmark_num / config.BATCH_SIZE
 
-        # self.writer.add_scalar("landmark_loss", landmark_loss, self.global_step)
-        return landmark_loss
+        return config.LANDMARK_LAMBDA * landmark_loss
 
     def batchwise_white_shading_loss(self, shade, **kwargs):
         uv_mask = self.uv_mask.unsqueeze(0).unsqueeze(0)
         mean_shade = torch.mean(shade * uv_mask, dim=[0, 2, 3]) * 16384 / 10379
-        g_loss_white_shading = config.BATCHWISE_WHITE_SHADING_LAMBDA * norm_loss(mean_shade, 0.99 * torch.ones(
-            mean_shade.shape).float().to(self.device),
-                                                                                 loss_type=config.BATCHWISE_WHITE_SHADING_LOSS_TYPE)
+        g_loss_white_shading = norm_loss(mean_shade,
+                                         0.99 * torch.ones(mean_shade.shape).float().to(self.device),
+                                         loss_type=config.BATCHWISE_WHITE_SHADING_LOSS_TYPE)
 
-        # self.writer.add_scalar("g_loss_white_shading", g_loss_white_shading, self.global_step)
-        return g_loss_white_shading
+        return config.BATCHWISE_WHITE_SHADING_LAMBDA * g_loss_white_shading
 
     def reconstruction_loss(self, batch_size, input_images, g_images, g_images_mask, **kwargs):
-        g_loss_recon = config.RECONSTRUCTION_LAMBDA * (
-                    norm_loss(g_images, input_images, loss_type=config.RECONSTRUCTION_LOSS_TYPE) /
-                    (torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)))
+        images_loss = norm_loss(g_images, input_images, loss_type=config.RECONSTRUCTION_LOSS_TYPE)
+        mask_mean = torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)
+        g_loss_recon = images_loss / mask_mean
 
-        self.input_reconstructions = input_images
-        self.g_reconstructions = g_images
-        # self.writer.add_scalar("reconstruction_loss", g_loss_recon, self.global_step)
-        return g_loss_recon
+        self.logger.write_image("reconstruction", g_images, input_images)
+        return config.RECONSTRUCTION_LAMBDA * g_loss_recon
 
     def texture_loss(self, input_texture_labels, tex, tex_vis_mask, tex_ratio, **kwargs):
         g_loss_texture = config.TEXTURE_LAMBDA * norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
                                                            loss_type=config.TEXTURE_LOSS_TYPE) / tex_ratio
 
-        # self.writer.add_scalar("texture_loss", g_loss_texture, self.global_step)
-        self.input_textures = input_texture_labels * tex_vis_mask
-        self.g_textures = tex * tex_vis_mask
+        self.logger.write_image("texture_raw", tex, input_texture_labels)
+        self.logger.write_image("texture", tex * tex_vis_mask, input_texture_labels * tex_vis_mask)
+
         return g_loss_texture
 
     def smoothness_loss(self, shape2d, **kwargs):
-        g_loss_smoothness = config.SMOOTHNESS_LAMBDA * norm_loss((shape2d[:, :, :-2, 1:-1] + shape2d[:, :, 2:, 1:-1] +
-                                                                  shape2d[:, :, 1:-1, :-2] + shape2d[:, :, 1:-1,
-                                                                                             2:]) / 4.0,
-                                                                 shape2d[:, :, 1:-1, 1:-1],
-                                                                 loss_type=config.SMOOTHNESS_LOSS_TYPE)
-
-        # self.writer.add_scalar("g_loss_smoothness", g_loss_smoothness, self.global_step)
-        return g_loss_smoothness
+        smoothness_sum = (shape2d[:, :, :-2, 1:-1] + shape2d[:, :, 2:, 1:-1] +
+                          shape2d[:, :, 1:-1, :-2] + shape2d[:, :, 1:-1, 2:]) / 4.0
+        g_loss_smoothness = norm_loss(smoothness_sum, shape2d[:, :, 1:-1, 1:-1],
+                                      loss_type=config.SMOOTHNESS_LOSS_TYPE)
+        return config.SMOOTHNESS_LAMBDA * g_loss_smoothness
 
     def symmetry_loss(self, albedo, **kwargs):
         albedo_flip = torch.flip(albedo, dims=[3])
         flip_diff = torch.max(torch.abs(albedo - albedo_flip), torch.ones_like(albedo) * 0.05)
-        g_loss_symmetry = config.SYMMETRY_LAMBDA * norm_loss(flip_diff, torch.zeros_like(flip_diff),
-                                                             loss_type=config.SYMMETRY_LOSS_TYPE)
-
-        # self.writer.add_scalar("g_loss_symmetry", g_loss_symmetry, self.global_step)
-        return g_loss_symmetry
+        g_loss_symmetry = norm_loss(flip_diff, torch.zeros_like(flip_diff),
+                                    loss_type=config.SYMMETRY_LOSS_TYPE)
+        return config.SYMMETRY_LAMBDA * g_loss_symmetry
 
     def const_albedo_loss(self, albedo, input_albedo_indexes, **kwargs):
         albedo_1 = get_pixel_value_torch(albedo, input_albedo_indexes[0], input_albedo_indexes[1])
         albedo_2 = get_pixel_value_torch(albedo, input_albedo_indexes[2], input_albedo_indexes[3])
         diff = torch.max(torch.abs(albedo_1 - albedo_2), torch.ones_like(albedo_1) * 0.05)
-        g_loss_albedo_const = config.CONST_ALBEDO_LAMBDA * norm_loss(diff, torch.zeros_like(diff),
-                                                                     loss_type=config.CONST_ALBEDO_LOSS_TYPE)
+        g_loss_albedo_const = norm_loss(diff, torch.zeros_like(diff),
+                                        loss_type=config.CONST_ALBEDO_LOSS_TYPE)
 
-        # self.writer.add_scalar("g_loss_albedo_const", g_loss_albedo_const, self.global_step)
-        return g_loss_albedo_const
+        return config.CONST_ALBEDO_LAMBDA * g_loss_albedo_const
 
     def const_local_albedo_loss(self, input_texture_labels, tex_vis_mask, albedo, **kwargs):
         chromaticity = (input_texture_labels + 1) / 2.0
@@ -230,10 +194,9 @@ class Loss:
         v_albedo_norm = norm_loss(albedo[:, :, :, :-1], albedo[:, :, :, 1:],
                                   loss_type=config.CONST_LOCAL_ALBEDO_LOSS_TYPE, p=0.8, reduce_mean=False) * w_v
         loss_local_albedo_v = torch.mean(v_albedo_norm) / torch.sum(w_v + 1e-6)
-        loss_local_albedo = config.CONST_LOCAL_ALBEDO_LAMBDA * (loss_local_albedo_u + loss_local_albedo_v)
+        loss_local_albedo = (loss_local_albedo_u + loss_local_albedo_v)
 
-        # self.writer.add_scalar("loss_local_albedo", loss_local_albedo, self.global_step)
-        return loss_local_albedo
+        return config.CONST_LOCAL_ALBEDO_LAMBDA * loss_local_albedo
 
     def landmark_calculation(self, mv, sv):
         m_full = mv * self.std_m + self.mean_m

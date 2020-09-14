@@ -24,20 +24,21 @@ def renderer ( lv_m, lv_il, albedo, shape2d, shape1d, inputs, std_m, mean_m, std
     tex_vis_mask = tex_vis_mask * input_texture_masks
     tex_ratio = torch.sum(tex_vis_mask) / (batch_size * config.TEXTURE_SIZE[0] * config.TEXTURE_SIZE[1] * config.C_DIM)
 
-    g_images, g_images_mask = warp_texture_torch(tex, m_full, shape_full)
+    g_images_raw, g_images_mask_raw = warp_texture_torch(tex, m_full, shape_full)
 
-
-    g_images_mask = input_masks * g_images_mask.unsqueeze(1).repeat(1, 3, 1, 1)
-    g_images = g_images * g_images_mask + input_images * (torch.ones_like(g_images_mask) - g_images_mask)
+    g_images_mask = input_masks * g_images_mask_raw.unsqueeze(1).repeat(1, 3, 1, 1)
+    g_images = g_images_raw * g_images_mask + input_images * (torch.ones_like(g_images_mask) - g_images_mask)
 
     param_dict = {
-            "shade"        : shade,
-            "tex"          : tex,
-            "tex_vis_mask" : tex_vis_mask,
-            "tex_ratio"    : tex_ratio,
+        "shade": shade,
+        "tex": tex,
+        "tex_vis_mask": tex_vis_mask,
+        "tex_ratio": tex_ratio,
 
-            "g_images"     : g_images,
-            "g_images_mask": g_images_mask,
+        "g_images": g_images,
+        "g_images_mask": g_images_mask,
+        "g_images_raw": g_images_raw,
+        "g_images_mask_raw": g_images_mask_raw.unsqueeze(1).repeat(1, 3, 1, 1),
     }
     return param_dict
 
