@@ -181,33 +181,35 @@ class NonlinearDataset(Dataset):
 		random.shuffle(random_indices)
 
 		phases = [
-				('train', 0.8),
-				('valid', 0.1),
-				('test', 0.1)
+				('train', int(0.8 * total_len)),
+				('valid', int(0.9 * total_len)),
+				('test', int(total_len))
 		]
 
 		# split dataset
-		offset = 0
-		for phase in phases:
-			print(f"Spliting {phase[0]} dataset ...")
+		bef = 0
+		for phase, last_idx in phases:
+			print(f"Spliting {phase} dataset ...")
 			# create directories
 			for dataset in datasets:
-				makedirs(join(self.dataset_dir, phase[0], dataset), exist_ok=True)
-			indices = random_indices[int(offset * total_len):int((offset + phase[1]) * total_len)]
-			offset += phase[1]
+				makedirs(join(self.dataset_dir, phase, dataset), exist_ok=True)
+			indices = random_indices[bef:last_idx]
+			bef = last_idx
 
 			image_paths = all_images[indices]
 			paras = all_paras[indices]
+			tot = list(zip(image_paths, paras))
+			paths_and_paras = sorted(tot, key=lambda a: a[0])
 
 			# copy image and mask_img files, duplicate mask and texture files
-			for idx, (image_path, para) in enumerate(zip(image_paths, paras)):
+			for idx, (image_path, para) in enumerate(paths_and_paras):
 				if idx % 100 == 0:
 					print("        Splitting {} dataset progress: {:.2f}% ({})".format(
-						phase[0],
+						phase,
 						idx / image_paths.shape[0] * 100,
 						basename(image_path)
 					))
-				target_name = join(self.dataset_dir, phase[0], image_path.split('.')[0])
+				target_name = join(self.dataset_dir, phase, image_path.split('.')[0])
 
 				# copy image and mask image files
 				image = join(self.dataset_dir, 'image', image_path)
@@ -222,7 +224,7 @@ class NonlinearDataset(Dataset):
 				shutil.copy(texture, target_name + '_texture.png')
 
 			# 5. write params to the proper directory
-			np.save(join(self.dataset_dir, phase[0], 'param'), paras)
+			np.save(join(self.dataset_dir, phase, 'param'), paras)
 
 		print("     Splited dataset!")
 
