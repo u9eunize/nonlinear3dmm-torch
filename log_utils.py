@@ -42,20 +42,16 @@ class NLLogger:
     def write_scalar(self, name, data, interval=config.LOSS_LOG_INTERVAL):
         self._write(interval, f"{name}", (self.writer.add_scalar, data))
 
-    def write_image(self, name, gen_img, other_images=None, interval=config.IMAGE_LOG_INTERVAL):
-        if gen_img is None:
+    def write_image(self, name, images, interval=config.IMAGE_LOG_INTERVAL):
+        if images is None:
             return
-        gen_img = gen_img[:self.img_log_number]
+        if not isinstance(images, list):
+            images = [images]
+        result = []
+        for img in images:
+            result.append(img[:self.img_log_number])
+        result = torch.cat(result, dim=0)
 
-        if other_images is not None:
-            if not isinstance(other_images, list):
-                other_images = [other_images]
-            result = [gen_img]
-            for images in other_images:
-                result.append(images[:self.img_log_number])
-            result = torch.cat(result, dim=0)
-        else:
-            result = gen_img
         self._write(interval, f"{name}", (self.writer.add_images, result))
 
 

@@ -144,15 +144,15 @@ class Loss:
         mask_mean = torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)
         g_loss_recon = images_loss / mask_mean
 
-        self.logger.write_image("reconstruction", g_images, input_images)
+        self.logger.write_image("reconstruction", [g_images, input_images])
         return config.RECONSTRUCTION_LAMBDA * g_loss_recon
 
     def texture_loss(self, input_texture_labels, tex, tex_vis_mask, tex_ratio, **kwargs):
         g_loss_texture = config.TEXTURE_LAMBDA * norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
                                                            loss_type=config.TEXTURE_LOSS_TYPE) / tex_ratio
 
-        self.logger.write_image("texture_raw", tex, input_texture_labels)
-        self.logger.write_image("texture", tex * tex_vis_mask, input_texture_labels * tex_vis_mask)
+        self.logger.write_image("texture_raw",
+                                [tex, input_texture_labels, tex * tex_vis_mask, input_texture_labels * tex_vis_mask])
 
         return g_loss_texture
 

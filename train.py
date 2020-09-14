@@ -154,11 +154,11 @@ class Nonlinear3DMMHelper:
 
         # debugging
         self.logger_train.write_image("shade", loss_param["shade"])
-        self.logger_train.write_image("g_images", loss_param["g_images"],
-                                      [loss_param["g_images_raw"], loss_param["input_images"]])
-        self.logger_train.write_image("g_images_mask", loss_param["g_images_mask"],
-                                      [loss_param["g_images_mask_raw"], loss_param["input_masks"]])
-
+        self.logger_train.write_image("g_images",
+                                      [loss_param["g_images"], loss_param["g_images_raw"], loss_param["input_images"]])
+        self.logger_train.write_image("g_images_mask",
+                                      [loss_param["g_images_mask"], loss_param["g_images_mask_raw"],
+                                       loss_param["input_masks"]])
         return self.loss(**loss_param)
 
 

@@ -130,3 +130,6 @@ dmypy.json
 .idea/
 dataset/
 checkpoint/
+save/
+logs/
+runs/
