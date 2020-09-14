@@ -5,14 +5,55 @@ Hence, there are "-1" subtraction to Python 0-based indexing
 from __future__ import division
 import math
 import numpy as np
-from config import _3DMM_DEFINITION_DIR
+import config
 import torch
+import os
 from torchvision.utils import save_image
+from os import makedirs
+from os.path import join
+from glob import glob
 
-VERTEX_NUM = 53215
-TRI_NUM = 105840
-N = VERTEX_NUM * 3
-OUTPUT_SIZE = 224
+
+
+
+def save ( model, global_optimizer, encoder_optimizer, epoch, path):
+	dir_path = get_checkpoint_dir(path, epoch)
+	makedirs(dir_path, exist_ok=True)
+
+	torch.save({
+			'epoch'            : epoch + 1,
+			'state_dict'       : model.state_dict(),
+			'global_optimizer' : global_optimizer.state_dict(),
+			'encoder_optimizer': encoder_optimizer.state_dict(),
+	}, get_checkpoint_name(path, epoch))
+
+
+def load ( model, global_optimizer=None, encoder_optimizer=None, start_epoch=None):
+	if not config.CHECKPOINT_PATH:
+		return model, global_optimizer, encoder_optimizer, 0
+
+	if start_epoch:
+		ckpt_name =join(config.CHECKPOINT_DIR_PATH, config.CHECKPOINT_PATH, f'ckpt_{start_epoch}', f'model_ckpt_{start_epoch}.pt')
+	else:
+		ckpt_name = glob(join(config.CHECKPOINT_DIR_PATH, config.CHECKPOINT_PATH, 'ckpt_*', 'model_ckpt_*'))[-1]
+
+	checkpoint = torch.load(ckpt_name, map_location=config.DEVICE)
+	start_epoch = checkpoint['epoch']
+	model.load_state_dict(checkpoint['state_dict'])
+	global_optimizer.load_state_dict(checkpoint['global_optimizer'])
+	encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
+	print("=> loaded checkpoint '{}' (epoch {})".format(ckpt_name, checkpoint['epoch']))
+
+	return model, global_optimizer, encoder_optimizer, start_epoch
+
+
+def get_checkpoint_dir ( path, number ):
+	return os.path.join(path, f"ckpt_{number}")
+
+
+def get_checkpoint_name ( path, number ):
+	return os.path.join(f"{get_checkpoint_dir(path, number)}", f"model_ckpt_{number}.pt")
+
 
 
 def load_3DMM_tri ():
@@ -20,14 +61,14 @@ def load_3DMM_tri ():
 
 	# print ('Loading 3DMM tri ...')
 
-	fd = open(_3DMM_DEFINITION_DIR + '3DMM_tri.dat')
+	fd = open(config.DEFINITION_PATH + '3DMM_tri.dat')
 	tri = np.fromfile(file=fd, dtype=np.int32)
 	fd.close()
 	# print tri
 
 	tri = tri.reshape((3, -1)).astype(np.int32)
 	tri = tri - 1
-	tri = np.append(tri, [[VERTEX_NUM], [VERTEX_NUM], [VERTEX_NUM]], axis=1)
+	tri = np.append(tri, [[config.VERTEX_NUM], [config.VERTEX_NUM], [config.VERTEX_NUM]], axis=1)
 
 	# print('   DONE')
 	return tri
@@ -38,13 +79,13 @@ def load_3DMM_vertex_tri ():
 
 	# print('Loading 3DMM vertex tri ...')
 
-	fd = open(_3DMM_DEFINITION_DIR + '3DMM_vertex_tri.dat')
+	fd = open(config.DEFINITION_PATH + '3DMM_vertex_tri.dat')
 	vertex_tri = np.fromfile(file=fd, dtype=np.int32)
 	fd.close()
 
 	vertex_tri = vertex_tri.reshape((8, -1)).astype(np.int32)
 	# vertex_tri = np.append(vertex_tri, np.zeros([8,1]), 1)
-	vertex_tri[vertex_tri == 0] = TRI_NUM + 1
+	vertex_tri[vertex_tri == 0] = config.TRI_NUM + 1
 	vertex_tri = vertex_tri - 1
 
 	# print('    DONE')
@@ -54,12 +95,12 @@ def load_3DMM_vertex_tri ():
 def load_3DMM_vt2pixel ():
 	# Mapping in UV space
 
-	fd = open(_3DMM_DEFINITION_DIR + 'vertices_2d_u.dat')
+	fd = open(config.DEFINITION_PATH + 'vertices_2d_u.dat')
 	vt2pixel_u = np.fromfile(file=fd, dtype=np.float32)
 	vt2pixel_u = np.append(vt2pixel_u - 1, 0)
 	fd.close()
 
-	fd = open(_3DMM_DEFINITION_DIR + 'vertices_2d_v.dat')
+	fd = open(config.DEFINITION_PATH + 'vertices_2d_v.dat')
 	vt2pixel_v = np.fromfile(file=fd, dtype=np.float32)
 	vt2pixel_v = np.append(vt2pixel_v - 1, 0)
 	fd.close()
@@ -72,7 +113,7 @@ def load_3DMM_kpts ():
 
 	# print('Loading 3DMM keypoints ...')
 
-	fd = open(_3DMM_DEFINITION_DIR + '3DMM_keypoints.dat')
+	fd = open(config.DEFINITION_PATH + '3DMM_keypoints.dat')
 	kpts = np.fromfile(file=fd, dtype=np.int32)
 	kpts = kpts.reshape((-1, 1))
 	fd.close()
@@ -81,7 +122,7 @@ def load_3DMM_kpts ():
 
 
 def load_3DMM_tri_2d ( with_mask=False ):
-	fd = open(_3DMM_DEFINITION_DIR + '3DMM_tri_2d.dat')
+	fd = open(config.DEFINITION_PATH + '3DMM_tri_2d.dat')
 	tri_2d = np.fromfile(file=fd, dtype=np.int32)
 	fd.close()
 
@@ -89,7 +130,7 @@ def load_3DMM_tri_2d ( with_mask=False ):
 
 	tri_mask = tri_2d != 0
 
-	tri_2d[tri_2d == 0] = TRI_NUM + 1  # VERTEX_NUM + 1
+	tri_2d[tri_2d == 0] = config.TRI_NUM + 1  # VERTEX_NUM + 1
 	tri_2d = tri_2d - 1
 
 	if with_mask:
@@ -99,14 +140,14 @@ def load_3DMM_tri_2d ( with_mask=False ):
 
 
 def load_Basel_basic ( element, is_reduce=False ):
-	fn = _3DMM_DEFINITION_DIR + '3DMM_' + element + '_basis.dat'
+	fn = config.DEFINITION_PATH + '3DMM_' + element + '_basis.dat'
 	# print('Loading ' + fn + ' ...')
 
 	fd = open(fn)
 	all_paras = np.fromfile(file=fd, dtype=np.float32)
 	fd.close()
 
-	all_paras = np.transpose(all_paras.reshape((-1, N)).astype(np.float32))
+	all_paras = np.transpose(all_paras.reshape((-1, config.N)).astype(np.float32))
 
 	mu = all_paras[:, 0]
 	w = all_paras[:, 1:]
@@ -117,7 +158,7 @@ def load_Basel_basic ( element, is_reduce=False ):
 
 
 def load_const_alb_mask ():
-	fd = open(_3DMM_DEFINITION_DIR + '3DMM_const_alb_mask.dat')
+	fd = open(config.DEFINITION_PATH + '3DMM_const_alb_mask.dat')
 	const_alb_mask = np.fromfile(file=fd, dtype=np.uint8)
 	fd.close()
 	const_alb_mask = const_alb_mask - 1
@@ -127,7 +168,7 @@ def load_const_alb_mask ():
 
 
 def load_3DMM_tri_2d_barycoord ():
-	fd = open(_3DMM_DEFINITION_DIR + '3DMM_tri_2d_barycoord_reduce.dat')
+	fd = open(config.DEFINITION_PATH + '3DMM_tri_2d_barycoord_reduce.dat')
 	tri_2d_barycoord = np.fromfile(file=fd, dtype=np.float32)
 	fd.close()
 

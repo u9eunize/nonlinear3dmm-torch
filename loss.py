@@ -1,7 +1,8 @@
 import torch
 import torch.nn.functional as F
 from renderer.rendering_ops import *
-
+import config
+from os.path import join
 
 def norm_loss(predictions, labels, mask=None, loss_type="l1", reduce_mean=True, p=1):
     """
@@ -40,8 +41,15 @@ def norm_loss(predictions, labels, mask=None, loss_type="l1", reduce_mean=True, 
 
 
 class Loss():
-	def __init__(self, losses):
-		self.losses = losses
+
+	def __init__( self, loss_names, writer ):
+		print("**** using ****")
+		for loss_name in loss_names:
+			print(loss_name)
+
+
+		self.loss_names = loss_names
+		self.writer = writer
 		self.shape_loss_name = "l2"
 		self.tex_loss_name = "l1"
 		self.landmark_num = 68
@@ -52,66 +60,95 @@ class Loss():
 		mu_shape, w_shape = load_Basel_basic('shape')
 		mu_exp, w_exp = load_Basel_basic('exp')
 		self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype).to(self.device)
-		self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM), dtype=dtype).to(self.device)
+		self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), config.VERTEX_NUM), dtype=dtype).to(self.device)
 		# self.std_shape  = np.load('std_shape.npy')
 
-		self.mean_m = torch.tensor(np.load('dataset/mean_m.npy'), dtype=dtype).to(self.device)
-		self.std_m = torch.tensor(np.load('dataset/std_m.npy'), dtype=dtype).to(self.device)
+		self.mean_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype).to(self.device)
+		self.std_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype).to(self.device)
 
 
 		self.uv_tri, self.uv_mask = load_3DMM_tri_2d(with_mask=True)
 		self.uv_tri = torch.tensor(self.uv_tri).to(self.device)
 		self.uv_mask = torch.tensor(self.uv_mask).to(self.device)
 
-	def __call__ ( self, **kwargs ):
-		landmark_loss = 0
-		g_loss = 0
+	def __call__ ( self, input_images, g_images, input_masks, g_images_mask, **kwargs ):
+		self.losses = {}
 
-		if "landmark" in self.losses: landmark_loss = self.landmark_loss(**kwargs)
-		if "batchwise_white_shading" in self.losses: g_loss += self.batchwise_white_shading_loss(**kwargs)
-		if "texture" in self.losses: g_loss += self.texture_loss(**kwargs)
-		if "symmetry" in self.losses: g_loss += self.symmetry_loss(**kwargs)
-		if "const_albedo" in self.losses: g_loss += self.const_albedo_loss(**kwargs)
-		if "smoothness" in self.losses: g_loss += self.smoothness_loss(**kwargs)
-		if "shape" in self.losses: g_loss += self.shape_loss(**kwargs)
-		if "m" in self.losses: g_loss += self.m_loss(**kwargs)
-		if "reconstruction" in self.losses: g_loss += self.reconstruction_loss(**kwargs)
-		if "const_local_albedo" in self.losses: g_loss += self.const_local_albedo_loss(**kwargs)
+		if "landmark" in self.loss_names:
+			self.losses['landmark_loss'] = self.landmark_loss(**kwargs)
+		if "batchwise_white_shading" in self.loss_names:
+			self.losses['batchwise_white_shading_loss'] = self.batchwise_white_shading_loss(**kwargs)
+		if "texture" in self.loss_names:
+			self.losses['texture_loss'] = self.texture_loss(**kwargs)
+		if "symmetry" in self.loss_names:
+			self.losses['symmetry_loss'] = self.symmetry_loss(**kwargs)
+		if "const_albedo" in self.loss_names:
+			self.losses['const_albedo_loss'] = self.const_albedo_loss(**kwargs)
+		if "smoothness" in self.loss_names:
+			self.losses['smoothness_loss'] = self.smoothness_loss(**kwargs)
+		if "shape" in self.loss_names:
+			self.losses['shape_loss'] = self.shape_loss(**kwargs)
+		if "m" in self.loss_names:
+			self.losses['m_loss'] = self.m_loss(**kwargs)
+		if "reconstruction" in self.loss_names:
+			self.losses['reconstruction_loss'] = self.reconstruction_loss(**kwargs)
+		if "const_local_albedo" in self.loss_names:
+			self.losses['const_local_albedo_loss'] = self.const_local_albedo_loss(**kwargs)
 
-		# for loss_name in self.losses:
-		#     loss_fn = getattr(Loss, loss_name+"_loss")
-		#     if not hasattr(loss_fn, '__call__'):
-		#         continue
-		#     result = loss_fn(**kwargs)
-		#
-		#     if loss_name == "landmark":
-		#         g_loss_with_landmark = result
-		#     else:
-		#         g_loss += result
+		self.losses['g_loss'] = sum(self.losses.values())
+		self.losses['g_loss_with_landmark'] = self.losses['landmark_loss'] + self.losses['g_loss']
 
-		g_loss_with_landmark = landmark_loss + g_loss
-		return g_loss, g_loss_with_landmark
+		# for image logging
+		self.input_images = input_images
+		self.g_images = g_images
+		self.input_images_mask = input_masks
+		self.g_images_mask = g_images_mask
+
+
+	def write_losses( self, step , phase):
+		for loss_name, loss in self.losses.items():
+			self.writer.add_scalar(f"{loss_name}/{phase}", loss, step)
+		self.writer.flush()
+
+	def write_images( self, step, phase ):
+		self.writer.add_images(f"images/{phase}",
+		                torch.cat([self.g_images[:config.IMAGE_LOG_NUMBER],
+		                           self.input_images[:config.IMAGE_LOG_NUMBER]], dim=0), step)
+
+		self.writer.add_images(f"image_masks/{phase}",
+		                       torch.cat([self.g_images_mask[:config.IMAGE_LOG_NUMBER],
+		                                  self.input_images_mask[:config.IMAGE_LOG_NUMBER]], dim=0), step)
+
+		self.writer.add_images(f"textures/{phase}",
+		                       torch.cat([self.g_textures[:config.IMAGE_LOG_NUMBER],
+		                                  self.input_textures[:config.IMAGE_LOG_NUMBER]], dim=0), step)
+
+		if 'reconstruction' in self.loss_names:
+			self.writer.add_images(f"reconstruction/{phase}",
+			                       torch.cat([self.g_reconstructions[:config.IMAGE_LOG_NUMBER],
+			                                  self.input_reconstructions[:config.IMAGE_LOG_NUMBER]], dim=0), step)
+
+		self.writer.flush()
 
 	def shape_loss ( self, shape1d, input_shape_labels, **kwargs ):
-		g_loss_shape = 10 * norm_loss(shape1d, input_shape_labels, loss_type=self.shape_loss_name)
+		g_loss_shape = config.SHAPE_LAMBDA * norm_loss(shape1d, input_shape_labels, loss_type=config.SHAPE_LOSS_TYPE)
 		# self.writer.add_scalar("g_loss_shape", g_loss_shape, self.global_step)
 		return g_loss_shape
 
-
 	def m_loss ( self, lv_m, input_m_labels, **kwargs ):
-		g_loss_m = 5 * norm_loss(lv_m, input_m_labels, loss_type="l1")
+		g_loss_m = config.M_LAMBDA * norm_loss(lv_m, input_m_labels, loss_type=config.M_LOSS_TYPE)
 		# self.writer.add_scalar("g_loss_m", g_loss_m, self.global_step)
 		return g_loss_m
 
 
-	def landmark_loss ( self, batch_size, lv_m, shape1d, input_m_labels, input_shape_labels, **kwargs ):
+	def landmark_loss ( self, lv_m, shape1d, input_m_labels, input_shape_labels, **kwargs ):
 		landmark_u, landmark_v = self.landmark_calculation(lv_m, shape1d)
 		landmark_u_labels, landmark_v_labels = self.landmark_calculation(input_m_labels, input_shape_labels)
 
 		landmark_mse_mean = (
-				torch.mean(norm_loss(landmark_u, landmark_u_labels, loss_type="l2", reduce_mean=False)) +
-				torch.mean(norm_loss(landmark_v, landmark_v_labels, loss_type="l2", reduce_mean=False)))
-		landmark_loss = landmark_mse_mean / self.landmark_num / batch_size / 50
+				torch.mean(norm_loss(landmark_u, landmark_u_labels, loss_type=config.LANDMARK_LOSS_TYPE, reduce_mean=False)) +
+				torch.mean(norm_loss(landmark_v, landmark_v_labels, loss_type=config.LANDMARK_LOSS_TYPE, reduce_mean=False)))
+		landmark_loss = config.LANDMARK_LAMBDA * landmark_mse_mean / self.landmark_num / config.BATCH_SIZE
 
 		# self.writer.add_scalar("landmark_loss", landmark_loss, self.global_step)
 		return landmark_loss
@@ -120,37 +157,37 @@ class Loss():
 	def batchwise_white_shading_loss ( self, shade, **kwargs ):
 		uv_mask = self.uv_mask.unsqueeze(0).unsqueeze(0)
 		mean_shade = torch.mean(shade * uv_mask, dim=[0, 2, 3]) * 16384 / 10379
-		g_loss_white_shading = 10 * norm_loss(mean_shade, 0.99 * torch.ones(mean_shade.shape).float().to(self.device),
-		                                      loss_type="l2")
+		g_loss_white_shading = config.BATCHWISE_WHITE_SHADING_LAMBDA * norm_loss(mean_shade, 0.99 * torch.ones(mean_shade.shape).float().to(self.device),
+		                                      loss_type=config.BATCHWISE_WHITE_SHADING_LOSS_TYPE)
 
 		# self.writer.add_scalar("g_loss_white_shading", g_loss_white_shading, self.global_step)
 		return g_loss_white_shading
 
 
 	def reconstruction_loss ( self, batch_size, input_images, g_images, g_images_mask, **kwargs ):
-		g_loss_recon = 10 * (norm_loss(g_images, input_images, loss_type=self.tex_loss_name) /
+		g_loss_recon = config.RECONSTRUCTION_LAMBDA * (norm_loss(g_images, input_images, loss_type=config.RECONSTRUCTION_LOSS_TYPE) /
 		                     (torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)))
 
-		self.reconstruction_loss_input = input_images
-		self.reconstruction_loss_generate = g_images
+		self.input_reconstructions = input_images
+		self.g_reconstructions = g_images
 		# self.writer.add_scalar("reconstruction_loss", g_loss_recon, self.global_step)
 		return g_loss_recon
 
 
 	def texture_loss ( self, input_texture_labels, tex, tex_vis_mask, tex_ratio, **kwargs ):
-		g_loss_texture = 100 * norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
-		                                 loss_type=self.tex_loss_name) / tex_ratio
+		g_loss_texture = config.TEXTURE_LAMBDA * norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
+		                                 loss_type=config.TEXTURE_LOSS_TYPE) / tex_ratio
 
 		# self.writer.add_scalar("texture_loss", g_loss_texture, self.global_step)
-		self.texture_loss_input = input_texture_labels * tex_vis_mask
-		self.texture_loss_generate = tex * tex_vis_mask
+		self.input_textures = input_texture_labels * tex_vis_mask
+		self.g_textures = tex * tex_vis_mask
 		return g_loss_texture
 
 
 	def smoothness_loss ( self, shape2d, **kwargs ):
-		g_loss_smoothness = 1000 * norm_loss((shape2d[:, :, :-2, 1:-1] + shape2d[:, :, 2:, 1:-1] +
+		g_loss_smoothness = config.SMOOTHNESS_LAMBDA * norm_loss((shape2d[:, :, :-2, 1:-1] + shape2d[:, :, 2:, 1:-1] +
 		                                      shape2d[:, :, 1:-1, :-2] + shape2d[:, :, 1:-1, 2:]) / 4.0,
-		                                     shape2d[:, :, 1:-1, 1:-1], loss_type=self.shape_loss_name)
+		                                     shape2d[:, :, 1:-1, 1:-1], loss_type=config.SMOOTHNESS_LOSS_TYPE)
 
 		# self.writer.add_scalar("g_loss_smoothness", g_loss_smoothness, self.global_step)
 		return g_loss_smoothness
@@ -159,17 +196,17 @@ class Loss():
 	def symmetry_loss ( self, albedo, **kwargs ):
 		albedo_flip = torch.flip(albedo, dims=[3])
 		flip_diff = torch.max(torch.abs(albedo - albedo_flip), torch.ones_like(albedo) * 0.05)
-		g_loss_symmetry = norm_loss(flip_diff, torch.zeros_like(flip_diff), loss_type=self.tex_loss_name)
+		g_loss_symmetry = config.SYMMETRY_LAMBDA * norm_loss(flip_diff, torch.zeros_like(flip_diff), loss_type=config.SYMMETRY_LOSS_TYPE)
 
 		# self.writer.add_scalar("g_loss_symmetry", g_loss_symmetry, self.global_step)
 		return g_loss_symmetry
 
 
 	def const_albedo_loss ( self, albedo, input_albedo_indexes, **kwargs ):
-		albedo_1 = get_pixel_value(albedo, input_albedo_indexes[0], input_albedo_indexes[1])
-		albedo_2 = get_pixel_value(albedo, input_albedo_indexes[2], input_albedo_indexes[3])
+		albedo_1 = get_pixel_value_torch(albedo, input_albedo_indexes[0], input_albedo_indexes[1])
+		albedo_2 = get_pixel_value_torch(albedo, input_albedo_indexes[2], input_albedo_indexes[3])
 		diff = torch.max(torch.abs(albedo_1 - albedo_2), torch.ones_like(albedo_1) * 0.05)
-		g_loss_albedo_const = 5 * norm_loss(diff, torch.zeros_like(diff), loss_type=self.tex_loss_name)
+		g_loss_albedo_const = config.CONST_ALBEDO_LAMBDA * norm_loss(diff, torch.zeros_like(diff), loss_type=config.CONST_ALBEDO_LOSS_TYPE)
 
 		# self.writer.add_scalar("g_loss_albedo_const", g_loss_albedo_const, self.global_step)
 		return g_loss_albedo_const
@@ -182,15 +219,15 @@ class Loss():
 		u_diff = -15 * torch.norm(chromaticity[:, :, :-1, :] - chromaticity[:, :, 1:, :], dim=1, keepdim=True)
 		w_u = (torch.exp(u_diff) * tex_vis_mask[:, :, :-1, :]).detach()
 		u_albedo_norm = norm_loss(albedo[:, :, :-1, :], albedo[:, :, 1:, :],
-		                          loss_type="l2,1", p=0.8, reduce_mean=False) * w_u
+		                          loss_type=config.CONST_LOCAL_ALBEDO_LOSS_TYPE, p=0.8, reduce_mean=False) * w_u
 		loss_local_albedo_u = torch.mean(u_albedo_norm) / torch.sum(w_u + 1e-6)
 
 		v_diff = -15 * torch.norm(chromaticity[:, :, :, :-1] - chromaticity[:, :, :, 1:], dim=1, keepdim=True)
 		w_v = (torch.exp(v_diff) * tex_vis_mask[:, :, :, :-1]).detach()
 		v_albedo_norm = norm_loss(albedo[:, :, :, :-1], albedo[:, :, :, 1:],
-		                          loss_type="l2,1", p=0.8, reduce_mean=False) * w_v
+		                          loss_type=config.CONST_LOCAL_ALBEDO_LOSS_TYPE, p=0.8, reduce_mean=False) * w_v
 		loss_local_albedo_v = torch.mean(v_albedo_norm) / torch.sum(w_v + 1e-6)
-		loss_local_albedo = (loss_local_albedo_u + loss_local_albedo_v) * 10
+		loss_local_albedo = config.CONST_LOCAL_ALBEDO_LAMBDA * (loss_local_albedo_u + loss_local_albedo_v)
 
 		# self.writer.add_scalar("loss_local_albedo", loss_local_albedo, self.global_step)
 		return loss_local_albedo
@@ -199,5 +236,12 @@ class Loss():
 		m_full = mv * self.std_m + self.mean_m
 		shape_full = sv * self.std_shape + self.mean_shape
 
-		landmark_u, landmark_v = compute_landmarks_torch(m_full, shape_full, output_size=self.img_sz)
+		landmark_u, landmark_v = compute_landmarks_torch(m_full, shape_full)
 		return landmark_u, landmark_v
+
+
+
+
+
+
+

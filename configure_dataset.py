@@ -1,7 +1,7 @@
 import torch
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-from config import _300W_LP_DIR
+import config
 from os.path import join, isdir, basename
 from PIL import Image
 from os import makedirs, cpu_count
@@ -11,12 +11,6 @@ import shutil
 from utils import *
 
 
-VERTEX_NUM  = 53215
-TRI_NUM     = 105840
-N           = VERTEX_NUM * 3
-CONST_PIXELS_NUM = 20
-
-
 class NonlinearDataset(Dataset):
 	'''
 		Nonlinear dataset load class
@@ -24,8 +18,7 @@ class NonlinearDataset(Dataset):
 			1. split raw data into train, test, and validation dataset and
 			2. load each dataset item
 	'''
-	def __init__( self, phase, frac=1.0, dataset_dir=_300W_LP_DIR):
-		print("Loading dataset ...")
+	def __init__( self, phase, frac=1.0, dataset_dir=config.DATASET_PATH):
 		self.fdtype = np.float32
 		self.frac = frac
 
@@ -44,7 +37,7 @@ class NonlinearDataset(Dataset):
 		mu_exp, w_exp = load_Basel_basic('exp')
 
 		self.mean_shape = mu_shape + mu_exp
-		self.std_shape = np.tile(np.array([1e4, 1e4, 1e4], dtype=self.fdtype), VERTEX_NUM)
+		self.std_shape = np.tile(np.array([1e4, 1e4, 1e4], dtype=self.fdtype), config.VERTEX_NUM)
 
 		self.w_shape = w_shape
 		self.w_exp = w_exp
@@ -55,8 +48,6 @@ class NonlinearDataset(Dataset):
 			self.split_dataset()
 
 		self.load_dataset(phase)
-
-		print("DONE")
 
 
 	def __len__( self ):
@@ -71,7 +62,7 @@ class NonlinearDataset(Dataset):
 		# load image
 		img_name    = self.image_filenames[idx]
 		img         = Image.open(img_name)
-		img         = transforms.functional.crop(img, ty, tx, 224, 224)
+		img         = transforms.functional.crop(img, ty, tx, config.IMAGE_SIZE, config.IMAGE_SIZE)
 		img_tensor  = self.transform(img)
 
 		# load mask
@@ -82,7 +73,7 @@ class NonlinearDataset(Dataset):
 		# load mask image
 		mask_img_name   = self.mask_img_filenames[idx]
 		mask_img        = Image.open(mask_img_name)
-		mask_img        = transforms.functional.crop(mask_img, ty, tx, 224, 224)
+		mask_img        = transforms.functional.crop(mask_img, ty, tx, config.IMAGE_SIZE, config.IMAGE_SIZE)
 		mask_img_tensor = self.transform(mask_img)
 
 		# load texture
@@ -96,20 +87,23 @@ class NonlinearDataset(Dataset):
 		delta_m[7] = np.divide(32 - tx, self.std_m[7])
 
 		m_label = self.all_m[idx] - delta_m
+		m_tensor = torch.tensor(m_label)
+
 		batch_shape_para    = self.all_shape_para[idx, :]
 		batch_exp_para      = self.all_exp_para[idx, :]
 		shape_label         = np.divide(np.matmul(batch_shape_para, np.transpose(self.w_shape)) +
 										np.matmul(batch_exp_para, np.transpose(self.w_exp)),
 										self.std_shape)
+		shape_tensor = torch.tensor(shape_label)
 
 		# set random albedo indices
-		indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CONST_PIXELS_NUM])
-		indices2 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CONST_PIXELS_NUM])
+		indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[config.CONST_PIXELS_NUM])
+		indices2 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[config.CONST_PIXELS_NUM])
 
-		albedo_indices_x1 = np.reshape(self.const_alb_mask[indices1, 1], [CONST_PIXELS_NUM, 1])
-		albedo_indices_y1 = np.reshape(self.const_alb_mask[indices1, 0], [CONST_PIXELS_NUM, 1])
-		albedo_indices_x2 = np.reshape(self.const_alb_mask[indices2, 1], [CONST_PIXELS_NUM, 1])
-		albedo_indices_y2 = np.reshape(self.const_alb_mask[indices2, 0], [CONST_PIXELS_NUM, 1])
+		albedo_indices_x1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 1], [config.CONST_PIXELS_NUM, 1]))
+		albedo_indices_y1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 0], [config.CONST_PIXELS_NUM, 1]))
+		albedo_indices_x2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 1], [config.CONST_PIXELS_NUM, 1]))
+		albedo_indices_y2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 0], [config.CONST_PIXELS_NUM, 1]))
 
 		sample = {
 				'image_name'    : self.image_filenames[idx],
@@ -118,14 +112,14 @@ class NonlinearDataset(Dataset):
 				'mask_img'      : mask_img_tensor,
 				'texture'       : texture_tensor,
 
-				'm_label'       : torch.tensor(m_label),
-				'shape_label'   : torch.tensor(shape_label),
+				'm_label'       : m_tensor,
+				'shape_label'   : shape_tensor,
 
 				'albedo_indices': [
-					torch.tensor(albedo_indices_x1),
-					torch.tensor(albedo_indices_y1),
-					torch.tensor(albedo_indices_x2),
-					torch.tensor(albedo_indices_y2)
+					albedo_indices_x1,
+					albedo_indices_y1,
+					albedo_indices_x2,
+					albedo_indices_y2
 				],
 		}
 

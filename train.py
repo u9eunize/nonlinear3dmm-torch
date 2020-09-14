@@ -1,221 +1,138 @@
 from network.Nonlinear_3DMM import Nonlinear3DMM
 from configure_dataset import *
+from pytz import timezone
 from datetime import datetime
-from loss import *
-import os
 from renderer.rendering_ops import *
-import time
-import re
 from torch.utils.tensorboard import SummaryWriter
 from loss import Loss
+import config
+from os.path import join
 
 
-
-
-MODEL_PATH = "./checkpoint"
 
 
 class Nonlinear3DMMHelper:
 
-    def __init__(self, losses: list, device='cpu', name="test_writer", using_default_loss=True):
-        dtype = torch.float
-        self.device = device
-        self.name = name
-        self.writer = SummaryWriter("runs/" +  self.name)
-        self.default_loss = ["shape", "m"]
-        self.state_file_root_name = os.path.join(MODEL_PATH, self.name)
-
-        # TODO parameterize
-        self.tex_sz = (192, 224)
-        self.img_sz = 224
-        self.c_dim = 3
-        self.landmark_num = 68
+    def __init__(self, losses):
+        # initialize parameters
+        dtype = torch.float32
         self.losses = losses
-        # self.available_losses = list(filter(lambda a: a.endswith("_loss"), dir(self)))
-        self.shape_loss_name = "l2"
-        self.tex_loss_name = "l1"
+        self.name = f'{datetime.now(timezone("Asia/Seoul")).strftime("%Y%m%d_%H%M%S")}'
+        if config.PREFIX:
+            self.name += f'_{config.PREFIX}'
+        self.writer = SummaryWriter(join(config.LOG_PATH, self.name))
+        self.state_file_root_name = join(config.CHECKPOINT_DIR_PATH, self.name)
 
-        print("**** using ****")
+        # Define losses
+        self.loss = Loss(self.losses, self.writer)
 
-        if using_default_loss:
-            self.losses += self.default_loss
-
-        if "reconstruction" not in self.losses and "texture" not in self.losses:
-            self.losses.append("texture")
-
-        self.loss = Loss(self.losses)
-        for loss_name in losses:
-            # assert loss_name + "_loss" in self.available_losses, loss_name + "_loss is not supported"
-            print(loss_name)
-
-        self.net = Nonlinear3DMM()
-
+        # Load model
+        self.net = Nonlinear3DMM().to(config.DEVICE)
 
 
         # Basis
         mu_shape, w_shape = load_Basel_basic('shape')
         mu_exp, w_exp = load_Basel_basic('exp')
 
-        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype).to(self.device)
-        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM), dtype=dtype).to(self.device)
-        # self.std_shape  = np.load('std_shape.npy')
+        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype).to(config.DEVICE)
+        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), config.VERTEX_NUM), dtype=dtype).to(config.DEVICE)
 
-        self.mean_m = torch.tensor(np.load('dataset/mean_m.npy'), dtype=dtype).to(self.device)
-        self.std_m = torch.tensor(np.load('dataset/std_m.npy'), dtype=dtype).to(self.device)
+        self.mean_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype).to(config.DEVICE)
+        self.std_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype).to(config.DEVICE)
 
-        self.w_shape = torch.tensor(w_shape, dtype=dtype).to(self.device)
-        self.w_exp = torch.tensor(w_exp, dtype=dtype).to(self.device)
+        self.w_shape = torch.tensor(w_shape, dtype=dtype).to(config.DEVICE)
+        self.w_exp = torch.tensor(w_exp, dtype=dtype).to(config.DEVICE)
 
-        # for log
-        self.global_step = 0
-        self.reconstruction_loss_input = None
-        self.reconstruction_loss_generate = None
-        self.texture_loss_input = None
-        self.texture_loss_generate = None
-        self.images_input = None
-        self.images_generate = None
-        self.image_masks_input = None
-        self.image_masks_generate = None
 
-    def train(self, num_epochs, batch_size, learning_rate, betas, start_epoch=-1, step_log=100):
-        dataset = NonlinearDataset(phase='train')
-        dataloader = DataLoader(dataset,
-                                batch_size=batch_size,
-                                shuffle=True,
-                                num_workers=1)
 
-        self.net.to(self.device)
 
-        encoder_optimizer = torch.optim.Adam(self.net.nl_encoder.parameters(), lr=learning_rate, betas=betas)
-        global_optimizer = torch.optim.Adam(self.net.parameters(), lr=learning_rate, betas=betas)
 
-        self.net, global_optimizer, encoder_optimizer, start_epoch = self.load(
-            self.net, global_optimizer, encoder_optimizer, path=self.state_file_root_name, start_epoch=start_epoch
+
+
+    def train(self):
+        # Load datasets
+        train_dataloader = DataLoader(NonlinearDataset(phase='train', frac=config.DATASET_FRAC),
+                                      batch_size=config.BATCH_SIZE,
+                                      drop_last=True,
+                                      shuffle=True,
+                                      num_workers=1,
+                                      pin_memory=True)
+
+        valid_dataloader = DataLoader(NonlinearDataset(phase='valid', frac=config.DATASET_FRAC),
+                                      batch_size=config.BATCH_SIZE,
+                                      drop_last=True,
+                                      shuffle=False,
+                                      num_workers=1,
+                                      pin_memory=True)
+
+        # test_dataloader = DataLoader(NonlinearDataset(phase='test', frac=config.DATASET_FRAC),
+        #                              batch_size=config.BATCH_SIZE,
+        #                              drop_last=True,
+        #                              shuffle=False,
+        #                              num_workers=1,
+        #                              pin_memory=True)
+
+
+        # Set optimizers
+        encoder_optimizer = torch.optim.Adam(self.net.nl_encoder.parameters(), lr=config.LEARNING_RATE, betas=config.BETAS)
+        global_optimizer = torch.optim.Adam(self.net.parameters(), lr=config.LEARNING_RATE, betas=config.BETAS)
+
+        # Load checkpoint
+        self.net, global_optimizer, encoder_optimizer, start_epoch = load(
+            self.net, global_optimizer, encoder_optimizer, start_epoch=config.CHECKPOINT_EPOCH
         )
+        global_step = start_epoch * len(train_dataloader) + 1
 
-        self.net.to(self.device)
+        # Write graph to the tensorboard
+        _, samples = next(enumerate(train_dataloader, 0))
+        self.writer.add_graph(self.net, samples["image"].to(config.DEVICE))
 
-        _, samples = next(enumerate(dataloader, 0))
-        self.writer.add_graph(self.net, samples["image"].to(self.device))
 
-        self.global_step = start_epoch * len(dataloader)
 
-        for epoch in range(start_epoch, num_epochs):
+
+        for epoch in range(start_epoch, config.EPOCH):
             # For each batch in the dataloader
-            for idx, samples in enumerate(dataloader, 0):
-                global_loss, global_loss_with_landmark = self.train_step(
-                    input_images=samples["image"].to(self.device),
-                    input_masks=samples["mask_img"].to(self.device),
-                    input_texture_labels=samples["texture"].to(self.device),
-                    input_texture_masks=samples["mask"].to(self.device),
-                    input_m_labels=samples["m_label"].to(self.device),
-                    input_shape_labels=samples["shape_label"].to(self.device),
-                    input_albedo_indexes=list(map(lambda a: a.to(self.device), samples["albedo_indices"]))
+            for idx, samples in enumerate(train_dataloader, 0):
+                self.train_step(
+                    input_images=samples["image"].to(config.DEVICE),
+                    input_masks=samples["mask_img"].to(config.DEVICE),
+                    input_texture_labels=samples["texture"].to(config.DEVICE),
+                    input_texture_masks=samples["mask"].to(config.DEVICE),
+                    input_m_labels=samples["m_label"].to(config.DEVICE),
+                    input_shape_labels=samples["shape_label"].to(config.DEVICE),
+                    input_albedo_indexes=list(map(lambda a: a.to(config.DEVICE), samples["albedo_indices"]))
                 )
-                self.writer.add_scalar("global_loss", global_loss, self.global_step)
-                self.writer.add_scalar("global_loss_with_landmark", global_loss_with_landmark, self.global_step)
-                self.writer.flush()
+
+                if global_step % config.LOSS_LOG_INTERVAL == 0:
+                    self.loss.write_losses(global_step, 'train')
+
+                if global_step % config.IMAGE_LOG_INTERVAL == 0:
+                    self.loss.write_images(global_step, 'train')
+
 
                 if idx % 2 == 0:
-
                     global_optimizer.zero_grad()
-                    # print([p.grad for p in self.nl_network.parameters()])
-                    global_loss.backward()
+                    self.loss.losses['g_loss'].backward()
                     global_optimizer.step()
-                    # print([(np.max(p.cpu().detach().numpy())) for p in
-                    #       self.net.nl_encoder.m.parameters()])
-                    # print([((torch.max(p.grad).cpu().numpy().item(),
-                    #          torch.min(p.grad).cpu().numpy().item()) if p.grad is not None else "None") for p in
-                    #        self.nl_network.parameters()])
-
                 else:
                     encoder_optimizer.zero_grad()
-                    # print([p.grad for p in self.nl_network.parameters()])
-                    global_loss_with_landmark.backward()
+                    self.loss.losses['g_loss_with_landmark'].backward()
                     encoder_optimizer.step()
-                    # print([((torch.max(p.grad).cpu().numpy().item(),
-                    #          torch.min(p.grad).cpu().numpy().item()) if p.grad is not None else "None") for p in
-                    #        self.nl_network.parameters()])
+
 
                 print(datetime.now(), end=" ")
-                print(f"[{epoch}, {idx:04d}] {idx * batch_size}/{len(dataset)} "
-                      f"({(idx * batch_size)/(len(dataset)) * 100:.2f}%) "
-                      f"g_loss: {global_loss:.6f}, "
-                      f"landmark_loss: {global_loss_with_landmark:.6f}")
+                print(f"[{epoch}, {idx+1:04d}] {idx * config.BATCH_SIZE}/{len(train_dataloader) * config.BATCH_SIZE} "
+                      f"({(idx * config.BATCH_SIZE)/(len(train_dataloader)) * 100:.2f}%) "
+                      f"g_loss: {self.loss.losses['g_loss']:.6f}, "
+                      f"landmark_loss: {self.loss.losses['g_loss_with_landmark']:.6f}")
 
-                if idx % step_log == 0:
 
-                    #self.add_to_log("global_loss", global_loss)
-                    #self.add_to_log("global_loss_with_landmark", global_loss_with_landmark)
-                    if self.image_masks_input is not None:
-                        self.writer.add_images("image_masks_input_step",
-                                               self.image_masks_input, self.global_step)
-                        self.writer.add_images("image_masks_generate_step",
-                                               self.image_masks_generate.unsqueeze(1), self.global_step)
-                    if self.images_input is not None:
-                        self.writer.add_images("images_input_step",
-                                               self.images_input, self.global_step)
-                        self.writer.add_images("images_generate_step",
-                                               self.images_generate, self.global_step)
-                    if self.texture_loss_generate is not None:
-                        self.writer.add_images("texture_loss_input_per_step",
-                                               self.texture_loss_input, self.global_step)
-                        self.writer.add_images("texture_loss_generate_per_step",
-                                               self.texture_loss_generate, self.global_step)
+                global_step += 1
 
-                self.global_step += 1
 
-            if self.reconstruction_loss_generate is not None:
-                self.writer.add_images("reconstruction_loss_input_per_epoch",
-                                       self.reconstruction_loss_input, epoch)
-                self.writer.add_images("reconstruction_loss_generate_per_epoch",
-                                       self.reconstruction_loss_generate, epoch)
-            if self.texture_loss_input is not None:
-                self.writer.add_images("texture_loss_input_per_epoch",
-                                       self.texture_loss_input, epoch)
-                self.writer.add_images("texture_loss_generate_per_epoch",
-                                       self.texture_loss_generate, epoch)
+            save(self.net, global_optimizer, encoder_optimizer, epoch, self.state_file_root_name)
 
-            self.save(self.net, global_optimizer, encoder_optimizer, epoch, self.state_file_root_name)
 
-    def renderer(self, lv_m, lv_il, albedo, shape2d, shape1d, inputs):
-        batch_size = shape2d.shape[0]
-
-        input_masks = inputs["input_masks"]
-        input_images = inputs["input_images"]
-        input_texture_masks = inputs["input_texture_masks"]
-        input_texture_labels = inputs["input_texture_labels"]
-
-        m_full = lv_m * self.std_m + self.mean_m
-        shape_full = shape1d * self.std_shape + self.mean_shape
-
-        shade = generate_shade_torch(lv_il, m_full, shape_full, self.tex_sz)
-        tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
-
-        tex_vis_mask = (~input_texture_labels.eq((torch.ones_like(input_texture_labels) * -1))).float()
-        tex_vis_mask = tex_vis_mask * input_texture_masks
-        tex_ratio = torch.sum(tex_vis_mask) / (batch_size * self.tex_sz[0] * self.tex_sz[1] * self.c_dim)
-
-        g_images, g_images_mask = warp_texture_torch(tex, m_full, shape_full, output_size=self.img_sz)
-
-        self.image_masks_input = input_masks
-        self.image_masks_generate = g_images_mask
-        self.images_input = input_images
-        self.images_generate = g_images
-
-        g_images_mask = input_masks * g_images_mask.unsqueeze(1).repeat(1, 3, 1, 1)
-        g_images = g_images * g_images_mask + input_images * (torch.ones_like(g_images_mask) - g_images_mask)
-
-        param_dict = {
-            "shade": shade,
-            "tex": tex,
-            "tex_vis_mask": tex_vis_mask,
-            "tex_ratio": tex_ratio,
-
-            "g_images": g_images,
-            "g_images_mask": g_images_mask,
-        }
-        return param_dict
 
 
 
@@ -224,12 +141,11 @@ class Nonlinear3DMMHelper:
         input_albedo_indexes = [x1,y1,x2,y2]
         """
         input_images = inputs["input_images"]
-        batch_size = input_images.shape[0]
 
-        loss_param = {"batch_size": batch_size}
+        loss_param = {}
 
         lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d = self.net(input_images)
-        renderer_dict = self.renderer(lv_m, lv_il, albedo, shape2d, shape1d, inputs)
+        renderer_dict = renderer(lv_m, lv_il, albedo, shape2d, shape1d, inputs, self.std_m, self.mean_m, self.std_shape, self.mean_shape)
 
         network_result = {
             "lv_m": lv_m,
@@ -251,75 +167,24 @@ class Nonlinear3DMMHelper:
 
 
 
-    def save(self, model, global_optimizer, encoder_optimizer, epoch, path="checkpoint/"):
-        dir_path = self.get_checkpoint_dir(path, epoch)
-        if not os.path.isdir(dir_path):
-            os.makedirs(dir_path)
-
-        torch.save({
-            'epoch': epoch+1,
-            'state_dict': model.state_dict(),
-            'global_optimizer': global_optimizer.state_dict(),
-            'encoder_optimizer': encoder_optimizer.state_dict(),
-        }, self.get_checkpoint_name(path, epoch))
-
-    def load(self, model, global_optimizer=None, encoder_optimizer=None, start_epoch=-1, path="checkpoint/"):
-        if start_epoch == -1:
-            start_epoch = 0
-            if not os.path.isdir(path):
-                print(f"no checkpoint! path: {path}")
-                return model, global_optimizer, encoder_optimizer, start_epoch
-            for ckpt_dir_name in os.listdir(path):
-                start_epoch = max(start_epoch, max(map(int, re.findall(r"\d+", ckpt_dir_name))))
-
-        filename = self.get_checkpoint_name(path, start_epoch)
-        if os.path.isfile(filename):
-            print("=> loading checkpoint '{}'".format(filename))
-            checkpoint = torch.load(filename, map_location=self.device)
-            start_epoch = checkpoint['epoch']
-            model.load_state_dict(checkpoint['state_dict'])
-            global_optimizer.load_state_dict(checkpoint['global_optimizer'])
-            encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})".format(filename, checkpoint['epoch']))
-        else:
-            print("=> no checkpoint found at '{}'".format(filename))
-
-        return model, global_optimizer, encoder_optimizer, start_epoch
-
-    def get_checkpoint_dir(self, path, number):
-        return os.path.join(path, f"ckpt_{number}")
-
-    def get_checkpoint_name(self, path, number):
-        return os.path.join(f"{self.get_checkpoint_dir(path, number)}", f"model_ckpt_{number}.pt")
 
 
-def pretrained_lr_test(lr, name=None, num_epochs=10, start_epoch=-1):
-    pretrained_kwargs = {
-        "losses": [
-            'landmark',
-            'batchwise_white_shading',
-            'texture',
-            'symmetry',
-            'const_albedo',
-            'smoothness'
-        ],
-        "device": 'cuda' if torch.cuda.is_available() else 'cpu',
-        "name": "pretrain-tco-test-" + str(int(round(lr*10000))) if name is None else name
-    }
-    pretrained_helper = Nonlinear3DMMHelper(**pretrained_kwargs)
-    pretrained_helper.train(
-        num_epochs=num_epochs,
-        batch_size=15,
-        learning_rate=lr,
-        betas=(0.5, 0.999),
-        start_epoch=start_epoch
-    )
+
+def pretrained_lr_test(name=None, start_epoch=-1):
+    losses = [
+        'm',
+        'shape',
+        'landmark',
+        'batchwise_white_shading',
+        'texture',
+        'symmetry',
+        'const_albedo',
+        'smoothness'
+    ]
+
+    pretrained_helper = Nonlinear3DMMHelper(losses)
+    pretrained_helper.train()
 
 
 if __name__ == "__main__":
-    pretrained_lr_test(0.0002, num_epochs=50)
-    # pretrained_lr_test(0.0002)
-    # pretrained_lr_test(0.0003)
-    # pretrained_lr_test(0.0005)
-    # pretrained_lr_test(0.0008)
-    # pretrained_lr_test(0.001)
+    pretrained_lr_test()
