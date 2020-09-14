@@ -38,13 +38,12 @@ def norm_loss(predictions, labels, mask=None, loss_type="l1", reduce_mean=True, 
 
 
 class Loss:
-    def __init__(self, loss_names, logger):
+    def __init__(self, loss_names):
         print("**** using ****")
         for loss_name in loss_names:
             print(loss_name)
 
         self.loss_names = loss_names
-        self.logger = logger
         self.shape_loss_name = "l2"
         self.tex_loss_name = "l1"
         self.landmark_num = 68
@@ -81,7 +80,7 @@ class Loss:
         self.losses = {}
 
         if "landmark" in self.loss_names:
-            self.losses['landmark_loss'] = self.landmark_loss(**kwargs)
+            landmark_loss = self.landmark_loss(**kwargs)
         if "batchwise_white_shading" in self.loss_names:
             self.losses['batchwise_white_shading_loss'] = self.batchwise_white_shading_loss(**kwargs)
         if "texture" in self.loss_names:
@@ -102,10 +101,8 @@ class Loss:
             self.losses['const_local_albedo_loss'] = self.const_local_albedo_loss(**kwargs)
 
         self.losses['g_loss'] = sum(self.losses.values())
+        self.losses['landmark_loss'] = landmark_loss
         self.losses['g_loss_with_landmark'] = self.losses['landmark_loss'] + self.losses['g_loss']
-
-        for loss_name, loss in self.losses.items():
-            self.logger.write_scalar(f"{loss_name}", loss)
 
         return self.losses['g_loss'], self.losses['g_loss_with_landmark']
 
@@ -143,17 +140,11 @@ class Loss:
         images_loss = norm_loss(g_images, input_images, loss_type=config.RECONSTRUCTION_LOSS_TYPE)
         mask_mean = torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)
         g_loss_recon = images_loss / mask_mean
-
-        self.logger.write_image("reconstruction", [g_images, input_images])
         return config.RECONSTRUCTION_LAMBDA * g_loss_recon
 
     def texture_loss(self, input_texture_labels, tex, tex_vis_mask, tex_ratio, **kwargs):
         g_loss_texture = config.TEXTURE_LAMBDA * norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
                                                            loss_type=config.TEXTURE_LOSS_TYPE) / tex_ratio
-
-        self.logger.write_image("texture_raw",
-                                [tex, input_texture_labels, tex * tex_vis_mask, input_texture_labels * tex_vis_mask])
-
         return g_loss_texture
 
     def smoothness_loss(self, shape2d, **kwargs):

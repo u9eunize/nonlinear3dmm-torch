@@ -40,8 +40,10 @@ def load ( model, global_optimizer=None, encoder_optimizer=None, start_epoch=Non
 	checkpoint = torch.load(ckpt_name, map_location=config.DEVICE)
 	start_epoch = checkpoint['epoch']
 	model.load_state_dict(checkpoint['state_dict'])
-	global_optimizer.load_state_dict(checkpoint['global_optimizer'])
-	encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
+	if global_optimizer is not None:
+		global_optimizer.load_state_dict(checkpoint['global_optimizer'])
+	if encoder_optimizer is not None:
+		encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
 	print("=> loaded checkpoint '{}' (epoch {})".format(ckpt_name, checkpoint['epoch']))
 
 	return model, global_optimizer, encoder_optimizer, start_epoch

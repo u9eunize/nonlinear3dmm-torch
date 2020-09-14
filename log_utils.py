@@ -34,6 +34,9 @@ class NLLogger:
 
         self.writer.flush()
 
+    def get_step(self):
+        return self._step
+
     def _write(self, interval, save_name, log_data):
         if interval not in self.holder:
             self.holder[interval] = dict()
