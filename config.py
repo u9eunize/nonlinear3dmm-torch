@@ -5,13 +5,13 @@ import torch
 EPOCH = 50
 BATCH_SIZE = 15
 BETAS = (0.5, 0.999)
-DATASET_FRAC = 0.001
+TRAIN_DATASET_FRAC = 1.0
+VALID_DATASET_FRAC = 0.1
 LEARNING_RATE = 0.0002
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 PREFIX = 'pretrain'
-
 
 
 # Ditectory path
@@ -21,7 +21,6 @@ CHECKPOINT_EPOCH = None
 LOG_PATH = './logs'
 DATASET_PATH = './dataset'
 DEFINITION_PATH = './dataset/3DMM_definition/'
-
 
 
 # Normalization type and lambda of loss
@@ -54,12 +53,6 @@ CONST_ALBEDO_LAMBDA = 5
 
 CONST_LOCAL_ALBEDO_LOSS_TYPE = 'l2,1'
 CONST_LOCAL_ALBEDO_LAMBDA = 10
-
-
-
-
-
-
 
 
 # 3DMM parameters
