@@ -89,12 +89,16 @@ class NonlinearDataset(Dataset):
 		m_label = self.all_m[idx] - delta_m
 		m_tensor = torch.tensor(m_label)
 
-		batch_shape_para    = self.all_shape_para[idx, :]
 		batch_exp_para      = self.all_exp_para[idx, :]
-		shape_label         = np.divide(np.matmul(batch_shape_para, np.transpose(self.w_shape)) +
-										np.matmul(batch_exp_para, np.transpose(self.w_exp)),
-										self.std_shape)
-		shape_tensor = torch.tensor(shape_label)
+		exp_label           = np.matmul(batch_exp_para, np.transpose(self.w_exp))
+		exp_tensor          = torch.tensor(exp_label)
+
+		batch_shape_para    = self.all_shape_para[idx, :]
+		shape_label         = np.matmul(batch_shape_para, np.transpose(self.w_shape))
+		shape_label         = np.divide( shape_label + exp_label, self.std_shape)
+		shape_tensor        = torch.tensor(shape_label)
+
+
 
 		# set random albedo indices
 		indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[config.CONST_PIXELS_NUM])
@@ -113,6 +117,7 @@ class NonlinearDataset(Dataset):
 				'texture'       : texture_tensor,
 
 				'm_label'       : m_tensor,
+				'exp_label'     : exp_tensor,
 				'shape_label'   : shape_tensor,
 
 				'albedo_indices': [
@@ -200,7 +205,7 @@ class NonlinearDataset(Dataset):
 			paras = all_paras[indices]
 			tot = list(zip(image_paths, paras))
 			paths_and_paras = sorted(tot, key=lambda a: a[0])
-
+			param = []
 			# copy image and mask_img files, duplicate mask and texture files
 			for idx, (image_path, para) in enumerate(paths_and_paras):
 				if idx % 100 == 0:
@@ -223,8 +228,11 @@ class NonlinearDataset(Dataset):
 				shutil.copy(mask, target_name + '_mask.png')
 				shutil.copy(texture, target_name + '_texture.png')
 
+				param.append(para)
+
 			# 5. write params to the proper directory
-			np.save(join(self.dataset_dir, phase, 'param'), paras)
+			param = np.stack(param)
+			np.save(join(self.dataset_dir, phase, 'param'), param)
 
 		print("     Splited dataset!")
 
