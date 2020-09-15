@@ -60,7 +60,7 @@ class Loss:
         self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), config.VERTEX_NUM), dtype=dtype)
 
         self.mean_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype)
-        self.std_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype)
+        self.std_m = torch.tensor(np.load(join(config.DATASET_PATH, 'std_m.npy')), dtype=dtype)
 
         self.uv_tri, self.uv_mask = load_3DMM_tri_2d(with_mask=True)
         self.uv_tri = torch.tensor(self.uv_tri)
@@ -77,6 +77,7 @@ class Loss:
         self.uv_mask = self.uv_mask.to(self.device)
 
     def __call__(self, input_images, g_images, input_masks, g_images_mask, **kwargs):
+        landmark_loss = 0
         self.losses = {}
 
         if "landmark" in self.loss_names:
@@ -115,6 +116,7 @@ class Loss:
         return config.M_LAMBDA * g_loss_m
 
     def landmark_loss(self, lv_m, shape1d, input_m_labels, input_shape_labels, **kwargs):
+        batch_size = lv_m.shape[0]
         landmark_u, landmark_v = self.landmark_calculation(lv_m, shape1d)
         landmark_u_labels, landmark_v_labels = self.landmark_calculation(input_m_labels, input_shape_labels)
 
@@ -123,7 +125,7 @@ class Loss:
         v_loss = torch.mean(norm_loss(landmark_v, landmark_v_labels,
                                       loss_type=config.LANDMARK_LOSS_TYPE, reduce_mean=False))
         landmark_mse_mean = u_loss + v_loss
-        landmark_loss = landmark_mse_mean / self.landmark_num / config.BATCH_SIZE
+        landmark_loss = landmark_mse_mean / self.landmark_num / batch_size
 
         return config.LANDMARK_LAMBDA * landmark_loss
 

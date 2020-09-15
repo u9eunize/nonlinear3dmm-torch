@@ -69,12 +69,14 @@ def warp_texture_torch ( texture, m, mshape):
 
     # texture = texture.permute((0, 2, 3, 1)) # [batch, 192, 224, 3]
 
+    batch_size = texture.shape[0]
+
     tri = torch.from_numpy(load_3DMM_tri()).cuda().long()  # [3, TRI_NUM + 1]
     vertex_tri = torch.from_numpy(load_3DMM_vertex_tri()).cuda()  # [8, VERTEX_NUM]
     vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel).cuda() for vt2pixel in load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
 
 
-    m = m.view((config.BATCH_SIZE, 4, 2))
+    m = m.view((batch_size, 4, 2))
     m_row1 = F.normalize(m[:, 0:3, 0], dim=1)
     m_row2 = F.normalize(m[:, 0:3, 1], dim=1)
     m_row3 = torch.cross(m_row1, m_row2)
@@ -82,7 +84,7 @@ def warp_texture_torch ( texture, m, mshape):
     m_row3 = torch.unsqueeze(m_row3, -1)
     m = torch.cat((m, m_row3), dim=2)
 
-    vertex3d = mshape.view((config.BATCH_SIZE, -1, 3))
+    vertex3d = mshape.view((batch_size, -1, 3))
     vertex4d = F.pad(vertex3d, (0, 1), mode='constant', value=1)
 
 
@@ -116,7 +118,7 @@ def warp_texture_torch ( texture, m, mshape):
 
     tri_map_2d = []
     masks = []
-    for i in range(config.BATCH_SIZE):
+    for i in range(batch_size):
         tri_map_2d_i, masks_i = ZBuffer_Rendering_CUDA_op_v2_sz224_torch(vertex2d_i[i].float(), tri, visible_tri[i])
         tri_map_2d.append(tri_map_2d_i)
         masks.append(masks_i)
@@ -125,9 +127,9 @@ def warp_texture_torch ( texture, m, mshape):
     masks = torch.stack(masks)
 
 
-    tri_map_2d_flat = tri_map_2d.view((config.BATCH_SIZE, -1))
+    tri_map_2d_flat = tri_map_2d.view((batch_size, -1))
 
-    vt = torch.gather(torch.unsqueeze(torch.transpose(tri, 0, 1), 0).repeat(config.BATCH_SIZE, 1, 1), 1,
+    vt = torch.gather(torch.unsqueeze(torch.transpose(tri, 0, 1), 0).repeat(batch_size, 1, 1), 1,
                       torch.unsqueeze(tri_map_2d_flat, dim=-1).repeat(1, 1, 3).long())
 
     pixel_uu = torch.gather(F.pad(vertex2d_u.repeat(1, 1, 3), (0, 0, 0, 1)), 1, vt)
@@ -136,8 +138,8 @@ def warp_texture_torch ( texture, m, mshape):
 
     c1, c2, c3 = barycentric_torch(pixel_uu, pixel_vv, u, v)
 
-    pixel_u = torch.gather(torch.unsqueeze(vt2pixel_u, -1).repeat(config.BATCH_SIZE, 1, 3), 1, vt)
-    pixel_v = torch.gather(torch.unsqueeze(vt2pixel_v, -1).repeat(config.BATCH_SIZE, 1, 3), 1, vt)
+    pixel_u = torch.gather(torch.unsqueeze(vt2pixel_u, -1).repeat(batch_size, 1, 3), 1, vt)
+    pixel_v = torch.gather(torch.unsqueeze(vt2pixel_v, -1).repeat(batch_size, 1, 3), 1, vt)
 
 
     pixel1_u, pixel2_u, pixel3_u = torch.split(pixel_u, (1, 1, 1), dim=-1)
@@ -146,8 +148,8 @@ def warp_texture_torch ( texture, m, mshape):
     pixel_u = torch.squeeze(pixel1_u) * c1 + torch.squeeze(pixel2_u) * c2 + torch.squeeze(pixel3_u) * c3
     pixel_v = torch.squeeze(pixel1_v) * c1 + torch.squeeze(pixel2_v) * c2 + torch.squeeze(pixel3_v) * c3
 
-    pixel_u = pixel_u.view((config.BATCH_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE))
-    pixel_v = pixel_v.view((config.BATCH_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE))
+    pixel_u = pixel_u.view((batch_size, config.IMAGE_SIZE, config.IMAGE_SIZE))
+    pixel_v = pixel_v.view((batch_size, config.IMAGE_SIZE, config.IMAGE_SIZE))
 
     images = bilinear_sampler_torch(texture, pixel_v, pixel_u)
 
@@ -183,12 +185,12 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
     # Output
     #   normal:  batch_size x vertex_num x 3
     #   normalf: batch_size x tri_num x 3
-
+    batch_size = vertex.shape[0]
 
     tri = torch.transpose(tri, 0, 1)
     tri = torch.unsqueeze(tri, 0)
     tri = torch.unsqueeze(tri, -1)
-    tri = torch.cat(config.BATCH_SIZE * [tri])[:, :-1, :]
+    tri = torch.cat(batch_size * [tri])[:, :-1, :]
 
     vt1_indices = torch.cat(3 * [tri[:, :, 0]], -1).cuda()
     vt2_indices = torch.cat(3 * [tri[:, :, 1]], -1).cuda()
@@ -196,7 +198,7 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
     vt1 = torch.gather(vertex, 1, vt1_indices)
     vt2 = torch.gather(vertex, 1, vt2_indices)
     vt3 = torch.gather(vertex, 1, vt3_indices)
-    zeros = torch.zeros((config.BATCH_SIZE, 1, 3)).cuda()
+    zeros = torch.zeros((batch_size, 1, 3)).cuda()
     vt1_padded = torch.cat((vt1, zeros), 1)
     vt2_padded = torch.cat((vt2, zeros), 1)
     vt3_padded = torch.cat((vt3, zeros), 1)
@@ -213,11 +215,11 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
     vertex_tri = vertex_tri.view((-1, 1))
 
     normal_indices = torch.unsqueeze(vertex_tri, 0)
-    normal_indices = torch.cat(config.BATCH_SIZE * [normal_indices])
+    normal_indices = torch.cat(batch_size * [normal_indices])
     normal_indices = torch.cat(3 * [normal_indices], -1).cuda()
     normal = torch.gather(normalf, 1, normal_indices.long())
 
-    normal = normal.view((config.BATCH_SIZE, 8, -1, 3))
+    normal = normal.view((batch_size, 8, -1, 3))
     multi = torch.mul(normal, mask)
     normal = torch.sum(multi, dim=1)
 
@@ -247,19 +249,21 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
 
 
 def compute_landmarks_torch(m, shape):
+    batch_size = m.shape[0]
+
     kpts = torch.from_numpy(load_3DMM_kpts())
     kpts_num = kpts.shape[0]
-    indices = torch.zeros([config.BATCH_SIZE, kpts_num, 2]).int()
-    for i in range(config.BATCH_SIZE):
+    indices = torch.zeros([batch_size, kpts_num, 2]).int()
+    for i in range(batch_size):
         indices[i, :, 0] = i
         indices[i, :, 1:2] = kpts
 
-    vertex3d = shape.view((config.BATCH_SIZE, -1, 3))
-    indices1 = torch.arange(0, config.BATCH_SIZE).long()
+    vertex3d = shape.view((batch_size, -1, 3))
+    indices1 = torch.arange(0, batch_size).long()
     vertex3d = vertex3d[indices1, kpts.long(), :].permute((1, 0, 2))
     vertex4d = torch.cat((vertex3d, torch.ones((vertex3d.shape[0], vertex3d.shape[1], 1)).cuda()), dim=2)
 
-    m = m.view((config.BATCH_SIZE, 4, 2))
+    m = m.view((batch_size, 4, 2))
     vertex2d = torch.matmul(vertex4d, m)
 
     [vertex2d_u, vertex2d_v] = torch.split(vertex2d, (1, 1), dim=2)
@@ -284,10 +288,10 @@ def get_pixel_value_torch( img, x, y):
     - output: tensor of shape (B, H, W, C)
     """
 
-    _, height, width = x.shape
+    batch_size, height, width = x.shape
 
 
-    batch_idx = torch.arange(0, config.BATCH_SIZE).view((config.BATCH_SIZE, 1, 1)).type(torch.int64)
+    batch_idx = torch.arange(0, batch_size).view((batch_size, 1, 1)).type(torch.int64)
     b = batch_idx.repeat(1, height, width)
 
     value = img[b.long(), :, y.long(), x.long()]
@@ -379,6 +383,7 @@ def generate_shade_torch(il, m, mshape, is_with_normal=False):
         Returns
             image: [batch, 192, 224, 3]
     '''
+    batch_size = il.shape[0]
 
     # load 3DMM files
     tri = torch.from_numpy(load_3DMM_tri())  # [3, TRI_NUM + 1]
@@ -406,7 +411,7 @@ def generate_shade_torch(il, m, mshape, is_with_normal=False):
     vt3_coeff = tri_2d_barycoord[:, :, 2].view((-1, 1))
 
     # 단순히 batch 단위로 나눈 것수
-    m_i = m.view((config.BATCH_SIZE, 4, 2))[:, 0:3, :]
+    m_i = m.view((batch_size, 4, 2))[:, 0:3, :]
     # l2_sum = torch.norm(m_i, dim=(1), keepdim=True)
     # m_i_row = torch.div(m_i, l2_sum)
     m_i_row = F.normalize(m_i, dim=1)
@@ -415,7 +420,7 @@ def generate_shade_torch(il, m, mshape, is_with_normal=False):
     m_i = torch.cat((m_i_row, m_cross), dim=2)
     m_i = torch.transpose(m_i, 1, 2)
 
-    vertex3d_rs = mshape.view((config.BATCH_SIZE, -1, 3))
+    vertex3d_rs = mshape.view((batch_size, -1, 3))
 
     normal, normalf = compute_normal_torch(vertex3d_rs, tri, vertex_tri)
 
@@ -425,12 +430,12 @@ def generate_shade_torch(il, m, mshape, is_with_normal=False):
 
     vt = torch.unsqueeze(vt, 0)
     vt = torch.unsqueeze(vt, -1)
-    vt = torch.cat(config.BATCH_SIZE * [vt], 0)
+    vt = torch.cat(batch_size * [vt], 0)
     vt = torch.cat(3 * [vt], -1)
     vt1 = vt[:, 0, :]
     vt2 = vt[:, 1, :]
     vt3 = vt[:, 2, :]
-    zeros = torch.zeros((config.BATCH_SIZE, 1, 3)).cuda()
+    zeros = torch.zeros((batch_size, 1, 3)).cuda()
 
     rotated_normal = torch.cat((rotated_normal, zeros), dim=1)
     normal_flat_vt1 = torch.gather(rotated_normal, 1, vt1)
@@ -463,6 +468,7 @@ def shading_torch ( L, normal):
 			normal_map: [batch, 192, 224, 3]
 	'''
     shape = normal.shape
+    batch_size = shape[0]
 
     normal = torch.unsqueeze(normal, -1)
     normal_x = normal[:, :, 0]
@@ -470,7 +476,7 @@ def shading_torch ( L, normal):
     normal_z = normal[:, :, 2]
 
     pi = math.pi
-    sh = torch.zeros(config.BATCH_SIZE, shape[1], 1, 9).cuda()
+    sh = torch.zeros(batch_size, shape[1], 1, 9).cuda()
     sh[:, :, :, 0] = 1 / math.sqrt(4 * pi) * torch.ones_like(normal_x)  #
     sh[:, :, :, 1] = ((2 * pi) / 3) * (math.sqrt(3 / (4 * pi))) * normal_z
     sh[:, :, :, 2] = ((2 * pi) / 3) * (math.sqrt(3 / (4 * pi))) * normal_y

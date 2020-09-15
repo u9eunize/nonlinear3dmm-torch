@@ -82,6 +82,7 @@ class Nonlinear3DMMHelper:
         for epoch in range(start_epoch, config.EPOCH):
             # For each batch in the dataloader
             for idx, samples in enumerate(train_dataloader, 0):
+                batch_size = len(samples)
                 loss_param = self.run_model(**self.sample_to_param(samples))
 
                 g_loss, g_loss_with_landmark = self.loss(**loss_param)
@@ -96,7 +97,7 @@ class Nonlinear3DMMHelper:
                     encoder_optimizer.step()
 
                 print(datetime.now(timezone("Asia/Seoul")), end=" ")
-                print(f"[{epoch}, {idx+1:04d}] {idx * config.BATCH_SIZE}/{len(train_dataloader) * config.BATCH_SIZE} "
+                print(f"[{epoch}, {idx+1:04d}] {idx * batch_size}/{len(train_dataloader) * batch_size} "
                       f"({idx/(len(train_dataloader)) * 100:.2f}%) ")
                 for key, loss in self.loss.losses.items():
                     print(key.replace("_loss", "") + ":", f"{loss.item():.4f}", end=" ")
@@ -137,12 +138,13 @@ class Nonlinear3DMMHelper:
             loss_param = dict()
             loss_mean = dict()
             for idx, samples in enumerate(dataloader, 0):
+                batch_size = len(samples)
                 loss_param = self.run_model(**self.sample_to_param(samples))
                 self.loss(**loss_param)
 
                 print(datetime.now(timezone("Asia/Seoul")), end=" ")
                 print(f"[{idx + 1:04d}] "
-                      f"{idx * config.BATCH_SIZE}/{len(dataloader) * config.BATCH_SIZE} "
+                      f"{idx * batch_size}/{len(dataloader) * batch_size} "
                       f"({idx / (len(dataloader)) * 100:.2f}%) ")
 
                 for key, loss in self.loss.losses.items():

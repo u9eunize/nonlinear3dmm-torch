@@ -8,8 +8,7 @@ from utils import *
 
 def main():
 
-
-    data = np.load('sample_data.npz')
+    data = np.load('./renderer/sample_data.npz')
 
     texture = torch.from_numpy(data['sample_texture']).double().cuda()
     shape = torch.from_numpy(data['sample_shape']).double().cuda()
