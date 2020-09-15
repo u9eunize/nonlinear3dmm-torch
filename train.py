@@ -99,10 +99,9 @@ class Nonlinear3DMMHelper:
                     encoder_optimizer.step()
 
                 print(datetime.now(timezone("Asia/Seoul")), end=" ")
-                print(f"[{epoch}, {idx+1:04d}, {self.logger_train.get_step()}] "
-                      f"{idx * config.BATCH_SIZE}/{len(train_dataloader) * config.BATCH_SIZE} "
-                print(f"[{epoch}, {idx+1:04d}] {idx * batch_size}/{len(train_dataloader) * batch_size} "
-                      f"({idx/(len(train_dataloader)) * 100:.2f}%) ")
+                print(f"[{epoch}, {idx + 1:04d}, {self.logger_train.get_step()}] "
+                      f"{idx * batch_size}/{len(train_dataloader) * batch_size} "
+                      f"({idx / (len(train_dataloader)) * 100:.2f}%) ")
 
                 for key, loss in self.loss.losses.items():
                     print(key.replace("_loss", "") + ":", f"{loss.item():.4f}", end=" ")
