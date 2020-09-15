@@ -73,11 +73,13 @@ class Nonlinear3DMMHelper:
         self.net, global_optimizer, encoder_optimizer, start_epoch = load(
             self.net, global_optimizer, encoder_optimizer, start_epoch=config.CHECKPOINT_EPOCH
         )
-        global_step = start_epoch * len(train_dataloader) + 1
+        self.logger_train.step(start_epoch * len(train_dataloader))
 
         # Write graph to the tensorboard
         # _, samples = next(enumerate(train_dataloader, 0))
         # self.writer.add_graph(self.net, samples["image"].to(config.DEVICE))
+
+        save_per = int(0.1 * len(train_dataloader))
 
         for epoch in range(start_epoch, config.EPOCH):
             # For each batch in the dataloader
@@ -96,8 +98,10 @@ class Nonlinear3DMMHelper:
                     encoder_optimizer.step()
 
                 print(datetime.now(timezone("Asia/Seoul")), end=" ")
-                print(f"[{epoch}, {idx+1:04d}] {idx * config.BATCH_SIZE}/{len(train_dataloader) * config.BATCH_SIZE} "
+                print(f"[{epoch}, {idx+1:04d}, {self.logger_train.get_step()}] "
+                      f"{idx * config.BATCH_SIZE}/{len(train_dataloader) * config.BATCH_SIZE} "
                       f"({idx/(len(train_dataloader)) * 100:.2f}%) ")
+
                 for key, loss in self.loss.losses.items():
                     print(key.replace("_loss", "") + ":", f"{loss.item():.4f}", end=" ")
                     self.logger_train.write_scalar(key, loss)
@@ -105,13 +109,11 @@ class Nonlinear3DMMHelper:
 
                 self.write_img_logs(loss_param, self.logger_train)
                 self.logger_train.step()
-                global_step += 1
 
-                if idx > 0.1 * len(train_dataloader):
-                    break
-
-            save(self.net, global_optimizer, encoder_optimizer, epoch, self.state_file_root_name)
-            self.validate(valid_dataloader, self.logger_train.get_step())
+                if self.logger_train.get_step() % save_per == 0:
+                    save(self.net, global_optimizer, encoder_optimizer, epoch,
+                         self.state_file_root_name, self.logger_train.get_step())
+                    self.validate(valid_dataloader, self.logger_train.get_step())
 
     def validate(self, valid_dataloader, global_step):
         loss_param, loss_mean = self.test(valid_dataloader)
