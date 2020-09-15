@@ -26,7 +26,7 @@ class NLLogger:
                 use.append(interval)
                 for name, flusher in logs.items():
                     fn, data = flusher
-                    fn(name, data, self._step)
+                    fn(self.writer, name, data, self._step)
 
         # delete used logs
         for interval in use:
@@ -43,7 +43,7 @@ class NLLogger:
         self.holder[interval][save_name] = log_data
 
     def write_scalar(self, name, data, interval=config.LOSS_LOG_INTERVAL):
-        self._write(interval, f"{name}", (self.writer.add_scalar, data))
+        self._write(interval, f"{name}", (NLLogger.add_scalar, data))
 
     def write_image(self, name, images, interval=config.IMAGE_LOG_INTERVAL):
         if images is None:
@@ -55,7 +55,18 @@ class NLLogger:
             result.append(img[:self.img_log_number])
         result = torch.cat(result, dim=0)
 
-        self._write(interval, f"{name}", (self.writer.add_images, result))
+        self._write(interval, f"{name}", (NLLogger.add_images, result))
+
+    def write_func(self, name, func, data, interval=config.IMAGE_LOG_INTERVAL):
+        self._write(interval, name, (func, data))
+
+    @staticmethod
+    def add_images(writer, name, data, step):
+        writer.add_images(name, data, step)
+
+    @staticmethod
+    def add_scalar(writer, name, data, step):
+        writer.add_scalar(name, data, step)
 
 
 _LOG_DICT = dict()

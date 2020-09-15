@@ -6,8 +6,8 @@ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 from utils import *
 
 
-def renderer ( lv_m, lv_il, albedo, shape2d, shape1d, inputs, std_m, mean_m, std_shape, mean_shape):
-    batch_size = shape2d.shape[0]
+def renderer ( lv_m, lv_il, albedo, shape1d, inputs, std_m, mean_m, std_shape, mean_shape):
+    batch_size = albedo.shape[0]
 
     input_masks = inputs["input_masks"]
     input_images = inputs["input_images"]
@@ -25,6 +25,9 @@ def renderer ( lv_m, lv_il, albedo, shape2d, shape1d, inputs, std_m, mean_m, std
     tex_ratio = torch.sum(tex_vis_mask) / (batch_size * config.TEXTURE_SIZE[0] * config.TEXTURE_SIZE[1] * config.C_DIM)
 
     g_images_raw, g_images_mask_raw = warp_texture_torch(tex, m_full, shape_full)
+    g_images_gt, g_images_mask_gt = warp_texture_torch(input_texture_labels,
+                                                       inputs["input_m_labels"] * std_m + mean_m,
+                                                       inputs["input_shape_labels"] * std_shape + mean_shape)
 
     g_images_mask = input_masks * g_images_mask_raw.unsqueeze(1).repeat(1, 3, 1, 1)
     g_images = g_images_raw * g_images_mask + input_images * (torch.ones_like(g_images_mask) - g_images_mask)
@@ -39,6 +42,8 @@ def renderer ( lv_m, lv_il, albedo, shape2d, shape1d, inputs, std_m, mean_m, std
         "g_images_mask": g_images_mask,
         "g_images_raw": g_images_raw,
         "g_images_mask_raw": g_images_mask_raw.unsqueeze(1).repeat(1, 3, 1, 1),
+        "g_images_gt": g_images_gt,
+        "g_images_mask_gt": g_images_mask_gt
     }
     return param_dict
 

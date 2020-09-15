@@ -107,6 +107,9 @@ class Nonlinear3DMMHelper:
                 self.logger_train.step()
                 global_step += 1
 
+                if idx > 0.1 * len(train_dataloader):
+                    break
+
             save(self.net, global_optimizer, encoder_optimizer, epoch, self.state_file_root_name)
             self.validate(valid_dataloader, self.logger_train.get_step())
 
@@ -160,7 +163,7 @@ class Nonlinear3DMMHelper:
         loss_param = {}
 
         lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d = self.net(input_images)
-        renderer_dict = renderer(lv_m, lv_il, albedo, shape2d, shape1d, inputs,
+        renderer_dict = renderer(lv_m, lv_il, albedo, shape1d, inputs,
                                  self.std_m, self.mean_m, self.std_shape, self.mean_shape)
 
         network_result = {
@@ -182,9 +185,12 @@ class Nonlinear3DMMHelper:
     def write_img_logs(self, loss_param, logger, interval=config.IMAGE_LOG_INTERVAL):
         logger.write_image("shade", loss_param["shade"],
                            interval=interval)
-        logger.write_image("g_images",
-                           [loss_param["g_images"], loss_param["g_images_raw"], loss_param["input_images"]],
-                           interval=interval)
+        logger.write_image("g_images",[
+            loss_param["g_images"],
+            loss_param["g_images_raw"],
+            loss_param["g_images_gt"],
+            loss_param["input_images"]
+        ], interval=interval)
         logger.write_image("g_images_mask",
                            [loss_param["g_images_mask"],
                             loss_param["g_images_mask_raw"],
