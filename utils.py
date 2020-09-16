@@ -46,14 +46,19 @@ def load(model, global_optimizer=None, encoder_optimizer=None, start_epoch=None,
     print("=> load checkpoint '{}'".format(ckpt_name))
     checkpoint = torch.load(ckpt_name, map_location=config.DEVICE)
 
-    start_step = checkpoint['step'] if 'step' in checkpoint else 0
     start_epoch = checkpoint['epoch']
+    start_step = checkpoint['step'] if 'step' in checkpoint else 0
 
     model.load_state_dict(checkpoint['state_dict'])
+    print("=> loaded model")
+
     if global_optimizer is not None:
         global_optimizer.load_state_dict(checkpoint['global_optimizer'])
+        print("=> loaded global_optimizer")
     if encoder_optimizer is not None:
         encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
+        print("=> loaded encoder_optimizer")
+
     print("=> loaded checkpoint '{}' (epoch {}, step {})".format(ckpt_name, start_epoch, start_step))
 
     return model, global_optimizer, encoder_optimizer, start_epoch, start_step

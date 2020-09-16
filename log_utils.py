@@ -3,6 +3,7 @@ from pytz import timezone
 from datetime import datetime
 
 import torch
+import torchvision
 from torch.utils.tensorboard import SummaryWriter
 
 import config
@@ -54,9 +55,12 @@ class NLLogger:
         if not isinstance(images, list):
             images = [images]
         result = []
-        for img in images:
-            result.append(img[:self.img_log_number])
-        result = torch.cat(result, dim=0)
+        for i in range(self.img_log_number):
+            r = torch.cat([img[i:i+1, :, :, :] for img in images], dim=0)
+            result.append(r)
+
+        row_limit = (8 // len(images)) * len(images)
+        result = torchvision.utils.make_grid(torch.cat(result, dim=0), nrow=row_limit).unsqueeze(0)
 
         self._write(interval, f"{name}", (NLLogger.add_images, result))
 
@@ -69,17 +73,18 @@ class NLLogger:
 
     def write_loss_images(self, loss_params, interval=config.IMAGE_LOG_INTERVAL):
 
+        shade = torch.zeros(loss_params["input_images"].shape).cuda()
+        shade[:, :, :loss_params["shade"].shape[2], :] = loss_params["shade"]
         self.write_image("shade", loss_params["shade"], interval=interval)
         self.write_image("g_images", [
-            loss_params["g_images"],
-            loss_params["g_images_raw"],
+            loss_params["input_images"],
             loss_params["g_images_gt"],
-            loss_params["input_images"]
-        ], interval=interval)
-        self.write_image("g_images_mask", [
-            loss_params["g_images_mask"],
+            loss_params["g_images_raw"],
+            loss_params["g_images"],
+            loss_params["input_masks"],
             loss_params["g_images_mask_raw"],
-            loss_params["input_masks"]
+            loss_params["g_images_mask"],
+            shade,
         ], interval=interval)
 
         self.write_image("texture", [

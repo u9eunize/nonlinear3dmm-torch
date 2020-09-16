@@ -96,6 +96,9 @@ class Nonlinear3DMMHelper:
         self.net, global_optimizer, encoder_optimizer, start_epoch, start_step = load(
             self.net, global_optimizer, encoder_optimizer, start_epoch=config.CHECKPOINT_EPOCH
         )
+
+        if start_step == 0:
+            start_step = start_epoch * len(train_dataloader)
         self.logger_train.step(start_step)
 
         # Write graph to the tensorboard
@@ -129,8 +132,12 @@ class Nonlinear3DMMHelper:
                 self.logger_train.step()
 
                 if self.logger_train.get_step() % save_per == 0:
-                    save(self.net, global_optimizer, encoder_optimizer, epoch,
+                    save_epoch = epoch
+                    if idx == len(train_dataloader) - 1:
+                        save_epoch += 1
+                    save(self.net, global_optimizer, encoder_optimizer, save_epoch,
                          self.state_file_root_name, self.logger_train.get_step())
+
                     self.validate(valid_dataloader, epoch, self.logger_train.get_step())
 
     def validate(self, valid_dataloader, epoch, global_step):
