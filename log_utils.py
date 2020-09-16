@@ -1,4 +1,6 @@
 from os.path import join
+from pytz import timezone
+from datetime import datetime
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -13,26 +15,27 @@ class NLLogger:
         self.holder = {}
         self.img_log_number = img_log_number
 
-    def step(self, step=None):
+    def step(self, step=None, is_flush=True):
         if step is not None:
             self._step = step
         else:
             self._step += 1
 
-        # do flush
-        use = []
-        for interval, logs in self.holder.items():
-            if self._step % interval == 0:
-                use.append(interval)
-                for name, flusher in logs.items():
-                    fn, data = flusher
-                    fn(self.writer, name, data, self._step)
+        if is_flush:
+            # do flush
+            use = []
+            for interval, logs in self.holder.items():
+                if self._step % interval == 0:
+                    use.append(interval)
+                    for name, flusher in logs.items():
+                        fn, data = flusher
+                        fn(self.writer, name, data, self._step)
 
-        # delete used logs
-        for interval in use:
-            del self.holder[interval]
+            # delete used logs
+            for interval in use:
+                del self.holder[interval]
 
-        self.writer.flush()
+            self.writer.flush()
 
     def get_step(self):
         return self._step
@@ -59,6 +62,47 @@ class NLLogger:
 
     def write_func(self, name, func, data, interval=config.IMAGE_LOG_INTERVAL):
         self._write(interval, name, (func, data))
+
+    def write_loss_scalar(self, loss, interval=config.IMAGE_LOG_INTERVAL):
+        for key, loss_value in loss.losses.items():
+            self.write_scalar(key, loss_value)
+
+    def write_loss_images(self, loss_params, interval=config.IMAGE_LOG_INTERVAL):
+
+        self.write_image("shade", loss_params["shade"], interval=interval)
+        self.write_image("g_images", [
+            loss_params["g_images"],
+            loss_params["g_images_raw"],
+            loss_params["g_images_gt"],
+            loss_params["input_images"]
+        ], interval=interval)
+        self.write_image("g_images_mask", [
+            loss_params["g_images_mask"],
+            loss_params["g_images_mask_raw"],
+            loss_params["input_masks"]
+        ], interval=interval)
+
+        self.write_image("texture", [
+            loss_params["tex"],
+            loss_params["input_texture_labels"],
+            loss_params["tex"] * loss_params["tex_vis_mask"],
+            loss_params["input_texture_labels"] * loss_params["tex_vis_mask"]
+        ], interval=interval)
+
+    @staticmethod
+    def print_iteration_log(epoch, step, idx, batch_size, iteration_size):
+        print(datetime.now(timezone("Asia/Seoul")), end=" ")
+
+        print(f"[{epoch}, {idx + 1:04d}, {step}] "
+              f"[{idx + 1:04d}] "
+              f"{idx * batch_size}/{iteration_size * batch_size} "
+              f"({idx / iteration_size * 100:.2f}%) ")
+
+    @staticmethod
+    def print_loss_log(loss):
+        for key, loss_value in loss.losses.items():
+            print(key.replace("_loss", "") + ":", f"{loss_value.item():.4f}", end=" ")
+        print()
 
     @staticmethod
     def add_images(writer, name, data, step):

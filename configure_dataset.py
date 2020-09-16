@@ -18,7 +18,7 @@ class NonlinearDataset(Dataset):
 			1. split raw data into train, test, and validation dataset and
 			2. load each dataset item
 	'''
-	def __init__( self, phase, frac=1.0, dataset_dir=config.DATASET_PATH):
+	def __init__(self, phase, frac=1.0, dataset_dir=config.DATASET_PATH):
 		self.fdtype = np.float32
 		self.frac = frac
 
@@ -83,8 +83,8 @@ class NonlinearDataset(Dataset):
 
 		# set label data
 		delta_m = np.zeros(8, dtype=self.fdtype)
-		delta_m[6] = np.divide(ty, self.std_m[6])
-		delta_m[7] = np.divide(32 - tx, self.std_m[7])
+		delta_m[6] = np.divide(tx, self.std_m[6])
+		delta_m[7] = np.divide(32 - ty, self.std_m[7])
 
 		m_label = self.all_m[idx] - delta_m
 		m_tensor = torch.tensor(m_label)
@@ -204,7 +204,7 @@ class NonlinearDataset(Dataset):
 			image_paths = all_images[indices]
 			paras = all_paras[indices]
 			tot = list(zip(image_paths, paras))
-			paths_and_paras = sorted(tot, key=lambda a: a[0])
+			paths_and_paras = sorted(tot, key=lambda a: '_'.join(a[0].split('.')))
 			param = []
 			# copy image and mask_img files, duplicate mask and texture files
 			for idx, (image_path, para) in enumerate(paths_and_paras):
@@ -230,12 +230,10 @@ class NonlinearDataset(Dataset):
 
 				param.append(para)
 
-			# 5. write params to the proper directory
 			param = np.stack(param)
 			np.save(join(self.dataset_dir, phase, 'param'), param)
 
 		print("     Splited dataset!")
-
 
 	def load_dataset ( self , phase ):
 		'''

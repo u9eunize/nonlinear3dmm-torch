@@ -22,7 +22,8 @@ def save(model, global_optimizer, encoder_optimizer, epoch, path, step):
 
     print("=> save checkpoint '{} (epoch: {}, step: {})')".format(save_name, epoch, step))
     torch.save({
-        'epoch': epoch + 1,
+        'step': step,
+        'epoch': epoch,
         'state_dict': model.state_dict(),
         'global_optimizer': global_optimizer.state_dict(),
         'encoder_optimizer': encoder_optimizer.state_dict(),
@@ -32,7 +33,7 @@ def save(model, global_optimizer, encoder_optimizer, epoch, path, step):
 
 def load(model, global_optimizer=None, encoder_optimizer=None, start_epoch=None, start_step=None):
     if not config.CHECKPOINT_PATH:
-        return model, global_optimizer, encoder_optimizer, 0
+        return model, global_optimizer, encoder_optimizer, 0, 0
 
     start_epoch_str = f"{start_epoch:02d}" if start_epoch is not None else "*"
     start_step_str = f"{start_step:06d}.pt" if start_step is not None else "*"
@@ -42,17 +43,20 @@ def load(model, global_optimizer=None, encoder_optimizer=None, start_epoch=None,
     ckpt_name.sort()
     ckpt_name = ckpt_name[-1]
 
-    print("=> loaded checkpoint '{}')".format(ckpt_name))
+    print("=> load checkpoint '{}'".format(ckpt_name))
     checkpoint = torch.load(ckpt_name, map_location=config.DEVICE)
+
+    start_step = checkpoint['step'] if 'step' in checkpoint else 0
     start_epoch = checkpoint['epoch']
+
     model.load_state_dict(checkpoint['state_dict'])
     if global_optimizer is not None:
         global_optimizer.load_state_dict(checkpoint['global_optimizer'])
     if encoder_optimizer is not None:
         encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
-    print("=> loaded checkpoint '{}' (epoch {})".format(ckpt_name, checkpoint['epoch']))
+    print("=> loaded checkpoint '{}' (epoch {}, step {})".format(ckpt_name, start_epoch, start_step))
 
-    return model, global_optimizer, encoder_optimizer, start_epoch
+    return model, global_optimizer, encoder_optimizer, start_epoch, start_step
 
 
 def get_checkpoint_dir(path, epoch):

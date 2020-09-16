@@ -5,8 +5,10 @@ BATCH_SIZE = 16
 BETAS = (0.5, 0.999)
 DATASET_FRAC = 1.0
 TRAIN_DATASET_FRAC = 1.0
-VALID_DATASET_FRAC = 0.1
+VALID_DATASET_FRAC = 0.2
+TEST_DATASET_FRAC = 1.0
 LEARNING_RATE = 0.0002
+SAVE_PER_RATIO = 0.2
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -17,6 +19,7 @@ PREFIX = 'pretrain'
 CHECKPOINT_DIR_PATH = './checkpoint'
 CHECKPOINT_PATH = ''            # ex) '20200914_005102_pretrain'
 CHECKPOINT_EPOCH = None
+CHECKPOINT_STEP = None
 LOG_PATH = './logs'
 DATASET_PATH = './dataset'
 DEFINITION_PATH = './dataset/3DMM_definition/'
