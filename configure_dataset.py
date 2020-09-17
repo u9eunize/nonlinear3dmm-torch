@@ -1,22 +1,14 @@
 import torch
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-import numpy as np
-from config import _300W_LP_DIR
-from os import cpu_count
-from os.path import join, isdir, basename, dirname
+import config
+from os.path import join, isdir, basename
 from PIL import Image
-from os import makedirs
+from os import makedirs, cpu_count
 from glob import glob
 import random
 import shutil
 from utils import *
-
-
-VERTEX_NUM  = 53215
-TRI_NUM     = 105840
-N           = VERTEX_NUM * 3
-CONST_PIXELS_NUM = 20
 
 
 class NonlinearDataset(Dataset):
@@ -26,8 +18,10 @@ class NonlinearDataset(Dataset):
 			1. split raw data into train, test, and validation dataset and
 			2. load each dataset item
 	'''
-	def __init__( self, phase, dataset_dir=_300W_LP_DIR ):
-		print("Loading dataset ...")
+	def __init__(self, phase, frac=1.0, dataset_dir=config.DATASET_PATH):
+		self.fdtype = np.float32
+		self.frac = frac
+
 		# initialize attributes
 		self.dataset_dir = dataset_dir
 		self.transform = transforms.Compose([
@@ -43,7 +37,7 @@ class NonlinearDataset(Dataset):
 		mu_exp, w_exp = load_Basel_basic('exp')
 
 		self.mean_shape = mu_shape + mu_exp
-		self.std_shape = np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM)
+		self.std_shape = np.tile(np.array([1e4, 1e4, 1e4], dtype=self.fdtype), config.VERTEX_NUM)
 
 		self.w_shape = w_shape
 		self.w_exp = w_exp
@@ -55,11 +49,9 @@ class NonlinearDataset(Dataset):
 
 		self.load_dataset(phase)
 
-		print("DONE")
-
 
 	def __len__( self ):
-		return self.image_filenames.shape[0]
+		return int(self.image_filenames.shape[0] * self.frac)
 
 
 	def __getitem__( self, idx ):
@@ -70,7 +62,7 @@ class NonlinearDataset(Dataset):
 		# load image
 		img_name    = self.image_filenames[idx]
 		img         = Image.open(img_name)
-		img         = transforms.functional.crop(img, ty, tx, 224, 224)
+		img         = transforms.functional.crop(img, ty, tx, config.IMAGE_SIZE, config.IMAGE_SIZE)
 		img_tensor  = self.transform(img)
 
 		# load mask
@@ -81,7 +73,7 @@ class NonlinearDataset(Dataset):
 		# load mask image
 		mask_img_name   = self.mask_img_filenames[idx]
 		mask_img        = Image.open(mask_img_name)
-		mask_img        = transforms.functional.crop(mask_img, ty, tx, 224, 224)
+		mask_img        = transforms.functional.crop(mask_img, ty, tx, config.IMAGE_SIZE, config.IMAGE_SIZE)
 		mask_img_tensor = self.transform(mask_img)
 
 		# load texture
@@ -90,23 +82,33 @@ class NonlinearDataset(Dataset):
 		texture_tensor  = self.transform(texture)
 
 		# set label data
-		delta_m = np.zeros(8)
-		delta_m[6] = np.divide(ty, self.std_m[6])
-		delta_m[7] = np.divide(32 - tx, self.std_m[7])
+		delta_m = np.zeros(8, dtype=self.fdtype)
+		delta_m[6] = np.divide(tx, self.std_m[6])
+		delta_m[7] = np.divide(32 - ty, self.std_m[7])
 
 		m_label = self.all_m[idx] - delta_m
-		batch_shape_para    = self.all_shape_para[idx, :]
+		m_tensor = torch.tensor(m_label)
+
 		batch_exp_para      = self.all_exp_para[idx, :]
-		shape_label         = np.divide( np.matmul(batch_shape_para, np.transpose(self.w_shape)) + np.matmul(batch_exp_para, np.transpose(self.w_exp)), self.std_shape)
+		exp_label           = np.matmul(batch_exp_para, np.transpose(self.w_exp))
+		exp_label           = np.divide(exp_label, self.std_shape)
+		exp_tensor          = torch.tensor(exp_label)
+
+		batch_shape_para    = self.all_shape_para[idx, :]
+		shape_label         = np.matmul(batch_shape_para, np.transpose(self.w_shape))
+		shape_label         = np.divide( shape_label + exp_label, self.std_shape)
+		shape_tensor        = torch.tensor(shape_label)
+
+
 
 		# set random albedo indices
-		indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CONST_PIXELS_NUM])
-		indices2 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CONST_PIXELS_NUM])
+		indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[config.CONST_PIXELS_NUM])
+		indices2 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[config.CONST_PIXELS_NUM])
 
-		albedo_indices_x1 = np.reshape(self.const_alb_mask[indices1, 1], [CONST_PIXELS_NUM, 1])
-		albedo_indices_y1 = np.reshape(self.const_alb_mask[indices1, 0], [CONST_PIXELS_NUM, 1])
-		albedo_indices_x2 = np.reshape(self.const_alb_mask[indices2, 1], [CONST_PIXELS_NUM, 1])
-		albedo_indices_y2 = np.reshape(self.const_alb_mask[indices2, 0], [CONST_PIXELS_NUM, 1])
+		albedo_indices_x1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 1], [config.CONST_PIXELS_NUM, 1]))
+		albedo_indices_y1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 0], [config.CONST_PIXELS_NUM, 1]))
+		albedo_indices_x2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 1], [config.CONST_PIXELS_NUM, 1]))
+		albedo_indices_y2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 0], [config.CONST_PIXELS_NUM, 1]))
 
 		sample = {
 				'image_name'    : self.image_filenames[idx],
@@ -115,8 +117,9 @@ class NonlinearDataset(Dataset):
 				'mask_img'      : mask_img_tensor,
 				'texture'       : texture_tensor,
 
-				'm_label'       : m_label,
-				'shape_label'   : shape_label,
+				'm_label'       : m_tensor,
+				'exp_label'     : exp_tensor,
+				'shape_label'   : shape_tensor,
 
 				'albedo_indices': [
 					albedo_indices_x1,
@@ -135,7 +138,11 @@ class NonlinearDataset(Dataset):
 			Returns
 				splited: Bool (True if splited before, otherwise False)
 		'''
-		return isdir(join(self.dataset_dir, 'train')) and isdir(join(self.dataset_dir, 'valid')) and isdir(join(self.dataset_dir, 'test'))
+		return (
+			isdir(join(self.dataset_dir, 'train')) and
+			isdir(join(self.dataset_dir, 'valid')) and
+			isdir(join(self.dataset_dir, 'test'))
+		)
 
 
 	def split_dataset( self ):
@@ -172,7 +179,7 @@ class NonlinearDataset(Dataset):
 
 		all_images = np.concatenate(all_images, axis=0)
 		all_paras = np.concatenate(all_paras, axis=0)
-		assert (all_images.shape[0] == all_paras.shape[0]), "Number of samples must be the same between images and paras"
+		assert all_images.shape[0] == all_paras.shape[0], "Number of samples must be the same between images and paras"
 
 		# random sample the files
 		total_len = all_images.shape[0]
@@ -180,28 +187,38 @@ class NonlinearDataset(Dataset):
 		random.shuffle(random_indices)
 
 		phases = [
-				('train', 0.8),
-				('valid', 0.1),
-				('test', 0.1)
+				('train', int(0.8 * total_len)),
+				('valid', int(0.9 * total_len)),
+				('test', int(total_len))
 		]
 
 		# split dataset
-		offset = 0
-		for phase in phases:
-			print(f"Spliting {phase[0]} dataset ...")
+		bef = 0
+		for phase, last_idx in phases:
+			print(f"Spliting {phase} dataset ...")
 			# create directories
 			for dataset in datasets:
-				makedirs(join(self.dataset_dir, phase[0], dataset), exist_ok=True)
-			indices = random_indices[int(offset * total_len):int((offset + phase[1]) * total_len)]
-			offset += phase[1]
+				makedirs(join(self.dataset_dir, phase, dataset), exist_ok=True)
+			indices = random_indices[bef:last_idx]
+			bef = last_idx
 
 			image_paths = all_images[indices]
 			paras = all_paras[indices]
+			tot = list(zip(image_paths, paras))
+			paths_and_paras = sorted(tot, key=lambda a: a[0])
+
+			param = []
+			names = []
 
 			# copy image and mask_img files, duplicate mask and texture files
-			for idx, (image_path, para) in enumerate(zip(image_paths, paras)):
-				if idx % 100 == 0: print(f"        Splitting {phase[0]} dataset progress: {idx/image_paths.shape[0] * 100:.2f}% ({basename(image_path)})")
-				target_name = join(self.dataset_dir, phase[0], image_path.split('.')[0])
+			for idx, (image_path, para) in enumerate(paths_and_paras):
+				if idx % 100 == 0:
+					print("        Splitting {} dataset progress: {:.2f}% ({})".format(
+						phase,
+						idx / image_paths.shape[0] * 100,
+						basename(image_path)
+					))
+				target_name = join(self.dataset_dir, phase, image_path.split('.')[0])
 
 				# copy image and mask image files
 				image = join(self.dataset_dir, 'image', image_path)
@@ -215,11 +232,19 @@ class NonlinearDataset(Dataset):
 				shutil.copy(mask, target_name + '_mask.png')
 				shutil.copy(texture, target_name + '_texture.png')
 
+				names.append(target_name + '_')
+				param.append(para)
+
 			# 5. write params to the proper directory
-			np.save(join(self.dataset_dir, phase[0], 'param'), paras)
+			tot_ = list(zip(names, param))
+			tot_ = sorted(tot_, key=lambda a: a[0])
+			param_ = []
+			for _, para in tot_:
+				param_.append(para)
+			param_ = np.stack(param_)
+			np.save(join(self.dataset_dir, phase, 'param'), param_)
 
 		print("     Splited dataset!")
-
 
 	def load_dataset ( self , phase ):
 		'''
@@ -238,11 +263,18 @@ class NonlinearDataset(Dataset):
 		# colorDim  = ilDim + 7
 
 		# load dataset images by filtering
-		all_files = glob(join(self.dataset_dir, phase, "*", "*.png"))
+		all_files           = glob(join(self.dataset_dir, phase, "*", "*.png"))
 		image_filenames     = list(filter(lambda x: '_image.png' in x, all_files))
 		mask_filenames      = list(filter(lambda x: '_mask.png' in x, all_files))
 		mask_img_filenames  = list(filter(lambda x: '_mask_img.png' in x, all_files))
 		texture_filenames   = list(filter(lambda x: '_texture.png' in x, all_files))
+
+		image_filenames.sort()
+		mask_filenames.sort()
+		mask_img_filenames.sort()
+		texture_filenames.sort()
+
+		# TODO filename validation check (same prefix)
 
 		self.image_filenames    = np.array(image_filenames)
 		self.mask_filenames     = np.array(mask_filenames)
@@ -274,7 +306,12 @@ class NonlinearDataset(Dataset):
 
 		# Texture parameter
 		tex_para = all_paras[:, expDim:texDim]
-		self.all_tex_para = np.concatenate(tex_para, axis=0)
+		all_tex_para = np.concatenate(tex_para, axis=0)
+
+		all_il_para = all_paras[:, texDim:ilDim]
+		self.mean_il_para = np.mean(all_il_para, axis=0)
+		self.std_il_para = np.std(all_il_para, axis=0)
+		self.all_il_para = all_il_para
 
 
 	def image2texture_fn ( self, image_fn ):
@@ -293,15 +330,20 @@ class NonlinearDataset(Dataset):
 
 
 def main():
+	# import time
 	print(torch.cuda.is_available())
-	dataloader = DataLoader(NonlinearDataset(phase='test'), batch_size=64, shuffle=True, num_workers=0)
-
+	dataset = NonlinearDataset(phase='train', frac=1.0)
+	print(len(dataset))
+	dataloader = DataLoader(dataset, batch_size=20, shuffle=True, num_workers=1)
+	# start = time.time()
+	print(len(dataloader))
+	# return
 	for idx, samples in enumerate(dataloader):
-		if idx > 10:
+		if idx > 2:
 			break
-		print(f'{idx/len(dataloader) * 100:.2f}% : {samples["image"][0].shape}, {samples["mask_img"][0].shape}')
-
-
+		print(f'{idx/len(dataloader) * 100:.2f}% : {samples["image"][0]}')
+		# print(time.time() - start)
+		# start = time.time()
 
 
 if __name__ == "__main__":

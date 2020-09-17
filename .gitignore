@@ -129,4 +129,7 @@ dmypy.json
 .pyre/
 .idea/
 dataset/
-
+checkpoint/
+save/
+logs/
+runs/
