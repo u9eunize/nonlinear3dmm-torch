@@ -5,12 +5,13 @@ from datetime import datetime
 import torch
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
+from utils import get_checkpoint_dir
 
 import config
 
 
 class NLLogger:
-    def __init__(self, name, phase, start_step=0, img_log_number=config.IMAGE_LOG_NUMBER):
+    def __init__(self, name, phase, start_step=1, img_log_number=config.IMAGE_LOG_NUMBER):
         self.writer = SummaryWriter(join(config.LOG_PATH, f"{name}_{phase}"))
         self._step = start_step
         self.holder = {}
@@ -64,6 +65,14 @@ class NLLogger:
 
         self._write(interval, f"{name}", (NLLogger.add_images, result))
 
+    def save_to_files(self, path, epoch):
+        for interval, logs in self.holder.items():
+            for name, flusher in logs.items():
+                fn, data = flusher
+                filename = join(get_checkpoint_dir(path, epoch), f"{name}_{self._step}.png")
+                if fn == NLLogger.add_images:
+                    torchvision.utils.save_image(data, filename)
+
     def write_func(self, name, func, data, interval=config.IMAGE_LOG_INTERVAL):
         self._write(interval, name, (func, data))
 
@@ -71,21 +80,33 @@ class NLLogger:
         for key, loss_value in loss.losses.items():
             self.write_scalar(key, loss_value)
 
+    @staticmethod
+    def match_size(origin, vec):
+        ret = torch.zeros(origin.shape).cuda()
+        ret[:, :, :vec.shape[2], :] = vec
+        return ret
+
     def write_loss_images(self, loss_params, interval=config.IMAGE_LOG_INTERVAL):
 
-        shade = torch.zeros(loss_params["input_images"].shape).cuda()
-        shade[:, :, :loss_params["shade"].shape[2], :] = loss_params["shade"]
         self.write_image("shade", loss_params["shade"], interval=interval)
         self.write_image("g_images", [
             loss_params["input_images"],
-            loss_params["g_images_gt"],
+            loss_params["g_images_raw_gt"],
             loss_params["g_images_raw"],
             loss_params["g_images"],
-            loss_params["input_masks"],
-            loss_params["g_images_mask_raw"],
-            loss_params["g_images_mask"],
-            shade,
+            self.match_size(loss_params["input_images"], loss_params["shade"]),
+            self.match_size(loss_params["input_images"], loss_params["tex"]),
+            self.match_size(loss_params["input_images"], loss_params["input_texture_labels"]),
         ], interval=interval)
+
+        # self.write_image("g_images_rand", [
+        #     loss_params["input_images"],
+        #     loss_params["g_images"],
+        #     loss_params["g_images_raw"],
+        #     loss_params["g_images_raw_rand"],
+        #     self.match_size(loss_params["input_images"], loss_params["rand_shade"]),
+        #     self.match_size(loss_params["input_images"], loss_params["rand_tex"]),
+        # ], interval=interval)
 
         self.write_image("texture", [
             loss_params["tex"],

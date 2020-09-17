@@ -56,8 +56,25 @@ class Nonlinear3DMMHelper:
         loss_param = {}
 
         lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d = self.net(input_images)
-        renderer_dict = renderer(lv_m, lv_il, albedo, shape1d, inputs,
-                                 self.std_m, self.mean_m, self.std_shape, self.mean_shape)
+
+        m_full = generate_full(lv_m, self.std_m, self.mean_m)
+        shape_full = generate_full(shape1d, self.std_shape, self.mean_shape)
+
+        gt_m_full = generate_full(inputs["input_m_labels"], self.std_m, self.mean_m)
+        gt_shape_full = generate_full(inputs["input_shape_labels"], self.std_shape, self.mean_shape)
+
+        # rand_m_full = generate_full(torch.tensor(np.random.normal(0, 0.5, lv_m.shape)).float().cuda(), self.std_m, self.mean_m)
+        # rand_shape_full = generate_full(torch.tensor(np.random.normal(0, 0.5, shape1d.shape)).float().cuda(), self.std_shape, self.mean_shape)
+        # rand_il = torch.tensor(np.random.normal(0, 0.5, lv_il.shape)).cuda().float()
+
+        shade, tex = generate_shade_and_texture(m_full, lv_il, albedo, shape_full)
+        # rand_shade, rand_tex = generate_shade_and_texture(m_full, lv_il, albedo, shape_full)
+
+        renderer_dict = renderer(m_full, tex, shape_full, inputs)
+        renderer_dict_gt = renderer(gt_m_full, inputs["input_texture_labels"], gt_shape_full, inputs, "_gt")
+        # renderer_dict_rand = renderer(rand_m_full, rand_tex, shape_full, inputs, "_rand")
+
+        mask_dict = generate_tex_mask(config.BATCH_SIZE, inputs["input_texture_labels"], inputs["input_texture_masks"])
 
         network_result = {
             "lv_m": lv_m,
@@ -69,9 +86,18 @@ class Nonlinear3DMMHelper:
             "shape1d": shape1d
         }
 
+        loss_param.update({
+            "shade": shade,
+            "tex": tex,
+            # "rand_shade": rand_shade,
+            # "rand_tex": rand_tex
+        })
         loss_param.update(inputs)
         loss_param.update(network_result)
         loss_param.update(renderer_dict)
+        loss_param.update(renderer_dict_gt)
+        # loss_param.update(renderer_dict_rand)
+        loss_param.update(mask_dict)
 
         return loss_param
 
@@ -98,7 +124,7 @@ class Nonlinear3DMMHelper:
         )
 
         if start_step == 0:
-            start_step = start_epoch * len(train_dataloader)
+            start_step = start_epoch * len(train_dataloader) + 1
         self.logger_train.step(start_step)
 
         # Write graph to the tensorboard
@@ -129,7 +155,6 @@ class Nonlinear3DMMHelper:
 
                 self.logger_train.write_loss_scalar(self.loss)
                 self.logger_train.write_loss_images(loss_param)
-                self.logger_train.step()
 
                 if self.logger_train.get_step() % save_per == 0:
                     save_epoch = epoch
@@ -138,7 +163,12 @@ class Nonlinear3DMMHelper:
                     save(self.net, global_optimizer, encoder_optimizer, save_epoch,
                          self.state_file_root_name, self.logger_train.get_step())
 
+                    self.logger_train.save_to_files(self.state_file_root_name, save_epoch)
+                    self.logger_train.step()
+
                     self.validate(valid_dataloader, epoch, self.logger_train.get_step())
+                else:
+                    self.logger_train.step()
 
     def validate(self, valid_dataloader, epoch, global_step):
         print("\n\n", "*" * 10, "start validation", "*" * 10, "\n")

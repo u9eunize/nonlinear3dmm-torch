@@ -6,44 +6,41 @@ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 from utils import *
 
 
-def renderer ( lv_m, lv_il, albedo, shape1d, inputs, std_m, mean_m, std_shape, mean_shape):
-    batch_size = albedo.shape[0]
+def generate_full(vec, std, mean):
+    return vec * std + mean
 
-    input_masks = inputs["input_masks"]
-    input_images = inputs["input_images"]
-    input_texture_masks = inputs["input_texture_masks"]
-    input_texture_labels = inputs["input_texture_labels"]
 
-    m_full = lv_m * std_m + mean_m
-    shape_full = shape1d * std_shape + mean_shape
-
+def generate_shade_and_texture(m_full, lv_il, albedo, shape_full):
     shade = generate_shade_torch(lv_il, m_full, shape_full)
     tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
 
+    return shade, tex
+
+
+def generate_tex_mask(batch_size, input_texture_labels, input_texture_masks):
     tex_vis_mask = (~input_texture_labels.eq((torch.ones_like(input_texture_labels) * -1))).float()
     tex_vis_mask = tex_vis_mask * input_texture_masks
     tex_ratio = torch.sum(tex_vis_mask) / (batch_size * config.TEXTURE_SIZE[0] * config.TEXTURE_SIZE[1] * config.C_DIM)
+    return {
+        "tex_vis_mask": tex_vis_mask,
+        "tex_ratio": tex_ratio,
+    }
+
+
+def renderer(m_full, tex, shape_full, inputs, postfix=""):
+    input_masks = inputs["input_masks"]
+    input_images = inputs["input_images"]
 
     g_images_raw, g_images_mask_raw = warp_texture_torch(tex, m_full, shape_full)
-    g_images_gt, g_images_mask_gt = warp_texture_torch(input_texture_labels,
-                                                       inputs["input_m_labels"] * std_m + mean_m,
-                                                       inputs["input_shape_labels"] * std_shape + mean_shape)
 
     g_images_mask = input_masks * g_images_mask_raw.unsqueeze(1).repeat(1, 3, 1, 1)
     g_images = g_images_raw * g_images_mask + input_images * (torch.ones_like(g_images_mask) - g_images_mask)
 
     param_dict = {
-        "shade": shade,
-        "tex": tex,
-        "tex_vis_mask": tex_vis_mask,
-        "tex_ratio": tex_ratio,
-
-        "g_images": g_images,
-        "g_images_mask": g_images_mask,
-        "g_images_raw": g_images_raw,
-        "g_images_mask_raw": g_images_mask_raw.unsqueeze(1).repeat(1, 3, 1, 1),
-        "g_images_gt": g_images_gt,
-        "g_images_mask_gt": g_images_mask_gt
+        "g_images"+postfix: g_images,
+        "g_images_mask"+postfix: g_images_mask,
+        "g_images_raw"+postfix: g_images_raw,
+        "g_images_mask_raw"+postfix: g_images_mask_raw.unsqueeze(1).repeat(1, 3, 1, 1),
     }
     return param_dict
 

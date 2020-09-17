@@ -12,6 +12,7 @@ from torchvision.utils import save_image
 from os import makedirs
 from os.path import join
 from glob import glob
+from torchvision.utils import make_grid
 
 
 def save(model, global_optimizer, encoder_optimizer, epoch, path, step):
@@ -70,6 +71,22 @@ def get_checkpoint_dir(path, epoch):
 
 def get_checkpoint_name(path, epoch, step):
     return os.path.join(f"{get_checkpoint_dir(path, epoch)}", f"model_ckpt_{epoch:02d}_{step:06d}.pt")
+
+
+def grid_viewer(images, limit=8):
+    if not isinstance(images, list):
+        images = [images]
+
+    reshape_imgs = []
+    t_s = list(np.max(np.array([img.shape for img in images]), axis=0))
+    for _, img in enumerate(images):
+        reshape_image = torch.zeros(t_s)
+        p_s = list(img.shape)
+        reshape_image[:p_s[0], :p_s[1], :p_s[2], :p_s[3]] = img
+        reshape_imgs.append(reshape_image)
+
+    image = make_grid(torch.cat(reshape_imgs, dim=0), nrow=t_s[0])
+    return image.cpu().data.permute(1, 2, 0).numpy()
 
 
 def load_3DMM_tri():

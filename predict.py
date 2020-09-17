@@ -12,7 +12,7 @@ from PIL import Image
 from renderer.rendering_ops import *
 from configure_dataset import NonlinearDataset
 
-d = NonlinearDataset(phase='test', frac=0.1)
+# d = NonlinearDataset(phase='test', frac=0.1)
 # exp_random          = np.random.normal(0, 0.5, d.std_shape.shape)
 # exp_random_tensor   = torch.tensor(exp_random)  # exp ~ N(0, 0.5)
 
@@ -45,7 +45,7 @@ def main():
 
 	# define model and loss
 	model = Nonlinear3DMM().to(config.DEVICE)
-	model, _, _, _ = load(model)
+	model, _, _, _, _ = load(model)
 	loss = Loss(losses)
 
 	# load images for prediction
