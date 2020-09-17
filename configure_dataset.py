@@ -83,14 +83,15 @@ class NonlinearDataset(Dataset):
 
 		# set label data
 		delta_m = np.zeros(8, dtype=self.fdtype)
-		delta_m[6] = np.divide(ty, self.std_m[6])
-		delta_m[7] = np.divide(32 - tx, self.std_m[7])
+		delta_m[6] = np.divide(tx, self.std_m[6])
+		delta_m[7] = np.divide(32 - ty, self.std_m[7])
 
 		m_label = self.all_m[idx] - delta_m
 		m_tensor = torch.tensor(m_label)
 
 		batch_exp_para      = self.all_exp_para[idx, :]
 		exp_label           = np.matmul(batch_exp_para, np.transpose(self.w_exp))
+		exp_label           = np.divide(exp_label, self.std_shape)
 		exp_tensor          = torch.tensor(exp_label)
 
 		batch_shape_para    = self.all_shape_para[idx, :]
@@ -205,7 +206,10 @@ class NonlinearDataset(Dataset):
 			paras = all_paras[indices]
 			tot = list(zip(image_paths, paras))
 			paths_and_paras = sorted(tot, key=lambda a: a[0])
+
 			param = []
+			names = []
+
 			# copy image and mask_img files, duplicate mask and texture files
 			for idx, (image_path, para) in enumerate(paths_and_paras):
 				if idx % 100 == 0:
@@ -228,11 +232,17 @@ class NonlinearDataset(Dataset):
 				shutil.copy(mask, target_name + '_mask.png')
 				shutil.copy(texture, target_name + '_texture.png')
 
+				names.append(target_name + '_')
 				param.append(para)
 
 			# 5. write params to the proper directory
-			param = np.stack(param)
-			np.save(join(self.dataset_dir, phase, 'param'), param)
+			tot_ = list(zip(names, param))
+			tot_ = sorted(tot_, key=lambda a: a[0])
+			param_ = []
+			for _, para in tot_:
+				param_.append(para)
+			param_ = np.stack(param_)
+			np.save(join(self.dataset_dir, phase, 'param'), param_)
 
 		print("     Splited dataset!")
 
@@ -254,7 +264,7 @@ class NonlinearDataset(Dataset):
 		# colorDim  = ilDim + 7
 
 		# load dataset images by filtering
-		all_files = glob(join(self.dataset_dir, phase, "*", "*.png"))
+		all_files           = glob(join(self.dataset_dir, phase, "*", "*.png"))
 		image_filenames     = list(filter(lambda x: '_image.png' in x, all_files))
 		mask_filenames      = list(filter(lambda x: '_mask.png' in x, all_files))
 		mask_img_filenames  = list(filter(lambda x: '_mask_img.png' in x, all_files))
@@ -297,7 +307,12 @@ class NonlinearDataset(Dataset):
 
 		# Texture parameter
 		tex_para = all_paras[:, expDim:texDim]
-		self.all_tex_para = np.concatenate(tex_para, axis=0)
+		all_tex_para = np.concatenate(tex_para, axis=0)
+
+		all_il_para = all_paras[:, texDim:ilDim]
+		self.mean_il_para = np.mean(all_il_para, axis=0)
+		self.std_il_para = np.std(all_il_para, axis=0)
+		self.all_il_para = all_il_para
 
 
 	def image2texture_fn ( self, image_fn ):
@@ -320,7 +335,7 @@ def main():
 	print(torch.cuda.is_available())
 	dataset = NonlinearDataset(phase='train', frac=1.0)
 	print(len(dataset))
-	dataloader = DataLoader(dataset, batch_size=20, shuffle=True, num_workers=cpu_count())
+	dataloader = DataLoader(dataset, batch_size=20, shuffle=True, num_workers=1)
 	# start = time.time()
 	print(len(dataloader))
 	# return

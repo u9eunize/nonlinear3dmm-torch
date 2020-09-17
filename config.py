@@ -15,11 +15,14 @@ PREFIX = 'pretrain'
 
 # Ditectory path
 CHECKPOINT_DIR_PATH = './checkpoint'
-CHECKPOINT_PATH = ''            # ex) '20200914_005102_pretrain'
+CHECKPOINT_PATH = '20200915_163743_pretrain'            # ex) '20200914_005102_pretrain'
+# CHECKPOINT_PATH = ''
 CHECKPOINT_EPOCH = None
 LOG_PATH = './logs'
 DATASET_PATH = './dataset'
 DEFINITION_PATH = './dataset/3DMM_definition/'
+PREDICTION_SRC_PATH = './dataset/pred/src'
+PREDICTION_DST_PATH = './dataset/pred/dst'
 
 
 # Normalization type and lambda of loss
