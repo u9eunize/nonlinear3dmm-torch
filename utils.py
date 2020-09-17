@@ -8,6 +8,7 @@ import numpy as np
 import config
 import torch
 import os
+import torchvision
 from torchvision.utils import save_image
 from os import makedirs
 from os.path import join
@@ -80,13 +81,14 @@ def grid_viewer(images, limit=8):
     reshape_imgs = []
     t_s = list(np.max(np.array([img.shape for img in images]), axis=0))
     for _, img in enumerate(images):
-        reshape_image = torch.zeros(t_s)
+        reshape_image = torch.zeros(t_s).cuda().float()
         p_s = list(img.shape)
-        reshape_image[:p_s[0], :p_s[1], :p_s[2], :p_s[3]] = img
+        reshape_image[:p_s[0], :p_s[1], :p_s[2], :p_s[3]] = img.float()
+        reshape_image = torch.flip(reshape_image, dims=[1])
         reshape_imgs.append(reshape_image)
 
     image = make_grid(torch.cat(reshape_imgs, dim=0), nrow=t_s[0])
-    return image.cpu().data.permute(1, 2, 0).numpy()
+    return image.data.permute(1, 2, 0).cpu().numpy()
 
 
 def load_3DMM_tri():
