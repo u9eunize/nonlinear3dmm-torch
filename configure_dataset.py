@@ -18,7 +18,7 @@ class NonlinearDataset(Dataset):
 			1. split raw data into train, test, and validation dataset and
 			2. load each dataset item
 	'''
-	def __init__( self, phase, frac=1.0, dataset_dir=config.DATASET_PATH):
+	def __init__(self, phase, frac=1.0, dataset_dir=config.DATASET_PATH):
 		self.fdtype = np.float32
 		self.frac = frac
 
@@ -245,7 +245,6 @@ class NonlinearDataset(Dataset):
 			np.save(join(self.dataset_dir, phase, 'param'), param_)
 
 		print("     Splited dataset!")
-
 
 	def load_dataset ( self , phase ):
 		'''

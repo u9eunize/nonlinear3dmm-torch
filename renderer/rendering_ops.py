@@ -47,6 +47,21 @@ def renderer ( lv_m, lv_il, albedo, shape1d, inputs, std_m, mean_m, std_shape, m
     }
     return param_dict
 
+
+def render_from_texture(m, tex, shape, images, tex_masks, std_m, mean_m, std_shape, mean_shape):
+
+    g_images_gt, g_images_mask_gt = warp_texture_torch(tex, m * std_m + mean_m, shape * std_shape + mean_shape)
+
+#    g_images_mask_render = tex_masks * g_images_mask_gt.unsqueeze(1).repeat(1, 3, 1, 1)
+#    g_images_render = g_images_gt * g_images_mask_render + images * (torch.ones_like(g_images_mask_render) - g_images_mask_render)
+
+    param_dict = {
+        "g_images_gt": g_images_gt,
+        "g_images_mask_gt": g_images_mask_gt
+    }
+    return g_images_gt, g_images_mask_gt
+
+
 def ZBuffer_Rendering_CUDA_op_v2_sz224_torch(s2d, tri, vis):
 
     s2d = s2d.contiguous()
