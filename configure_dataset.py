@@ -9,6 +9,9 @@ from glob import glob
 import random
 import shutil
 from utils import *
+import multiprocessing
+from joblib import Parallel, delayed
+from tqdm import tqdm
 
 
 class NonlinearDataset(Dataset):
@@ -177,6 +180,7 @@ class NonlinearDataset(Dataset):
 			all_images += [images]
 			all_paras += [paras]
 
+		# all_images = list(filter(lambda x: int(x.split('_')[-1].split('.')[0]) < 8 ))
 		all_images = np.concatenate(all_images, axis=0)
 		all_paras = np.concatenate(all_paras, axis=0)
 		assert all_images.shape[0] == all_paras.shape[0], "Number of samples must be the same between images and paras"
@@ -187,8 +191,8 @@ class NonlinearDataset(Dataset):
 		random.shuffle(random_indices)
 
 		phases = [
-				('train', int(0.8 * total_len)),
-				('valid', int(0.9 * total_len)),
+				('train', int(0.9 * total_len)),
+				('valid', int(0.95 * total_len)),
 				('test', int(total_len))
 		]
 
@@ -199,11 +203,11 @@ class NonlinearDataset(Dataset):
 			# create directories
 			for dataset in datasets:
 				makedirs(join(self.dataset_dir, phase, dataset), exist_ok=True)
-			indices = random_indices[bef:last_idx]
+
+			image_paths = all_images[bef:last_idx]
+			paras = all_paras[bef:last_idx]
 			bef = last_idx
 
-			image_paths = all_images[indices]
-			paras = all_paras[indices]
 			tot = list(zip(image_paths, paras))
 			paths_and_paras = sorted(tot, key=lambda a: a[0])
 
@@ -211,13 +215,17 @@ class NonlinearDataset(Dataset):
 			names = []
 
 			# copy image and mask_img files, duplicate mask and texture files
-			for idx, (image_path, para) in enumerate(paths_and_paras):
-				if idx % 100 == 0:
-					print("        Splitting {} dataset progress: {:.2f}% ({})".format(
-						phase,
-						idx / image_paths.shape[0] * 100,
-						basename(image_path)
-					))
+			# for image_path, para in paths_and_paras:
+			def _split(image_path, para):
+				if int(image_path.split('_')[-1].split('.')[0]) > 7:
+					return ("", None)
+
+				# if idx % 100 == 0:
+				# 	print("        Splitting {} dataset progress: {:.2f}% ({})".format(
+				# 		phase,
+				# 		idx / image_paths.shape[0] * 100,
+				# 		basename(image_path)
+				# 	))
 				target_name = join(self.dataset_dir, phase, image_path.split('.')[0])
 
 				# copy image and mask image files
@@ -235,9 +243,16 @@ class NonlinearDataset(Dataset):
 				names.append(target_name + '_')
 				param.append(para)
 
+				return (target_name + '_', para)
+
+			result = Parallel(n_jobs=multiprocessing.cpu_count())(delayed(_split)(image_path, para) for image_path, para in tqdm(paths_and_paras))
+
+
 			# 5. write params to the proper directory
-			tot_ = list(zip(names, param))
+			# tot_ = list(zip(names, param))
+			tot_ = result
 			tot_ = sorted(tot_, key=lambda a: a[0])
+			tot_ = list(filter(lambda x: x[0] != "", tot_))
 			param_ = []
 			for _, para in tot_:
 				param_.append(para)
