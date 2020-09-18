@@ -55,17 +55,14 @@ class Nonlinear3DMMHelper:
 
         loss_param = {}
 
-        lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d = self.net(input_images)
+        lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp = self.net(input_images)
 
         m_full = generate_full(lv_m, self.std_m, self.mean_m)
-        shape_full = generate_full(shape1d, self.std_shape, self.mean_shape)
+        shape_full = generate_full((shape1d + exp), self.std_shape, self.mean_shape)
 
         gt_m_full = generate_full(inputs["input_m_labels"], self.std_m, self.mean_m)
-        gt_shape_full = generate_full(inputs["input_shape_labels"], self.std_shape, self.mean_shape)
-
-        # rand_m_full = generate_full(torch.tensor(np.random.normal(0, 0.5, lv_m.shape)).float().cuda(), self.std_m, self.mean_m)
-        # rand_shape_full = generate_full(torch.tensor(np.random.normal(0, 0.5, shape1d.shape)).float().cuda(), self.std_shape, self.mean_shape)
-        # rand_il = torch.tensor(np.random.normal(0, 0.5, lv_il.shape)).cuda().float()
+        # gt_shape_full = generate_full(inputs["input_shape_labels"], self.std_shape, self.mean_shape)
+        gt_shape_full = generate_full(inputs["input_shape_labels"] + inputs["input_exp_labels"], self.std_shape, self.mean_shape)
 
         shade, tex = generate_shade_and_texture(m_full, lv_il, albedo, shape_full)
         # rand_shade, rand_tex = generate_shade_and_texture(m_full, lv_il, albedo, shape_full)
@@ -83,7 +80,10 @@ class Nonlinear3DMMHelper:
             "lv_tex": lv_tex,
             "albedo": albedo,
             "shape2d": shape2d,
-            "shape1d": shape1d
+            "shape1d": shape1d,
+            "exp": exp
+
+
         }
 
         loss_param.update({
@@ -134,10 +134,14 @@ class Nonlinear3DMMHelper:
         save_per = int(config.SAVE_PER_RATIO * len(train_dataloader))
         iter_size = len(train_dataloader)
 
+        camera = []
+        illumination = []
         for epoch in range(start_epoch, config.EPOCH):
             # For each batch in the dataloader
             for idx, samples in enumerate(train_dataloader, 0):
                 loss_param = self.run_model(**self.sample_to_param(samples))
+                camera += loss_param['lv_m']
+                illumination += loss_param['lv_il']
 
                 g_loss, g_loss_with_landmark = self.loss(**loss_param)
 
@@ -167,8 +171,11 @@ class Nonlinear3DMMHelper:
                     self.logger_train.step()
 
                     self.validate(valid_dataloader, epoch, self.logger_train.get_step())
+                    np.save(f'camera_{epoch}_{idx}', torch.stack(camera, dim=0).cpu().detach().numpy())
+                    np.save(f'illumination_{epoch}_{idx}', torch.stack(illumination, dim=0).cpu().detach().numpy())
                 else:
                     self.logger_train.step()
+
 
     def validate(self, valid_dataloader, epoch, global_step):
         print("\n\n", "*" * 10, "start validation", "*" * 10, "\n")
@@ -233,7 +240,8 @@ class Nonlinear3DMMHelper:
             "input_texture_masks": samples["mask"].to(config.DEVICE),
             "input_m_labels": samples["m_label"].to(config.DEVICE),
             "input_shape_labels": samples["shape_label"].to(config.DEVICE),
-            "input_albedo_indexes": list(map(lambda a: a.to(config.DEVICE), samples["albedo_indices"]))
+            "input_albedo_indexes": list(map(lambda a: a.to(config.DEVICE), samples["albedo_indices"])),
+            "input_exp_labels": samples["exp_label"].to(config.DEVICE)
         }
 
 
@@ -246,7 +254,8 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         'texture',
         'symmetry',
         'const_albedo',
-        'smoothness'
+        'smoothness',
+        'expression'
     ]
 
     pretrained_helper = Nonlinear3DMMHelper(losses)

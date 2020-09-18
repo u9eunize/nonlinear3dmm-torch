@@ -49,20 +49,22 @@ class Nonlinear3DMM(nn.Module):
         self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=dtype)
 
         ###################################### encoder shasha
-        self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2, self.gfc_dim // 2, self.m_dim, self.il_dim)
+        self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2, self.gfc_dim // 2, self.gfc_dim // 2, self.m_dim, self.il_dim)
         self.in_dim = self.nl_encoder.in_dim
 
         self.albedo_gen = NLAlbedoDecoderBlock(self.gfc_dim//2, self.gf_dim, self.tex_sz)
         self.shape_gen = NLShapeDecoderBlock(self.gfc_dim//2, self.gf_dim, self.gfc_dim, self.tex_sz)
+        self.exp_gen = NLShapeDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
 
     def forward(self, input_images):
         batch_size = input_images.shape[0]
 
-        lv_m, lv_il, lv_shape, lv_tex = self.nl_encoder(input_images)
+        lv_m, lv_il, lv_shape, lv_tex, lv_exp = self.nl_encoder(input_images)
 
         # generate albedo and shape
         albedo = self.albedo_gen(lv_tex)
         shape2d = self.shape_gen(lv_shape)
+        exp2d     = self.exp_gen(lv_exp)
 
         vt2pixel_u = self.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
         vt2pixel_v = self.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
@@ -70,7 +72,10 @@ class Nonlinear3DMM(nn.Module):
         shape1d = bilinear_sampler_torch(shape2d, vt2pixel_u, vt2pixel_v)
         shape1d = shape1d.view(batch_size, -1)
 
-        return lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d
+        exp = bilinear_sampler_torch(exp2d, vt2pixel_u, vt2pixel_v)
+        exp = exp.view(batch_size, -1)
+
+        return lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp
 
     def to(self, device, *args, **kwargs):
         ret = super(Nonlinear3DMM, self).to(device, *args, **kwargs)

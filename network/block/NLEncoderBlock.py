@@ -5,7 +5,7 @@ from torch import nn
 
 
 class Encoder(nn.Module):
-    def __init__(self, in_dim, gf_dim, gfc_dim_m, gfc_dim_il, gfc_dim_shape, gfc_dim_tex, out_dim_m, out_dim_il):
+    def __init__(self, in_dim, gf_dim, gfc_dim_m, gfc_dim_il, gfc_dim_shape, gfc_dim_tex, gfc_dim_exp, out_dim_m, out_dim_il):
         super(Encoder, self).__init__()
         self.ngpu = 1
         self.in_dim = in_dim
@@ -36,6 +36,7 @@ class Encoder(nn.Module):
         self.il = NLEmbeddingBlock(in_dim, gfc_dim_il, out_dim_il)
         self.shape = NLEmbeddingBlock(in_dim, gfc_dim_shape)
         self.tex = NLEmbeddingBlock(in_dim, gfc_dim_tex)
+        self.exp = NLEmbeddingBlock(in_dim, gfc_dim_exp)
 
 
     def forward(self, x):
@@ -48,7 +49,8 @@ class Encoder(nn.Module):
         il = self.il(output)
         shape = self.shape(output)
         tex = self.tex(output)
-        return m, il, shape, tex
+        exp = self.exp(output)
+        return m, il, shape, tex, exp
 
     def _make_layer(self, out_dim, kernel_size, stride):
         layers = [

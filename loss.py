@@ -100,12 +100,18 @@ class Loss:
             self.losses['reconstruction_loss'] = self.reconstruction_loss(**kwargs)
         if "const_local_albedo" in self.loss_names:
             self.losses['const_local_albedo_loss'] = self.const_local_albedo_loss(**kwargs)
+        if "expression" in self.loss_names:
+            self.losses['expression_loss'] = self.expression_loss(**kwargs)
 
         self.losses['g_loss'] = sum(self.losses.values())
         self.losses['landmark_loss'] = landmark_loss
         self.losses['g_loss_with_landmark'] = self.losses['landmark_loss'] + self.losses['g_loss']
 
         return self.losses['g_loss'], self.losses['g_loss_with_landmark']
+
+    def expression_loss(self, exp, input_exp_labels, **kwargs):
+        g_loss_exp = norm_loss(exp, input_exp_labels, loss_type=config.EXPRESSION_LOSS_TYPE)
+        return config.EXPRESSION_LAMBDA * g_loss_exp
 
     def shape_loss(self, shape1d, input_shape_labels, **kwargs):
         g_loss_shape = norm_loss(shape1d, input_shape_labels, loss_type=config.SHAPE_LOSS_TYPE)

@@ -490,20 +490,35 @@ def shading_torch ( L, normal):
     pi = math.pi
     sh = torch.zeros(batch_size, shape[1], 1, 9).cuda()
     sh[:, :, :, 0] = 1 / math.sqrt(4 * pi) * torch.ones_like(normal_x)  #
+
     sh[:, :, :, 1] = ((2 * pi) / 3) * (math.sqrt(3 / (4 * pi))) * normal_z
     sh[:, :, :, 2] = ((2 * pi) / 3) * (math.sqrt(3 / (4 * pi))) * normal_y
     sh[:, :, :, 3] = ((2 * pi) / 3) * (math.sqrt(3 / (4 * pi))) * normal_x
+
     sh[:, :, :, 4] = (pi / 4) * (1 / 2) * (math.sqrt(5 / (4 * pi))) * (2 * torch.pow(normal_z, 2) - torch.pow(normal_x, 2) - torch.pow(normal_y, 2))
+
     sh[:, :, :, 5] = (pi / 4) * (3) * (math.sqrt(5 / (12 * pi))) * (normal_y * normal_z)
     sh[:, :, :, 6] = (pi / 4) * (3) * (math.sqrt(5 / (12 * pi))) * (normal_x * normal_z)
     sh[:, :, :, 7] = (pi / 4) * (3) * (math.sqrt(5 / (12 * pi))) * (normal_x * normal_y)
+
     sh[:, :, :, 8] = (pi / 4) * (3 / 2) * (math.sqrt(5 / (12 * pi))) * (torch.pow(normal_x, 2) - torch.pow(normal_y, 2))
+
 
     L = torch.unsqueeze(L, 1)
     L = L.repeat(1, shape[1], 1)
     L = torch.unsqueeze(L, -1)
 
     L1, L2, L3 = torch.split(L, (9, 9, 9), dim=2)
+
+    # gray = (L1 + L2 + L3) / 1
+    # L1 = torch.ones_like(L1) * 10
+    # L2 = torch.ones_like(L2) * 10
+    # L3 = torch.ones_like(L3) * 10
+
+    # alpha = 0.0
+    # L1 = F.normalize(L1, dim=2) * alpha + 1 - alpha
+    # L2 = F.normalize(L2, dim=2) * alpha + 1 - alpha
+    # L3 = F.normalize(L3, dim=2) * alpha + 1 - alpha
 
     B1 = torch.matmul(sh, L1)
     B2 = torch.matmul(sh, L2)
