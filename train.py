@@ -116,7 +116,7 @@ class Nonlinear3DMMHelper:
         encoder_optimizer = torch.optim.Adam(self.net.nl_encoder.parameters(),
                                              lr=config.LEARNING_RATE, betas=config.BETAS)
         global_optimizer = torch.optim.Adam(self.net.parameters(),
-                                            lr=config.LEARNING_RATE,  betas=config.BETAS)
+                                            lr=config.LEARNING_RATE, betas=config.BETAS)
 
         # Load checkpoint
         self.net, global_optimizer, encoder_optimizer, start_epoch, start_step = load(
@@ -124,7 +124,10 @@ class Nonlinear3DMMHelper:
         )
 
         if start_step == 0:
-            start_step = start_epoch * len(train_dataloader) + 1
+            start_step = start_epoch * len(train_dataloader)
+
+        start_step += 1
+
         self.logger_train.step(start_step)
 
         # Write graph to the tensorboard
@@ -244,9 +247,12 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         'landmark',
         'batchwise_white_shading',
         'texture',
+        #'reconstruction',
         'symmetry',
         'const_albedo',
-        'smoothness'
+        #'const_local_albedo',
+        'smoothness',
+        # "albedo_texture"
     ]
 
     pretrained_helper = Nonlinear3DMMHelper(losses)

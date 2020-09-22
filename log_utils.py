@@ -88,12 +88,13 @@ class NLLogger:
 
     def write_loss_images(self, loss_params, interval=config.IMAGE_LOG_INTERVAL):
 
-        self.write_image("shade", loss_params["shade"], interval=interval)
+        # self.write_image("shade", loss_params["shade"], interval=interval)
         self.write_image("g_images", [
             loss_params["input_images"],
             loss_params["g_images_raw_gt"],
             loss_params["g_images_raw"],
             loss_params["g_images"],
+            self.match_size(loss_params["input_images"], (loss_params["albedo"]+1)/2),
             self.match_size(loss_params["input_images"], loss_params["shade"]),
             self.match_size(loss_params["input_images"], loss_params["tex"]),
             self.match_size(loss_params["input_images"], loss_params["input_texture_labels"]),
@@ -108,12 +109,12 @@ class NLLogger:
         #     self.match_size(loss_params["input_images"], loss_params["rand_tex"]),
         # ], interval=interval)
 
-        self.write_image("texture", [
-            loss_params["tex"],
-            loss_params["input_texture_labels"],
-            loss_params["tex"] * loss_params["tex_vis_mask"],
-            loss_params["input_texture_labels"] * loss_params["tex_vis_mask"]
-        ], interval=interval)
+        # self.write_image("texture", [
+        #     loss_params["tex"],
+        #     loss_params["input_texture_labels"],
+        #     loss_params["tex"] * loss_params["tex_vis_mask"],
+        #     loss_params["input_texture_labels"] * loss_params["tex_vis_mask"]
+        # ], interval=interval)
 
     @staticmethod
     def print_iteration_log(epoch, step, idx, batch_size, iteration_size):
