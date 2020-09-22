@@ -76,7 +76,9 @@ class Loss:
         self.uv_tri = self.uv_tri.to(self.device)
         self.uv_mask = self.uv_mask.to(self.device)
 
-    def __call__(self, input_images, g_images, input_masks, g_images_mask, **kwargs):
+        self.recognition_md = None
+
+    def __call__(self, **kwargs):
         landmark_loss = 0
         self.losses = {}
 
@@ -102,6 +104,9 @@ class Loss:
             self.losses['const_local_albedo_loss'] = self.const_local_albedo_loss(**kwargs)
         if "expression" in self.loss_names:
             self.losses['expression_loss'] = self.expression_loss(**kwargs)
+
+        if "albedo_texture" in self.loss_names:
+            self.losses['albedo_texture_loss'] = self.albedo_texture_loss(**kwargs)
 
         self.losses['g_loss'] = sum(self.losses.values())
         self.losses['landmark_loss'] = landmark_loss
@@ -144,7 +149,8 @@ class Loss:
 
         return config.BATCHWISE_WHITE_SHADING_LAMBDA * g_loss_white_shading
 
-    def reconstruction_loss(self, batch_size, input_images, g_images, g_images_mask, **kwargs):
+    def reconstruction_loss(self, input_images, g_images, g_images_mask, **kwargs):
+        batch_size = input_images.shape[0]
         images_loss = norm_loss(g_images, input_images, loss_type=config.RECONSTRUCTION_LOSS_TYPE)
         mask_mean = torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)
         g_loss_recon = images_loss / mask_mean
@@ -152,7 +158,7 @@ class Loss:
 
     def texture_loss(self, input_texture_labels, tex, tex_vis_mask, tex_ratio, **kwargs):
         g_loss_texture = config.TEXTURE_LAMBDA * norm_loss(tex, input_texture_labels, mask=tex_vis_mask,
-                                                           loss_type=config.TEXTURE_LOSS_TYPE) / tex_ratio
+                                                                     loss_type=config.TEXTURE_LOSS_TYPE) / tex_ratio
         return g_loss_texture
 
     def smoothness_loss(self, shape2d, **kwargs):
@@ -196,6 +202,11 @@ class Loss:
         loss_local_albedo = (loss_local_albedo_u + loss_local_albedo_v)
 
         return config.CONST_LOCAL_ALBEDO_LAMBDA * loss_local_albedo
+
+    def albedo_texture_loss(self, albedo, input_texture_labels, tex_vis_mask, tex_ratio, **kwargs):
+        g_loss_albedo_texture = norm_loss((albedo+1)/2, input_texture_labels, mask=tex_vis_mask,
+                                          loss_type=config.ALBEDO_TEXTURE_LOSS_TYPE) / tex_ratio
+        return config.ALBEDO_TEXTURE_LAMBDA * g_loss_albedo_texture
 
     def landmark_calculation(self, mv, sv):
         m_full = mv * self.std_m + self.mean_m

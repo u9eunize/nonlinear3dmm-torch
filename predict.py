@@ -30,8 +30,21 @@ mean_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dt
 std_m = torch.tensor(np.load(join(config.DATASET_PATH, 'std_m.npy')), dtype=dtype).to(config.DEVICE)
 
 
+def save_to_obj(name, vertex, face):
+	with open(name, 'w') as fd:
+		result = ""
+		for v1, v2, v3 in vertex:
+			result += f'v {v1:.3f} {v2:.3f} {v3:.3f}\n'
+		result += "\n"
+		for f1, f2, f3 in face:
+			result += f'f {f3 + 1} {f2 + 1} {f1 + 1}\n'
+		fd.write(result)
+
 
 def main():
+	tri = load_3DMM_tri()
+	face = np.transpose(tri)[:-1]
+
 	losses = [
 		'm',
 		'shape',
@@ -57,6 +70,7 @@ def main():
 	output_gt = []
 	output_images = []
 	output_images_with_mask = []
+	output_shapes = []
 
 	# random_camera = []
 	# random_il = []
@@ -91,6 +105,7 @@ def main():
 		output_gt += input_images
 		output_images += g_images_raw
 		output_images_with_mask += g_images
+		output_shapes += shape_full.view(shape_full.shape[0], -1, 3) / 10000
 
 
 		# # random camera
@@ -133,8 +148,12 @@ def main():
 
 
 	# save images
-	for o1, o2, o3, fname in zip(output_gt, output_images, output_images_with_mask, fnames_raw):
-		torchvision.utils.save_image(torch.stack([o1, o2, o3]), fp=join(config.PREDICTION_DST_PATH, basename(fname).split('.')[0] + '_generated.png'))
+	if not os.path.isdir(config.PREDICTION_DST_PATH):
+		os.makedirs(config.PREDICTION_DST_PATH)
+	for o1, o2, o3, fname, sh in zip(output_gt, output_images, output_images_with_mask, fnames_raw, output_shapes):
+		name = join(config.PREDICTION_DST_PATH, basename(fname).split('.')[0] + '_generated')
+		torchvision.utils.save_image(torch.stack([o1, o2, o3]), fp=name+".png")
+		save_to_obj(name+".obj", sh, face)
 
 	# for o1, o2, o3, fname in zip(random_camera, random_il, random_exp, fnames_raw):
 	# 	torchvision.utils.save_image(torch.stack([o1, o2, o3]), fp=join(config.PREDICTION_DST_PATH, basename(fname).split('.')[0] + '_randomed.png'))

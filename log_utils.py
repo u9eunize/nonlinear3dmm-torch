@@ -118,6 +118,13 @@ class NLLogger:
         #     loss_params["input_texture_labels"] * loss_params["tex_vis_mask"]
         # ], interval=interval)
 
+        # self.write_image("texture", [
+        #     loss_params["tex"],
+        #     loss_params["input_texture_labels"],
+        #     loss_params["tex"] * loss_params["tex_vis_mask"],
+        #     loss_params["input_texture_labels"] * loss_params["tex_vis_mask"]
+        # ], interval=interval)
+
     @staticmethod
     def print_iteration_log(epoch, step, idx, batch_size, iteration_size):
         print(datetime.now(timezone("Asia/Seoul")), end=" ")
