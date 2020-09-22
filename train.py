@@ -50,12 +50,31 @@ class Nonlinear3DMMHelper:
         self.w_shape = torch.tensor(w_shape, dtype=dtype).to(config.DEVICE)
         self.w_exp = torch.tensor(w_exp, dtype=dtype).to(config.DEVICE)
 
+        if True:
+            self.random_m_samples = []
+            self.random_il_samples = []
+            self.random_exp_samples = []
+        else:
+            pass
+
     def run_model(self, **inputs):
         input_images = inputs["input_images"]
+        batch_size = input_images.shape[0]
 
         loss_param = {}
 
         lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp = self.net(input_images)
+
+        if True:
+            self.random_m_samples = [lv_m.detach().cpu()] + self.random_m_samples
+            self.random_m_samples = self.random_m_samples[:min(config.RANDOM_SAMPLE_NUM, len(self.random_m_samples))]
+            self.random_il_samples = [lv_il.detach().cpu()] + self.random_il_samples
+            self.random_il_samples = self.random_il_samples[:min(config.RANDOM_SAMPLE_NUM, len(self.random_il_samples))]
+            self.random_exp_samples = [exp.detach().cpu()] + self.random_exp_samples
+            self.random_exp_samples = self.random_exp_samples[:min(config.RANDOM_SAMPLE_NUM, len(self.random_exp_samples))]
+        else:
+            pass
+
 
         m_full = generate_full(lv_m, self.std_m, self.mean_m)
         shape_full = generate_full((shape1d + exp), self.std_shape, self.mean_shape)
@@ -71,7 +90,32 @@ class Nonlinear3DMMHelper:
         renderer_dict_gt = renderer(gt_m_full, inputs["input_texture_labels"], gt_shape_full, inputs, "_gt")
         # renderer_dict_rand = renderer(rand_m_full, rand_tex, shape_full, inputs, "_rand")
 
-        mask_dict = generate_tex_mask(config.BATCH_SIZE, inputs["input_texture_labels"], inputs["input_texture_masks"])
+        mask_dict = generate_tex_mask(batch_size, inputs["input_texture_labels"], inputs["input_texture_masks"])
+
+
+        # Random feeding data
+        if config.RANDOM_CAMERA:
+            indices = torch.randint(len(self.random_m_samples), (batch_size,))
+            random_camera = torch.cat(self.random_m_samples, dim=0)[indices].to(config.DEVICE)
+            random_camera_full = generate_full(random_camera, self.std_m, self.mean_m)
+
+        else:
+            random_camera_full = m_full
+        if config.RANDOM_EXPRESSION:
+            indices = torch.randint(len(self.random_exp_samples), (batch_size,))
+            random_exp = torch.cat(self.random_exp_samples, dim=0)[indices].to(config.DEVICE)
+            random_shape_full = generate_full(shape1d + random_exp, self.std_shape, self.mean_shape)
+        else:
+            random_shape_full = shape_full
+        if config.RANDOM_ILLUMINATION:
+            indices = torch.randint(len(self.random_il_samples), (batch_size,))
+            random_il = torch.cat(self.random_il_samples, dim=0)[indices].to(config.DEVICE)
+        else:
+            random_il = lv_il
+
+        random_shade, random_tex = generate_shade_and_texture(random_camera_full, random_il, albedo, random_shape_full)
+        renderer_dict_random = renderer_random(random_camera_full, random_tex, random_shape_full, '_random')
+
 
         network_result = {
             "lv_m": lv_m,
@@ -82,22 +126,19 @@ class Nonlinear3DMMHelper:
             "shape2d": shape2d,
             "shape1d": shape1d,
             "exp": exp
-
-
         }
 
         loss_param.update({
             "shade": shade,
             "tex": tex,
-            # "rand_shade": rand_shade,
-            # "rand_tex": rand_tex
         })
         loss_param.update(inputs)
         loss_param.update(network_result)
         loss_param.update(renderer_dict)
         loss_param.update(renderer_dict_gt)
-        # loss_param.update(renderer_dict_rand)
         loss_param.update(mask_dict)
+
+        loss_param.update(renderer_dict_random)
 
         return loss_param
 
@@ -134,14 +175,19 @@ class Nonlinear3DMMHelper:
         save_per = int(config.SAVE_PER_RATIO * len(train_dataloader))
         iter_size = len(train_dataloader)
 
-        camera = []
-        illumination = []
+
         for epoch in range(start_epoch, config.EPOCH):
             # For each batch in the dataloader
+            camera = []
+            il = []
+            exp = []
+
             for idx, samples in enumerate(train_dataloader, 0):
                 loss_param = self.run_model(**self.sample_to_param(samples))
-                camera += loss_param['lv_m']
-                illumination += loss_param['lv_il']
+
+                camera += loss_param['lv_m'].detach().cpu()
+                il += loss_param['lv_il'].detach().cpu()
+                exp += loss_param['exp'].detach().cpu()
 
                 g_loss, g_loss_with_landmark = self.loss(**loss_param)
 
@@ -171,8 +217,14 @@ class Nonlinear3DMMHelper:
                     self.logger_train.step()
 
                     self.validate(valid_dataloader, epoch, self.logger_train.get_step())
-                    np.save(f'camera_{epoch}_{idx}', torch.stack(camera, dim=0).cpu().detach().numpy())
-                    np.save(f'illumination_{epoch}_{idx}', torch.stack(illumination, dim=0).cpu().detach().numpy())
+
+                    np.save(f'samples/camera_{epoch}_{idx}', torch.stack(camera, dim=0).numpy())
+                    np.save(f'samples/il_{epoch}_{idx}', torch.stack(il, dim=0).numpy())
+                    np.save(f'samples/exp_{epoch}_{idx}', torch.stack(exp, dim=0).numpy())
+                    camera = []
+                    il = []
+                    exp = []
+
                 else:
                     self.logger_train.step()
 

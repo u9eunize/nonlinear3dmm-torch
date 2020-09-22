@@ -44,6 +44,17 @@ def renderer(m_full, tex, shape_full, inputs, postfix=""):
     }
     return param_dict
 
+def renderer_random(m_full, tex, shape_full, postfix=""):
+
+    g_images, g_images_mask = warp_texture_torch(tex, m_full, shape_full)
+
+
+    param_dict = {
+        "g_images"+postfix: g_images,
+        "g_images_mask"+postfix: g_images_mask.unsqueeze(1).repeat(1, 3, 1, 1),
+    }
+    return param_dict
+
 
 def render_from_texture(m, tex, shape, images, tex_masks, std_m, mean_m, std_shape, mean_shape):
 

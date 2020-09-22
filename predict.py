@@ -76,11 +76,11 @@ def main():
 
 		# forward network
 		with torch.no_grad():
-			lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d = model(input_images)
+			lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp = model(input_images)
 
 		# make full
 		m_full = lv_m * std_m + mean_m
-		shape_full = shape1d * std_shape + mean_shape
+		shape_full = (shape1d + exp) * std_shape + mean_shape
 		shade = generate_shade_torch(lv_il, m_full, shape_full)
 		tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
 
