@@ -1,8 +1,10 @@
 import torch
 import torch.nn.functional as F
 from renderer.rendering_ops import *
+from network.facenet import InceptionResnetV1
 import config
 from os.path import join
+from torchvision.models.vgg import vgg19_bn
 
 
 def norm_loss(predictions, labels, mask=None, loss_type="l1", reduce_mean=True, p=1):
@@ -36,6 +38,11 @@ def norm_loss(predictions, labels, mask=None, loss_type="l1", reduce_mean=True, 
 
     return loss
 
+activation = {}
+def get_activation(name):
+    def hook(model, input, output):
+        activation[name] = output.detach().cpu()
+    return hook
 
 class Loss:
     def __init__(self, loss_names):
@@ -78,6 +85,12 @@ class Loss:
 
         self.recognition_md = None
 
+        # self.facenet = InceptionResnetV1('vggface2').eval().to(config.DEVICE)
+        self.vgg19 = vgg19_bn(pretrained=True).eval().to(config.DEVICE)
+
+        for layer_idx in config.CONTENT_LAYERS:
+            self.vgg19.features[layer_idx].register_forward_hook(get_activation(f'({layer_idx}) conv2d'))
+
     def __call__(self, **kwargs):
         landmark_loss = 0
         self.losses = {}
@@ -104,6 +117,10 @@ class Loss:
             self.losses['const_local_albedo_loss'] = self.const_local_albedo_loss(**kwargs)
         if "expression" in self.loss_names:
             self.losses['expression_loss'] = self.expression_loss(**kwargs)
+        if "identity" in self.loss_names:
+            self.losses['identity_loss'] = self.identity_loss_vgg19(**kwargs)
+        if "content" in self.loss_names:
+            self.losses['content_loss'] = self.content_loss_vgg19(**kwargs)
 
         if "albedo_texture" in self.loss_names:
             self.losses['albedo_texture_loss'] = self.albedo_texture_loss(**kwargs)
@@ -113,6 +130,44 @@ class Loss:
         self.losses['g_loss_with_landmark'] = self.losses['landmark_loss'] + self.losses['g_loss']
 
         return self.losses['g_loss'], self.losses['g_loss_with_landmark']
+
+    def identity_loss(self, input_images, g_images, g_images_random, **kwargs):
+        input_vec = self.facenet(input_images).detach()
+        generated_vec = self.facenet(g_images.float()).detach()
+        random_generated_vec = self.facenet(g_images_random.float()).detach()
+        g_loss_identity1 = norm_loss(input_vec, generated_vec, loss_type=config.IDENTITY_LOSS_TYPE)
+        g_loss_identity2 = norm_loss(input_vec, random_generated_vec, loss_type=config.IDENTITY_LOSS_TYPE)
+        return config.IDENTITY_LAMBDA * (1 -  g_loss_identity1) + config.IDENTITY_LAMBDA * (1 -  g_loss_identity2)
+
+    def content_loss(self, input_images, g_images, **kwargs):
+        input_features = self.facenet(input_images, return_features=True).detach()
+        generated_features = self.facenet(g_images.float(), return_features=True).detach()
+        g_loss_content = 0
+        for i_feature, g_feature in zip(input_features, generated_features):
+            _, C_j, H_j, W_j = i_feature.shape
+            g_loss_content += torch.norm(i_feature - g_feature) / (C_j * H_j * W_j)
+        return config.CONTENT_LAMBDA * g_loss_content
+
+    def identity_loss_vgg19(self, input_images, g_images, g_images_random, **kwargs):
+        with torch.no_grad():
+            input_vec = self.vgg19(input_images).detach().cpu()
+            self.activation_input = activation.copy()
+            generated_vec = self.vgg19(g_images.float()).detach().cpu()
+            self.activation_generated = activation.copy()
+            random_generated_vec = self.vgg19(g_images_random.float()).detach().cpu()
+        g_loss_identity1 = norm_loss(input_vec, generated_vec, loss_type=config.IDENTITY_LOSS_TYPE)
+        g_loss_identity2 = norm_loss(input_vec, random_generated_vec, loss_type=config.IDENTITY_LOSS_TYPE)
+        return config.IDENTITY_LAMBDA * g_loss_identity1 + config.IDENTITY_LAMBDA * g_loss_identity2
+
+    def content_loss_vgg19(self, **kwargs):
+        g_loss_content = 0
+        for (i_key, i_val), (g_key, g_val) in zip(
+                self.activation_input.items(),
+                self.activation_generated.items()):
+            _, C_j, H_j, W_j = i_val.shape
+            # g_loss_content += norm_loss(i_val, g_val, loss_type=config.CONTENT_LOSS_TYPE) / (C_j * H_j * W_j) / len(config.CONTENT_LAYERS)
+            g_loss_content += norm_loss(i_val, g_val, loss_type=config.CONTENT_LOSS_TYPE) / len(config.CONTENT_LAYERS)
+        return config.CONTENT_LAMBDA * g_loss_content
 
     def expression_loss(self, exp, input_exp_labels, **kwargs):
         g_loss_exp = norm_loss(exp, input_exp_labels, loss_type=config.EXPRESSION_LOSS_TYPE)

@@ -139,6 +139,10 @@ class Nonlinear3DMMHelper:
         loss_param.update(mask_dict)
 
         loss_param.update(renderer_dict_random)
+        loss_param.update({
+            "random_shade": random_shade,
+            "random_tex": random_tex
+        })
 
         return loss_param
 
@@ -181,16 +185,16 @@ class Nonlinear3DMMHelper:
 
         for epoch in range(start_epoch, config.EPOCH):
             # For each batch in the dataloader
-            camera = []
-            il = []
-            exp = []
+            # camera = []
+            # il = []
+            # exp = []
 
             for idx, samples in enumerate(train_dataloader, 0):
                 loss_param = self.run_model(**self.sample_to_param(samples))
 
-                camera += loss_param['lv_m'].detach().cpu()
-                il += loss_param['lv_il'].detach().cpu()
-                exp += loss_param['exp'].detach().cpu()
+                # camera += loss_param['lv_m'].detach().cpu()
+                # il += loss_param['lv_il'].detach().cpu()
+                # exp += loss_param['exp'].detach().cpu()
 
                 g_loss, g_loss_with_landmark = self.loss(**loss_param)
 
@@ -219,14 +223,14 @@ class Nonlinear3DMMHelper:
                     self.logger_train.save_to_files(self.state_file_root_name, save_epoch)
                     self.logger_train.step()
 
-                    self.validate(valid_dataloader, epoch, self.logger_train.get_step())
+                    # self.validate(valid_dataloader, epoch, self.logger_train.get_step())
 
-                    np.save(f'samples/camera_{epoch}_{idx}', torch.stack(camera, dim=0).numpy())
-                    np.save(f'samples/il_{epoch}_{idx}', torch.stack(il, dim=0).numpy())
-                    np.save(f'samples/exp_{epoch}_{idx}', torch.stack(exp, dim=0).numpy())
-                    camera = []
-                    il = []
-                    exp = []
+                    # np.save(f'samples/camera_{epoch}_{idx}', torch.stack(camera, dim=0).numpy())
+                    # np.save(f'samples/il_{epoch}_{idx}', torch.stack(il, dim=0).numpy())
+                    # np.save(f'samples/exp_{epoch}_{idx}', torch.stack(exp, dim=0).numpy())
+                    # camera = []
+                    # il = []
+                    # exp = []
 
                 else:
                     self.logger_train.step()
@@ -311,7 +315,10 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         'symmetry',
         'const_albedo',
         'smoothness',
-        'expression'
+        'expression',
+
+        'identity',
+        'content',
     ]
 
     pretrained_helper = Nonlinear3DMMHelper(losses)

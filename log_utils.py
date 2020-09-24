@@ -106,8 +106,8 @@ class NLLogger:
             loss_params["g_images_random"],
             loss_params["g_images_mask_random"],
             self.match_size(loss_params["input_images"], (loss_params["albedo"] + 1) / 2),
-            self.match_size(loss_params["input_images"], loss_params["shade"]),
-            self.match_size(loss_params["input_images"], loss_params["tex"]),
+            self.match_size(loss_params["input_images"], loss_params["random_shade"]),
+            self.match_size(loss_params["input_images"], loss_params["random_tex"]),
             self.match_size(loss_params["input_images"], loss_params["input_texture_labels"]),
         ], interval=interval)
 
