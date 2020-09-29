@@ -121,6 +121,8 @@ class Loss:
             self.losses['identity_loss'] = self.identity_loss_vgg19(**kwargs)
         if "content" in self.loss_names:
             self.losses['content_loss'] = self.content_loss_vgg19(**kwargs)
+        if "gradient_difference" in self.loss_names:
+            self.losses['gradient_difference'] = self.gradient_difference_loss(**kwargs)
 
         if "albedo_texture" in self.loss_names:
             self.losses['albedo_texture_loss'] = self.albedo_texture_loss(**kwargs)
@@ -147,6 +149,18 @@ class Loss:
             _, C_j, H_j, W_j = i_feature.shape
             g_loss_content += torch.norm(i_feature - g_feature) / (C_j * H_j * W_j)
         return config.CONTENT_LAMBDA * g_loss_content
+
+    def gradient_difference_loss(self, input_images, g_images, **kwargs):
+        input_images_gradient_x = torch.abs(input_images[:, :, :-1, :] - input_images[:, :, 1:, :])
+        input_images_gradient_y = torch.abs(input_images[:, :, :, :-1] - input_images[:, :, :, 1:])
+
+        g_images_gradient_x = torch.abs(g_images[:, :, :-1, :] - g_images[:, :, 1:, :])
+        g_images_gradient_y = torch.abs(g_images[:, :, :, :-1] - g_images[:, :, :, 1:])
+
+        g_loss_gradient_difference = norm_loss(input_images_gradient_x, g_images_gradient_x, loss_type=config.GRADIENT_DIFFERENCE_LOSS_TYPE)\
+                                    + norm_loss(input_images_gradient_y, g_images_gradient_y, loss_type=config.GRADIENT_DIFFERENCE_LOSS_TYPE)
+
+        return config.GRADIENT_DIFFERENCE_LAMBDA * g_loss_gradient_difference
 
     def identity_loss_vgg19(self, input_images, g_images, g_images_random, **kwargs):
         with torch.no_grad():

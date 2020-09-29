@@ -3,6 +3,7 @@ from datetime import datetime
 from tqdm import tqdm
 
 from network.Nonlinear_3DMM import Nonlinear3DMM
+from network.Nonlinear_3DMM_UNet import Nonlinear3DMM_UNet
 from configure_dataset import *
 from renderer.rendering_ops import *
 from loss import Loss
@@ -36,6 +37,7 @@ class Nonlinear3DMMHelper:
 
         # Load model
         self.net = Nonlinear3DMM().to(config.DEVICE)
+        # self.net = Nonlinear3DMM_UNet().to(config.DEVICE)
 
         # Basis
         mu_shape, w_shape = load_Basel_basic('shape')
@@ -311,7 +313,7 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         'landmark',
         'batchwise_white_shading',
         'texture',
-        #'reconstruction',
+        'reconstruction',
         'symmetry',
         'const_albedo',
         'smoothness',
@@ -319,6 +321,7 @@ def pretrained_lr_test(name=None, start_epoch=-1):
 
         'identity',
         'content',
+        # 'gradient_difference',
     ]
 
     pretrained_helper = Nonlinear3DMMHelper(losses)

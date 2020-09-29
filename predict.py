@@ -72,10 +72,6 @@ def main():
 	output_images_with_mask = []
 	output_shapes = []
 
-	# random_camera = []
-	# random_il = []
-	# random_exp = []
-
 	for batch_fnames in fnames:
 		input_images = []
 
@@ -106,46 +102,6 @@ def main():
 		output_images += g_images_raw
 		output_images_with_mask += g_images
 		output_shapes += shape_full.view(shape_full.shape[0], -1, 3) / 10000
-
-
-		# # random camera
-		# m_random = torch.tensor(np.random.normal(0, 0.5, lv_m.shape), dtype=torch.float32).cuda()
-		#
-		# m_full_random = m_random * std_m + mean_m
-		# shape_full = shape1d * std_shape + mean_shape
-		# shade = generate_shade_torch(lv_il, m_full_random, shape_full)
-		# tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
-		#
-		# g_images_raw, g_images_mask_raw = warp_texture_torch(tex, m_full, shape_full)
-		#
-		# random_camera += g_images_raw
-		#
-		#
-		#
-		# # random illumination
-		# il_random = torch.tensor(np.random.normal(0, 0.5, lv_il.shape), dtype=torch.float32).cuda()
-		#
-		# m_full = lv_m * std_m + mean_m
-		# shape_full = shape1d * std_shape + mean_shape
-		# shade = generate_shade_torch(il_random, m_full, shape_full)
-		# tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
-		#
-		# g_images_raw, g_images_mask_raw = warp_texture_torch(tex, m_full, shape_full)
-		#
-		# random_il += g_images_raw
-		#
-		# # random exp
-		# exp_random = torch.tensor(np.random.normal(0, 0.5, shape1d.shape), dtype=torch.float32).cuda()
-		#
-		# m_full = m_random * std_m + mean_m
-		# shape_full = (shape1d + exp_random) * std_shape + mean_shape
-		# shade = generate_shade_torch(lv_il, m_full, shape_full)
-		# tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
-		#
-		# g_images_raw, g_images_mask_raw = warp_texture_torch(tex, m_full, shape_full)
-		#
-		# random_exp += g_images_raw
-
 
 	# save images
 	if not os.path.isdir(config.PREDICTION_DST_PATH):
