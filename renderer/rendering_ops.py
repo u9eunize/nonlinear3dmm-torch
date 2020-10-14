@@ -10,14 +10,20 @@ def generate_full(vec, std, mean):
     return vec * std + mean
 
 
-def generate_shade_and_texture(m_full, lv_il, albedo, shape_full):
-    shade = generate_shade_torch(lv_il, m_full, shape_full)
+def minmax(vec):
+    return torch.min(vec), torch.max(vec)
+
+
+def generate_texture(albedo, shade, is_clamp=False):
     tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
+    # tex = torch.clamp(tex, 0, 1)
+    if is_clamp:
+        tex = torch.clamp(tex, 0, 1)
+    return tex
 
-    return shade, tex
 
-
-def generate_tex_mask(batch_size, input_texture_labels, input_texture_masks):
+def generate_tex_mask(input_texture_labels, input_texture_masks):
+    batch_size = input_texture_labels.shape[0]
     tex_vis_mask = (~input_texture_labels.eq((torch.ones_like(input_texture_labels) * -1))).float()
     tex_vis_mask = tex_vis_mask * input_texture_masks
     tex_ratio = torch.sum(tex_vis_mask) / (batch_size * config.TEXTURE_SIZE[0] * config.TEXTURE_SIZE[1] * config.C_DIM)
@@ -43,6 +49,7 @@ def renderer(m_full, tex, shape_full, inputs, postfix=""):
         "g_images_mask_raw"+postfix: g_images_mask_raw.unsqueeze(1).repeat(1, 3, 1, 1),
     }
     return param_dict
+
 
 def renderer_random(m_full, tex, shape_full, postfix=""):
 
@@ -79,25 +86,17 @@ def ZBuffer_Rendering_CUDA_op_v2_sz224_torch(s2d, tri, vis):
     return map, mask
 
 
-def warp_texture_torch ( texture, m, mshape):
-    '''
-        Render image
-        Parameters
-            texture:    [batch, 3, 192, 224]
-            m:          [batch, 8]
-            mshape:     [batch , VERTEXU_NUM * 3]
-        Returns
-            image: [batch, x, t, c]
-    '''
+def warping_flow(m, mshape, output_size=96, is_reduce=False):
+    batch_size = mshape.shape[0]
 
-    # texture = texture.permute((0, 2, 3, 1)) # [batch, 192, 224, 3]
+    tri = load_3DMM_tri(is_reduce)
+    vertex_tri = load_3DMM_vertex_tri(is_reduce)
+    vt2pixel_u, vt2pixel_v = load_FaceAlignment_vt2pixel(is_reduce)
 
-    batch_size = texture.shape[0]
-
-    tri = torch.from_numpy(load_3DMM_tri()).cuda().long()  # [3, TRI_NUM + 1]
-    vertex_tri = torch.from_numpy(load_3DMM_vertex_tri()).cuda()  # [8, VERTEX_NUM]
-    vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel).cuda() for vt2pixel in load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
-
+    tri = torch.from_numpy(tri).cuda().long()  # [3, TRI_NUM + 1]
+    vertex_tri = torch.from_numpy(vertex_tri).cuda()  # [8, VERTEX_NUM]
+    vt2pixel_u = torch.from_numpy(vt2pixel_u).cuda()
+    vt2pixel_v = torch.from_numpy(vt2pixel_v).cuda()
 
     m = m.view((batch_size, 4, 2))
     m_row1 = F.normalize(m[:, 0:3, 0], dim=1)
@@ -173,6 +172,38 @@ def warp_texture_torch ( texture, m, mshape):
 
     pixel_u = pixel_u.view((batch_size, config.IMAGE_SIZE, config.IMAGE_SIZE))
     pixel_v = pixel_v.view((batch_size, config.IMAGE_SIZE, config.IMAGE_SIZE))
+
+    return pixel_u, pixel_v, masks
+
+
+def rendering_wflow(texture, flow_u, flow_v):
+    image = bilinear_sampler_torch(texture, flow_v, flow_u)
+    image = image.permute((0, 3, 1, 2))
+    return image
+
+
+def apply_mask(image, mask, background=None):
+    image = torch.mul(image, mask)
+
+    if background is not None:
+        image = image + torch.mul(background, 1 - mask)
+    return image
+
+
+def warp_texture_torch (texture, m, mshape, output_size=96, is_reduce=False):
+
+    '''
+        Render image
+        Parameters
+            texture:    [batch, 3, 192, 224]
+            m:          [batch, 8]
+            mshape:     [batch , VERTEXU_NUM * 3]
+        Returns
+            image: [batch, x, t, c]
+    '''
+
+    # texture = texture.permute((0, 2, 3, 1)) # [batch, 192, 224, 3]
+    pixel_u, pixel_v, masks = warping_flow(m, mshape, output_size, is_reduce)
 
     images = bilinear_sampler_torch(texture, pixel_v, pixel_u)
 
@@ -392,8 +423,7 @@ def bilinear_sampler_torch ( img, x, y ):
     return out
 
 
-
-def generate_shade_torch(il, m, mshape, is_with_normal=False):
+def generate_shade(il, m, mshape, is_with_normal=False, is_clamp=False):
     '''
         빛, projection matric, shape로 texture를 입힐 shading map 렌더링
 
@@ -473,6 +503,9 @@ def generate_shade_torch(il, m, mshape, is_with_normal=False):
     shade = shade.view((-1, config.TEXTURE_SIZE[0], config.TEXTURE_SIZE[1], 3)) # [batch, 192, 224, 3]
     normalf_flat = normalf_flat.view((-1, config.TEXTURE_SIZE[0], config.TEXTURE_SIZE[1], 3))
 
+    if is_clamp:
+        shade = torch.clamp(shade, -1, 1)
+
     if is_with_normal:
         return shade, normalf_flat
 
@@ -513,7 +546,6 @@ def shading_torch ( L, normal):
     sh[:, :, :, 7] = (pi / 4) * (3) * (math.sqrt(5 / (12 * pi))) * (normal_x * normal_y)
 
     sh[:, :, :, 8] = (pi / 4) * (3 / 2) * (math.sqrt(5 / (12 * pi))) * (torch.pow(normal_x, 2) - torch.pow(normal_y, 2))
-
 
     L = torch.unsqueeze(L, 1)
     L = L.repeat(1, shape[1], 1)

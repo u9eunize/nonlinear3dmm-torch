@@ -59,7 +59,6 @@ def main():
 	# define model and loss
 	model = Nonlinear3DMM().to(config.DEVICE)
 	model, _, _, _, _ = load(model)
-	loss = Loss(losses)
 
 	# load images for prediction
 	fnames_raw = glob(join(config.PREDICTION_SRC_PATH, "*"))
@@ -86,12 +85,19 @@ def main():
 
 		# forward network
 		with torch.no_grad():
-			lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp = model(input_images)
+			infer = model(input_images)
+			lv_m = infer["lv_m"]
+			lv_il = infer["lv_il"]
+			albedo = infer["albedo_comb"]
+			shape2d = infer["shape_2d_base"]
+			shape1d = infer["shape_1d_comb"]
+			exp = infer["exp"]
+			# lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp =
 
 		# make full
 		m_full = lv_m * std_m + mean_m
 		shape_full = (shape1d + exp) * std_shape + mean_shape
-		shade = generate_shade_torch(lv_il, m_full, shape_full)
+		shade = generate_shade(lv_il, m_full, shape_full)
 		tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
 
 		g_images_raw, g_images_mask_raw = warp_texture_torch(tex, m_full, shape_full)

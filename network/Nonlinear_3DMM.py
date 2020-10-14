@@ -49,33 +49,71 @@ class Nonlinear3DMM(nn.Module):
         self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=dtype)
 
         ###################################### encoder shasha
-        self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2, self.gfc_dim // 2, self.gfc_dim // 2, self.m_dim, self.il_dim)
+        self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2,
+                                  self.gfc_dim // 2, self.gfc_dim // 2, self.m_dim, self.il_dim)
+
         self.in_dim = self.nl_encoder.in_dim
 
-        self.albedo_gen = NLAlbedoDecoderBlock(self.gfc_dim//2, self.gf_dim, self.tex_sz)
-        self.shape_gen = NLShapeDecoderBlock(self.gfc_dim//2, self.gf_dim, self.gfc_dim, self.tex_sz)
-        self.exp_gen = NLShapeDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
+        self.albedo_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gf_dim * 10, self.tex_sz)
+        self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+
+        self.shape_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
+        self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+
+        # self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
+        # self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
     def forward(self, input_images):
         batch_size = input_images.shape[0]
-
-        lv_m, lv_il, lv_shape, lv_tex, lv_exp = self.nl_encoder(input_images)
-
-        # generate albedo and shape
-        albedo = self.albedo_gen(lv_tex)
-        shape2d = self.shape_gen(lv_shape)
-        exp2d     = self.exp_gen(lv_exp)
-
         vt2pixel_u = self.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
         vt2pixel_v = self.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
 
-        shape1d = bilinear_sampler_torch(shape2d, vt2pixel_u, vt2pixel_v)
-        shape1d = shape1d.view(batch_size, -1)
+        lv_m, lv_il, lv_shape, lv_tex, lv_exp = self.nl_encoder(input_images)
 
-        exp = bilinear_sampler_torch(exp2d, vt2pixel_u, vt2pixel_v)
-        exp = exp.view(batch_size, -1)
+        # albedo
+        albedo_dec = self.albedo_dec(lv_tex)
+        albedo_base = self.albedo_gen_base(albedo_dec)
+        albedo_comb = self.albedo_gen_comb(albedo_dec)
+        albedo_res = albedo_comb - albedo_base
 
-        return lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp
+        # shape
+        shape_dec = self.shape_dec(lv_tex)
+        shape_2d_base = self.shape_gen_base(shape_dec)
+        shape_2d_comb = self.shape_gen_comb(shape_dec)
+
+        shape_1d_base = self.make_1d(shape_2d_base, vt2pixel_u, vt2pixel_v)
+        shape_1d_comb = self.make_1d(shape_2d_comb, vt2pixel_u, vt2pixel_v)
+
+        shape_2d_res = shape_2d_base - shape_2d_comb
+        shape_1d_res = shape_1d_comb - shape_1d_base
+
+        # exp
+        # exp_dec = self.exp_dec(lv_tex)
+        # exp_2d = self.exp_gen(exp_dec)
+        # exp = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
+
+        return dict(
+            lv_m=lv_m,
+            lv_il=lv_il,
+            albedo_base=albedo_base,
+            albedo_comb=albedo_comb,
+            albedo_res=albedo_res,
+            shape_2d_base=shape_2d_base,
+            shape_2d_comb=shape_2d_comb,
+            shape_1d_base=shape_1d_base,
+            shape_1d_comb=shape_1d_comb,
+            shape_2d_res=shape_2d_res,
+            shape_1d_res=shape_1d_res,
+            # exp=exp
+        )
+
+    def make_1d(self, decoder_2d_result, vt2pixel_u, vt2pixel_v):
+        batch_size = decoder_2d_result.shape[0]
+        decoder_1d_result = bilinear_sampler_torch(decoder_2d_result, vt2pixel_u, vt2pixel_v)
+        decoder_1d_result = decoder_1d_result.view(batch_size, -1)
+        return decoder_1d_result
 
     def to(self, device, *args, **kwargs):
         ret = super(Nonlinear3DMM, self).to(device, *args, **kwargs)

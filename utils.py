@@ -84,8 +84,10 @@ def load(model, global_optimizer=None, encoder_optimizer=None, start_epoch=None,
     start_epoch_str = f"{start_epoch:02d}" if start_epoch is not None else "*"
     start_step_str = f"{start_step:06d}.pt" if start_step is not None else "*"
 
-    ckpt_name = glob(join(config.CHECKPOINT_DIR_PATH, config.CHECKPOINT_PATH,
-                          f'ckpt_{start_epoch_str}', f'model_ckpt_{start_step_str}'))
+    path = join(config.CHECKPOINT_DIR_PATH, config.CHECKPOINT_PATH,
+                f'ckpt_{start_epoch_str}', f'model_ckpt_{start_epoch_str}_{start_step_str}')
+    print(f"try load {path}")
+    ckpt_name = glob(path)
     ckpt_name.sort()
     ckpt_name = ckpt_name[-1]
 
@@ -135,36 +137,49 @@ def grid_viewer(images, limit=8):
     return image.data.permute(1, 2, 0).cpu().numpy()
 
 
-def load_3DMM_tri():
+def load_3DMM_tri(is_reduce=False):
     # Triangle definition (i.e. from Basel model)
 
     # print ('Loading 3DMM tri ...')
+    if not is_reduce:
+        vertex_num = config.VERTEX_NUM
+        postfix = ""
+    else:
+        vertex_num = config.VERTEX_NUM_REDUCE
+        postfix = "_reduce"
 
-    fd = open(config.DEFINITION_PATH + '3DMM_tri.dat')
+    fd = open(config.DEFINITION_PATH + f'3DMM_tri{postfix}.dat')
     tri = np.fromfile(file=fd, dtype=np.int32)
     fd.close()
     # print tri
 
     tri = tri.reshape((3, -1)).astype(np.int32)
     tri = tri - 1
-    tri = np.append(tri, [[config.VERTEX_NUM], [config.VERTEX_NUM], [config.VERTEX_NUM]], axis=1)
+    tri = np.append(tri, [[vertex_num], [vertex_num], [vertex_num]], axis=1)
 
     # print('   DONE')
     return tri
 
 
-def load_3DMM_vertex_tri():
+def load_3DMM_vertex_tri(is_reduce=False):
     # Vertex to triangle mapping (list of all trianlge containing the cureent vertex)
 
     # print('Loading 3DMM vertex tri ...')
 
-    fd = open(config.DEFINITION_PATH + '3DMM_vertex_tri.dat')
+    if not is_reduce:
+        post_fix = ""
+        tri_num = config.TRI_NUM
+    else:
+        post_fix = "_reduce"
+        tri_num = config.TRI_NUM_REDUCE
+
+    fd = open(config.DEFINITION_PATH + f'3DMM_vertex_tri{post_fix}.dat')
     vertex_tri = np.fromfile(file=fd, dtype=np.int32)
     fd.close()
 
     vertex_tri = vertex_tri.reshape((8, -1)).astype(np.int32)
     # vertex_tri = np.append(vertex_tri, np.zeros([8,1]), 1)
-    vertex_tri[vertex_tri == 0] = config.TRI_NUM + 1
+    vertex_tri[vertex_tri == 0] = tri_num + 1
     vertex_tri = vertex_tri - 1
 
     # print('    DONE')
@@ -254,6 +269,21 @@ def load_3DMM_tri_2d_barycoord():
     tri_2d_barycoord = tri_2d_barycoord.reshape(192, 224, 3)
 
     return tri_2d_barycoord
+
+
+def load_FaceAlignment_vt2pixel(is_reduce=False):
+    post_fix = "_reduce" if is_reduce else ""
+    fd = open(config.DEFINITION_PATH  + 'vertices_2d_u' + post_fix + '.dat')
+    vt2pixel_u = np.fromfile(file=fd, dtype=np.float32)
+    vt2pixel_u = np.append(vt2pixel_u - 1, 0)
+    fd.close()
+
+    fd = open(config.DEFINITION_PATH  + 'vertices_2d_v' + post_fix + '.dat')
+    vt2pixel_v = np.fromfile(file=fd, dtype=np.float32)
+    vt2pixel_v = np.append(vt2pixel_v - 1, 0) #vt2pixel_v[VERTEX_NUM] = 0
+    fd.close()
+
+    return vt2pixel_u, vt2pixel_v
 
 
 def inverse_transform(images):

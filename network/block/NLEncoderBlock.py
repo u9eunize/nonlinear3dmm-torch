@@ -57,15 +57,10 @@ class Encoder(nn.Module):
             # original parameter: padding = same, now zeros
             nn.Conv2d(self.in_dim, out_dim, kernel_size, stride=stride, padding=int((kernel_size - 1) / 2)),
             nn.BatchNorm2d(out_dim),
-            nn.ELU(inplace=True)  # inplace 옵션 주는 것은 의문
+            nn.ReLU(inplace=True)  # inplace 옵션 주는 것은 의문
         ]
         self.in_dim = out_dim
         return nn.Sequential(*layers)
-
-
-
-
-
 
 
 class NLEmbeddingBlock(nn.Module):
@@ -136,7 +131,7 @@ class NLEncoderBlock(nn.Module):
             # original parameter: padding = same, now zeros
             nn.Conv2d(self.in_dim, out_dim, kernel_size, stride=stride, padding=int((kernel_size - 1) / 2)),
             nn.BatchNorm2d(out_dim),
-            nn.ELU(inplace=True)  # inplace 옵션 주는 것은 의문
+            nn.ReLU(inplace=True)  # inplace 옵션 주는 것은 의문
         ]
         self.in_dim = out_dim
         return nn.Sequential(*layers)

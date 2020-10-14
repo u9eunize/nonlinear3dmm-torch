@@ -86,30 +86,67 @@ class NLLogger:
         ret[:, :, :vec.shape[2], :] = vec
         return ret
 
+    def _write_loss_images(self, name, loss_params, keywords, img_sz=None, interval=config.IMAGE_LOG_INTERVAL):
+        if img_sz is None:
+            img_sz = loss_params[keywords[0]]
+        img_list = []
+        for key in keywords:
+            img = self.match_size(img_sz, loss_params[key])
+            img = img.clamp(0, 1) if "shade" not in key else img.clamp(-1, 1)
+            img_list.append(img)
+        self.write_image(name, img_list, interval=interval)
+
     def write_loss_images(self, loss_params, interval=config.IMAGE_LOG_INTERVAL):
 
         # self.write_image("shade", loss_params["shade"], interval=interval)
-        self.write_image("g_images", [
-            loss_params["input_images"],
-            loss_params["g_images_raw_gt"],
-            loss_params["g_images_raw"],
-            loss_params["g_images"],
-            self.match_size(loss_params["input_images"], (loss_params["albedo"] + 1) / 2),
-            self.match_size(loss_params["input_images"], loss_params["shade"]),
-            self.match_size(loss_params["input_images"], loss_params["tex"]),
-            self.match_size(loss_params["input_images"], loss_params["input_texture_labels"]),
+        self._write_loss_images("g_images", loss_params, [
+            "input_images",
+            "g_img_base",
+            "g_img_ac_sb",
+            "g_img_ab_sc",
+            "g_img_comb",
+            "g_img_gt",
+            "g_img_raw_base",
+            "g_img_raw_comb",
         ], interval=interval)
 
-        self.write_image("g_images_rand", [
-            loss_params["input_images"],
-            loss_params["g_images"],
-            loss_params["g_images_random"],
-            loss_params["g_images_mask_random"],
-            self.match_size(loss_params["input_images"], (loss_params["albedo"] + 1) / 2),
-            self.match_size(loss_params["input_images"], loss_params["random_shade"]),
-            self.match_size(loss_params["input_images"], loss_params["random_tex"]),
-            self.match_size(loss_params["input_images"], loss_params["input_texture_labels"]),
+        self._write_loss_images("g_images_raw", loss_params, [
+            "input_images",
+            "g_img_raw_base",
+            "g_img_raw_ac_sb",
+            "g_img_raw_ab_sc",
+            "g_img_raw_comb",
+            "g_img_shade_base",
+            "g_img_shade_comb",
+            "g_img_shade_gt",
         ], interval=interval)
+
+        self._write_loss_images("albedo_and_shade", loss_params, [
+            "input_texture_labels",
+            "albedo_base",
+            "albedo_comb",
+            "shade_gt",
+            "shade_base",
+            "shade_comb",
+        ], interval=interval)
+
+        self._write_loss_images("texture", loss_params, [
+            "input_texture_labels",
+            "tex_base",
+            "tex_mix_ac_sb",
+            "tex_mix_ab_sc",
+        ], interval=interval)
+
+        # self.write_image("g_images_rand", [
+        #     loss_params["input_images"],
+        #     loss_params["g_images"],
+        #     loss_params["g_images_random"],
+        #     loss_params["g_images_mask_random"],
+        #     self.match_size(loss_params["input_images"], (loss_params["albedo"] + 1) / 2),
+        #     self.match_size(loss_params["input_images"], loss_params["random_shade"]),
+        #     self.match_size(loss_params["input_images"], loss_params["random_tex"]),
+        #     self.match_size(loss_params["input_images"], loss_params["input_texture_labels"]),
+        # ], interval=interval)
 
         # self.write_image("texture", [
         #     loss_params["tex"],
