@@ -12,10 +12,15 @@ import config
 
 class Nonlinear3DMMHelper:
 
-    def __init__(self, loss_coefficients):
+    def __init__(self, loss_coefficients, decay_per_epoch=None):
         # initialize parameters
         dtype = torch.float32
         self.losses = loss_coefficients
+
+        if decay_per_epoch is None:
+            decay_per_epoch = dict()
+        self.decay_per_epoch = decay_per_epoch
+
         self.name = f'{datetime.now(timezone("Asia/Seoul")).strftime("%Y%m%d/%H%M%S")}'
         if config.PREFIX:
             self.name += f'_{config.PREFIX}'
@@ -26,13 +31,13 @@ class Nonlinear3DMMHelper:
         self.logger_train = log_utils.NLLogger(self.name, "train")
         log_utils.set_logger("nl_train", self.logger_train)
 
-        self.logger_valid = log_utils.NLLogger(self.name, "valid")
-        log_utils.set_logger("nl_valid", self.logger_valid)
+        # self.logger_valid = log_utils.NLLogger(self.name, "valid")
+        # log_utils.set_logger("nl_valid", self.logger_valid)
 
         self.state_file_root_name = join(config.CHECKPOINT_DIR_PATH, self.name)
 
         # Define losses
-        self.loss = Loss(loss_coefficients)
+        self.loss = Loss(loss_coefficients, decay_per_epoch)
 
         # Load model
         self.net = Nonlinear3DMM().to(config.DEVICE)
@@ -153,45 +158,52 @@ class Nonlinear3DMMHelper:
         g_img_shade_gt = rendering_wflow(shade_gt, u_gt, v_gt)
 
         return {
-            "shade_base": shade_base,
-            "shade_comb": shade_comb,
+            "shade_base": shade_base.float(),
+            "shade_comb": shade_comb.float(),
 
-            "tex_base": tex_base,
-            "tex_mix_ac_sb": tex_mix_ac_sb,
-            "tex_mix_ab_sc": tex_mix_ab_sc,
-            "tex_comb": tex_comb,
+            "tex_base": tex_base.float(),
+            "tex_mix_ac_sb": tex_mix_ac_sb.float(),
+            "tex_mix_ab_sc": tex_mix_ab_sc.float(),
+            "tex_comb": tex_comb.float(),
 
-            "g_img_base": g_img_base,
-            "g_img_mask_base": g_img_mask_base,
+            "g_img_base": g_img_base.float(),
+            "g_img_mask_base": g_img_mask_base.float(),
 
-            "g_img_ac_sb": g_img_ac_sb,
-            "g_img_ab_sc": g_img_ab_sc,
+            "g_img_ac_sb": g_img_ac_sb.float(),
+            "g_img_ab_sc": g_img_ab_sc.float(),
 
-            "g_img_comb": g_img_comb,
-            "g_img_mask_comb": g_img_mask_comb,
+            "g_img_comb": g_img_comb.float(),
+            "g_img_mask_comb": g_img_mask_comb.float(),
 
-            "shape_full_gt": shape_full_gt,
-            "shade_gt": shade_gt,
-            "mask_gt": mask_gt,
-            "g_img_gt": g_img_gt,
+            "shape_full_gt": shape_full_gt.float(),
+            "shade_gt": shade_gt.float(),
+            "mask_gt": mask_gt.float(),
+            "g_img_gt": g_img_gt.float(),
 
             # for debugging
-            "g_img_raw_base": g_img_raw_base,
-            "g_img_raw_ac_sb": g_img_raw_ac_sb,
-            "g_img_raw_ab_sc": g_img_raw_ab_sc,
-            "g_img_raw_comb": g_img_raw_comb,
+            "g_img_raw_base": g_img_raw_base.float(),
+            "g_img_raw_ac_sb": g_img_raw_ac_sb.float(),
+            "g_img_raw_ab_sc": g_img_raw_ab_sc.float(),
+            "g_img_raw_comb": g_img_raw_comb.float(),
 
-            "g_img_shade_base": g_img_shade_base,
-            "g_img_shade_comb": g_img_shade_comb,
-            "g_img_shade_gt": g_img_shade_gt,
+            "g_img_shade_base": g_img_shade_base.float(),
+            "g_img_shade_comb": g_img_shade_comb.float(),
+            "g_img_shade_gt": g_img_shade_gt.float(),
         }
 
     def run_model(self, **inputs):
         # lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp = self.net(input_images)
 
         loss_param = {}
+
+        self.loss.time_start("infer")
         infer = self.net(inputs["input_images"])
+        self.loss.time_end("infer")
+
+        self.loss.time_start("render")
         renderer_dict = self.rendering(inputs, infer)
+        self.loss.time_end("render")
+
         mask_dict = generate_tex_mask(inputs["input_texture_labels"], inputs["input_texture_masks"])
 
         loss_param.update(inputs)
@@ -245,7 +257,10 @@ class Nonlinear3DMMHelper:
             # il = []
             # exp = []
 
+            self.loss.time_start("data_fetching")
             for idx, samples in enumerate(train_dataloader, 0):
+                self.loss.time_end("data_fetching")
+                self.loss.time_start("total")
                 loss_param = self.run_model(**self.sample_to_param(samples))
 
                 # camera += loss_param['lv_m'].detach().cpu()
@@ -254,6 +269,7 @@ class Nonlinear3DMMHelper:
 
                 g_loss, g_loss_with_landmark = self.loss(**loss_param)
 
+                self.loss.time_start("optimizer")
                 if idx % 2 == 0:
                     global_optimizer.zero_grad()
                     g_loss.backward()
@@ -262,10 +278,13 @@ class Nonlinear3DMMHelper:
                     encoder_optimizer.zero_grad()
                     g_loss_with_landmark.backward()
                     encoder_optimizer.step()
+                self.loss.time_end("optimizer")
 
+                self.loss.time_end("total")
                 log_utils.NLLogger.print_iteration_log(epoch, self.logger_train.get_step(), idx, batch_size, iter_size)
                 log_utils.NLLogger.print_loss_log(self.loss)
 
+                self.loss.time_start("set_log")
                 self.logger_train.write_loss_scalar(self.loss)
                 self.logger_train.write_loss_images(loss_param)
 
@@ -290,6 +309,14 @@ class Nonlinear3DMMHelper:
 
                 else:
                     self.logger_train.step()
+
+                self.loss.time_end("set_log")
+                self.loss.time_start("empty_cache")
+                torch.cuda.empty_cache()
+                self.loss.time_end("empty_cache")
+                self.loss.time_start("data_fetching")
+            if epoch % 2 == 0:
+                self.loss.decay_coefficient()
 
     def validate(self, valid_dataloader, epoch, global_step):
         print("\n\n", "*" * 10, "start validation", "*" * 10, "\n")
@@ -375,10 +402,15 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         'mix_ab_sc_texture': 2.5,  # if using texture loss  using 0.5, else 2.5
         # 'comb_texture': 0,  # if using texture loss  using 0.5, else 2.5
 
-        # 'base_recon': 10 / 2 ,
-        # 'mix_ab_sc_recon': 10 * 2 / 2,
-        # 'mix_ac_sb_recon': 10 * 2 / 2,
-        # # 'comb_recon': 0,
+        'base_perceptual_recon': 10 / 2 * 100,
+        'mix_ab_sc_perceptual_recon': 10 * 2 / 2 * 100,
+        'mix_ac_sb_perceptual_recon': 10 * 2 / 2 * 100,
+        # 'comb_perceptual_recon': 0,
+
+        'base_pix_recon': 10 / 2,
+        'mix_ab_sc_pix_recon': 10 * 2 / 2,
+        'mix_ac_sb_pix_recon': 10 * 2 / 2,
+        # 'comb_pix_recon': 0,
 
         'symmetry': 10,  # origin: 10
         'const_albedo': 10,  # origin: 10
@@ -394,8 +426,15 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         # 'content': 10,
         # 'gradient_difference': 10,
     }
+    decay_per_epoch = {
+        # 'm': 0.8,
+        # 'shape': 0.8,
+        # 'base_texture': 0.8,
+        # 'mix_ac_sb_texture': 0.8,
+        # 'mix_ab_sc_texture': 0.8,
+    }
 
-    pretrained_helper = Nonlinear3DMMHelper(losses)
+    pretrained_helper = Nonlinear3DMMHelper(losses, decay_per_epoch)
     pretrained_helper.train()
 
 

@@ -5,6 +5,16 @@ from network.facenet import InceptionResnetV1
 import config
 from os.path import join
 from torchvision.models.vgg import vgg19_bn
+from datetime import datetime
+
+
+activation = {}
+
+
+def get_activation(name):
+    def hook(model, input, output):
+        activation[name] = output.detach()
+    return hook
 
 
 def norm_loss(predictions, labels, mask=None, loss_type="l1", reduce_mean=True, p=1):
@@ -38,23 +48,26 @@ def norm_loss(predictions, labels, mask=None, loss_type="l1", reduce_mean=True, 
 
     return loss
 
-activation = {}
-
-def get_activation(name):
-    def hook(model, input, output):
-        activation[name] = output.detach().cpu()
-    return hook
-
 
 class Loss:
-    def __init__(self, loss_coefficients: dict):
+    def __init__(self, loss_coefficients: dict, decay_per_epoch=None):
         print("**** using ****")
+        if decay_per_epoch is None:
+            decay_per_epoch = dict()
+
         loss_names = loss_coefficients.keys()
         for loss_name, loss_coefficient in loss_coefficients.items():
-            print(loss_name, "coefficients:", loss_coefficient)
+            print(loss_name, "coefficients:", loss_coefficient, end=" ")
+            if loss_name not in decay_per_epoch:
+                decay_per_epoch[loss_name] = 1.0
+            else:
+                print("decay per epoch:", decay_per_epoch[loss_name], end="")
+            print("")
 
         self.loss_names = loss_names
         self.loss_coefficients = loss_coefficients
+        self.decay_per_epoch = decay_per_epoch
+        self.decay_step = config.LOSS_START_DECAY_STEP
         self.shape_loss_name = "l2"
         self.tex_loss_name = "l1"
         self.landmark_num = 68
@@ -89,75 +102,50 @@ class Loss:
 
         self.recognition_md = None
 
-        # self.facenet = InceptionResnetV1('vggface2').eval().to(config.DEVICE)
-        self.vgg19 = vgg19_bn(pretrained=True).eval().to(config.DEVICE)
-
+        self.facenet = InceptionResnetV1('vggface2').eval().to(config.DEVICE)
         for layer_idx in config.CONTENT_LAYERS:
-            self.vgg19.features[layer_idx].register_forward_hook(get_activation(f'({layer_idx}) conv2d'))
+            self.facenet.__getattr__(layer_idx).register_forward_hook(get_activation(f'({layer_idx}) conv2d'))
+
+        self.cache = dict()
+        self.time_checker = dict()
 
     def __call__(self, **kwargs):
         self.losses = dict()
+        self.generate_precalculation(**kwargs)
 
         for loss_name, loss_coefficient in self.loss_coefficients.items():
+            self.time_start(loss_name)
             loss_fn_name = loss_name + "_loss"
             loss_fn = self.__getattribute__(loss_fn_name)
-            self.losses[loss_fn_name] = loss_coefficient * loss_fn(**kwargs)
+            decay_coefficient = self.decay_per_epoch[loss_name] ** self.decay_step
+            self.losses[loss_fn_name] = (loss_coefficient * decay_coefficient) * loss_fn(**kwargs)
+            self.time_end(loss_name)
 
         self.losses['g_loss'] = sum([v if "landmark" not in k else 0 for k, v in self.losses.items()])
         self.losses['landmark_loss'] = sum([v if "landmark" in k else 0 for k, v in self.losses.items()])
         self.losses['g_loss_with_landmark'] = self.losses['landmark_loss'] + self.losses['g_loss']
 
+        self.release_precalculcation()
         return self.losses['g_loss'], self.losses['g_loss_with_landmark']
 
-    def identity_loss(self, input_images, g_images, g_images_random, **kwargs):
-        input_vec = self.facenet(input_images).detach()
-        generated_vec = self.facenet(g_images.float()).detach()
-        random_generated_vec = self.facenet(g_images_random.float()).detach()
-        g_loss_identity1 = norm_loss(input_vec, generated_vec, loss_type=config.IDENTITY_LOSS_TYPE)
-        g_loss_identity2 = norm_loss(input_vec, random_generated_vec, loss_type=config.IDENTITY_LOSS_TYPE)
-        return (1 - g_loss_identity1) + (1 - g_loss_identity2)
+    def time_start(self, name):
+        self.time_checker[name] = datetime.now()
 
-    def content_loss(self, input_images, g_images, **kwargs):
-        input_features = self.facenet(input_images, return_features=True).detach()
-        generated_features = self.facenet(g_images.float(), return_features=True).detach()
-        g_loss_content = 0
-        for i_feature, g_feature in zip(input_features, generated_features):
-            _, C_j, H_j, W_j = i_feature.shape
-            g_loss_content += torch.norm(i_feature - g_feature) / (C_j * H_j * W_j)
-        return g_loss_content
+    def time_end(self, name):
+        self.time_checker[name] = (datetime.now() - self.time_checker[name]).total_seconds() * 1000
 
-    def gradient_difference_loss(self, input_images, g_images, **kwargs):
-        input_images_gradient_x = torch.abs(input_images[:, :, :-1, :] - input_images[:, :, 1:, :])
-        input_images_gradient_y = torch.abs(input_images[:, :, :, :-1] - input_images[:, :, :, 1:])
+    def decay_coefficient(self):
+        self.decay_step += 1
 
-        g_images_gradient_x = torch.abs(g_images[:, :, :-1, :] - g_images[:, :, 1:, :])
-        g_images_gradient_y = torch.abs(g_images[:, :, :, :-1] - g_images[:, :, :, 1:])
+    def generate_precalculation(self, **kwargs):
+        self.time_start("pre_rec")
+        self.cache.update(self._perceptual_recon_precalculation(**kwargs))
+        self.time_end("pre_rec")
+        pass
 
-        g_loss_gradient_difference = norm_loss(input_images_gradient_x, g_images_gradient_x, loss_type=config.GRADIENT_DIFFERENCE_LOSS_TYPE)\
-                                    + norm_loss(input_images_gradient_y, g_images_gradient_y, loss_type=config.GRADIENT_DIFFERENCE_LOSS_TYPE)
-
-        return g_loss_gradient_difference
-
-    def identity_loss_vgg19(self, input_images, g_images, g_images_random, **kwargs):
-        with torch.no_grad():
-            input_vec = self.vgg19(input_images).detach().cpu()
-            self.activation_input = activation.copy()
-            generated_vec = self.vgg19(g_images.float()).detach().cpu()
-            self.activation_generated = activation.copy()
-            random_generated_vec = self.vgg19(g_images_random.float()).detach().cpu()
-        g_loss_identity1 = norm_loss(input_vec, generated_vec, loss_type=config.IDENTITY_LOSS_TYPE)
-        g_loss_identity2 = norm_loss(input_vec, random_generated_vec, loss_type=config.IDENTITY_LOSS_TYPE)
-        return g_loss_identity1 + g_loss_identity2
-
-    def content_loss_vgg19(self, **kwargs):
-        g_loss_content = 0
-        for (i_key, i_val), (g_key, g_val) in zip(
-                self.activation_input.items(),
-                self.activation_generated.items()):
-            _, C_j, H_j, W_j = i_val.shape
-            # g_loss_content += norm_loss(i_val, g_val, loss_type=config.CONTENT_LOSS_TYPE) / (C_j * H_j * W_j) / len(config.CONTENT_LAYERS)
-            g_loss_content += norm_loss(i_val, g_val, loss_type=config.CONTENT_LOSS_TYPE) / len(config.CONTENT_LAYERS)
-        return g_loss_content
+    def release_precalculcation(self):
+        self.cache = dict()
+        pass
 
     def expression_loss(self, exp, input_exp_labels, **kwargs):
         g_loss_exp = norm_loss(exp, input_exp_labels, loss_type=config.EXPRESSION_LOSS_TYPE)
@@ -205,24 +193,117 @@ class Loss:
 
     # --------- reconstrcution loss -------
 
-    def _reconstruction_loss_calculation(self, g_images, g_images_mask, input_images):
+    def _pixel_loss_calculation(self, g_images, g_images_mask, input_images):
         batch_size = input_images.shape[0]
-        images_loss = norm_loss(g_images, input_images, loss_type=config.RECONSTRUCTION_LOSS_TYPE)
+        images_loss = norm_loss(g_images, input_images, loss_type="l2")
         mask_mean = torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)
         g_loss_recon = images_loss / mask_mean
         return g_loss_recon
 
-    def base_recon_loss(self, g_img_base, g_img_mask_base, input_images, **kwargs):
-        return self._reconstruction_loss_calculation(g_img_base, g_img_mask_base, input_images)
+    def _reconstruction_loss_calculation(self, g_images, g_images_mask, input_images, name=""):
+        if config.CONTENT_LOSS_TYPE == "perceptual":
+            return self._perceptual_loss_calculation(name)
+        elif config.CONTENT_LOSS_TYPE == "pix":
+            return self._pixel_loss_calculation(g_images, g_images_mask, input_images)
 
-    def mix_ac_sb_recon_loss(self, g_img_ac_sb, g_img_mask_base, input_images, **kwargs):
-        return self._reconstruction_loss_calculation(g_img_ac_sb, g_img_mask_base, input_images)
+    def _perceptual_recon_precalculation(self, input_images, g_img_base, g_img_ac_sb, g_img_ab_sc, **kwargs):
+        idxes, fts = self._face_calculation_multiple(input_images, g_img_base, g_img_ac_sb, g_img_ab_sc)
 
-    def mix_ab_sc_recon_loss(self, g_img_ab_sc, g_img_mask_comb, input_images, **kwargs):
-        return self._reconstruction_loss_calculation(g_img_ab_sc, g_img_mask_comb, input_images)
+        return dict(
+            pcpt_input_images=(idxes[0], fts[0]),
+            pcpt_g_img_base=(idxes[1], fts[1]),
+            pcpt_g_img_ac_sb=(idxes[2], fts[2]),
+            pcpt_g_img_ab_sc=(idxes[3], fts[3]),
+        )
 
-    def comb_recon_loss(self, g_img_comb, g_img_mask_comb, input_images, **kwargs):
-        return self._reconstruction_loss_calculation(g_img_comb, g_img_mask_comb, input_images)
+    def _face_calculation(self, img):
+        features = []
+        idx_vec = self.facenet(img)
+        for val in activation.values():
+            features.append(val.clone())
+        return idx_vec, features
+
+    def _face_calculation_multiple(self, *imgs):
+        bat_sz = imgs[0].shape[0]
+        img_chunks = torch.cat(imgs, dim=0)
+        features = [list() for _ in range(len(imgs))]
+
+        idx_vecs = self.facenet(img_chunks.float())
+        idx_vecs = torch.split(idx_vecs, bat_sz)
+        for val in activation.values():
+            result = torch.split(val.clone(), bat_sz)
+            for i in range(len(imgs)):
+                features[i].append(result[i])
+        return idx_vecs, features
+
+    def _perceptual_loss_calculation(self, name):
+        i1_idx, i1_features = self.cache["pcpt_"+name]
+        i2_idx, i2_features = self.cache["pcpt_input_images"]
+        return self._perceptual_distance(i1_features, i2_features)
+
+    def _perceptual_distance(self, features1, features2):
+        perceptual_distance = 0
+        for f1, f2 in zip(features1, features2):
+            perceptual_distance += norm_loss(f1, f2, loss_type="l2") / len(features1)
+        return perceptual_distance
+
+    # def face_loss(self, input_images, g_images, g_images_random, **kwargs):
+    #
+    #
+    #     g_loss_identity1 = norm_loss(input_vec, generated_vec, loss_type=config.IDENTITY_LOSS_TYPE)
+    #     g_loss_content = 0
+    #     for (i_key, i_val), (g_key, g_val) in zip(
+    #             self.activation_input.items(),
+    #             self.activation_generated.items()):
+    #         _, C_j, H_j, W_j = i_val.shape
+    #         # g_loss_content += norm_loss(i_val, g_val, loss_type=config.CONTENT_LOSS_TYPE) / (C_j * H_j * W_j) / len(config.CONTENT_LAYERS)
+    #         g_loss_content += norm_loss(i_val, g_val, loss_type=config.CONTENT_LOSS_TYPE) / len(config.CONTENT_LAYERS)
+    #     return (1 - g_loss_identity1) + g_loss_content  # + (1 - g_loss_identity2)
+
+    # def content_loss(self, input_images, g_images, **kwargs):
+    #     input_features = self.facenet(input_images, return_features=True).detach()
+    #     generated_features = self.facenet(g_images.float(), return_features=True).detach()
+    #     g_loss_content = 0
+    #     for i_feature, g_feature in zip(input_features, generated_features):
+    #         _, C_j, H_j, W_j = i_feature.shape
+    #         g_loss_content += torch.norm(i_feature - g_feature) / (C_j * H_j * W_j)
+    #     return g_loss_content
+
+    # def gradient_difference_loss(self, input_images, g_images, **kwargs):
+    #     input_images_gradient_x = torch.abs(input_images[:, :, :-1, :] - input_images[:, :, 1:, :])
+    #     input_images_gradient_y = torch.abs(input_images[:, :, :, :-1] - input_images[:, :, :, 1:])
+    #
+    #     g_images_gradient_x = torch.abs(g_images[:, :, :-1, :] - g_images[:, :, 1:, :])
+    #     g_images_gradient_y = torch.abs(g_images[:, :, :, :-1] - g_images[:, :, :, 1:])
+    #
+    #     g_loss_gradient_difference = norm_loss(input_images_gradient_x, g_images_gradient_x, loss_type=config.GRADIENT_DIFFERENCE_LOSS_TYPE)\
+    #                                  + norm_loss(input_images_gradient_y, g_images_gradient_y, loss_type=config.GRADIENT_DIFFERENCE_LOSS_TYPE)
+    #
+    #     return g_loss_gradient_difference
+
+    def base_perceptual_recon_loss(self, g_img_base, **kwargs):
+        return self._perceptual_loss_calculation("g_img_base")
+
+    def mix_ac_sb_perceptual_recon_loss(self, g_img_ac_sb, **kwargs):
+        return self._perceptual_loss_calculation( "g_img_ac_sb")
+
+    def mix_ab_sc_perceptual_recon_loss(self, g_img_ab_sc, **kwargs):
+        return self._perceptual_loss_calculation( "g_img_ab_sc")
+
+    def comb_perceptual_recon_loss(self, g_img_comb, **kwargs):
+        return self._perceptual_loss_calculation("g_img_comb")
+
+    def base_pix_recon_loss(self, g_img_base, g_img_mask_base, input_images, **kwargs):
+        return self._pixel_loss_calculation(g_img_base, g_img_mask_base, input_images)
+
+    def mix_ac_sb_pix_recon_loss(self, g_img_ac_sb, g_img_mask_base, input_images, **kwargs):
+        return self._pixel_loss_calculation(g_img_ac_sb, g_img_mask_base, input_images)
+
+    def mix_ab_sc_pix_recon_loss(self, g_img_ab_sc, g_img_mask_comb, input_images, **kwargs):
+        return self._pixel_loss_calculation(g_img_ab_sc, g_img_mask_comb, input_images)
+
+    def comb_recon_pix_loss(self, g_img_comb, g_img_mask_comb, input_images, **kwargs):
+        return self._pixel_loss_calculation(g_img_comb, g_img_mask_comb, input_images)
 
     # --------- texture ---------
 

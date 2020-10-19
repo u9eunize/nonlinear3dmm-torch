@@ -1,15 +1,15 @@
 import torch
 # Train parameters
 EPOCH = 50
-BATCH_SIZE = 8
+BATCH_SIZE = 5
 BETAS = (0.5, 0.999)
 DATASET_FRAC = 1.0
 TRAIN_DATASET_FRAC = 1.0
 VALID_DATASET_FRAC = 0.1
 TEST_DATASET_FRAC = 1.0
-LEARNING_RATE = 0.0002
+LEARNING_RATE = 0.0001
 SAVE_PER_RATIO = 0.1
-
+VERVOSE_LEVEL = "info"
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 PREFIX = 'pretrain'
@@ -18,15 +18,16 @@ PREFIX = 'pretrain'
 # Ditectory path
 CHECKPOINT_DIR_PATH = './checkpoint'
 #CHECKPOINT_PATH = '20201008/165553_pretrain'            # ex) '20200914_005102_pretrain'
-CHECKPOINT_PATH = '20201013/*'
+CHECKPOINT_PATH = '20201018/*'
 CHECKPOINT_EPOCH = None
 CHECKPOINT_STEP = None
 LOG_PATH = './logs'
 DATASET_PATH = './dataset'
 DEFINITION_PATH = './dataset/3DMM_definition/'
 PREDICTION_SRC_PATH = './dataset/pred/src'
-PREDICTION_DST_PATH = './dataset/pred/dst'
+PREDICTION_DST_PATH = './dataset/pred/result/proxy'
 
+LOSS_START_DECAY_STEP = 1
 
 # Normalization type and lambda of loss
 SHAPE_LOSS_TYPE = 'l2'
@@ -64,9 +65,10 @@ EXPRESSION_LAMBDA = 10
 IDENTITY_LOSS_TYPE = 'l1'
 IDENTITY_LAMBDA = 2
 
-CONTENT_LAYERS = [0, 7, 14, 27, 40]
+CONTENT_LAYERS = ['conv2d_1a', 'conv2d_2a', 'maxpool_3a', 'conv2d_4a']
 CONTENT_WEIGHTS = [50, 500, 2000, 3000, 250]
-CONTENT_LOSS_TYPE = 'l2'
+
+CONTENT_LOSS_TYPE = 'perceptual'  # pix, perceptual
 CONTENT_LAMBDA = 2000
 
 GRADIENT_DIFFERENCE_LOSS_TYPE = 'l2'
@@ -89,7 +91,7 @@ CONST_PIXELS_NUM = 20
 
 # Log parameters
 LOSS_LOG_INTERVAL = 10
-IMAGE_LOG_INTERVAL = 10
+IMAGE_LOG_INTERVAL = 50
 IMAGE_LOG_NUMBER = 4
 
 # Random arguments

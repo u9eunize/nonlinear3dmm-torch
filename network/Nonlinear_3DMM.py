@@ -48,7 +48,7 @@ class Nonlinear3DMM(nn.Module):
         self.vt2pixel_u = torch.tensor(self.vt2pixel_u[:-1], dtype=dtype)
         self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=dtype)
 
-        ###################################### encoder shasha
+        ###################################### encoder
         self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2,
                                   self.gfc_dim // 2, self.gfc_dim // 2, self.m_dim, self.il_dim)
 

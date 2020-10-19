@@ -174,8 +174,16 @@ class NLLogger:
     @staticmethod
     def print_loss_log(loss):
         for key, loss_value in loss.losses.items():
-            print(key.replace("_loss", "") + ":", f"{loss_value.item():.4f}", end=" ")
+            loss_name = key.replace("_loss", "")
+            print_name = loss_name
+            if loss_name in loss.decay_per_epoch:
+                print_name = print_name + f"({loss.decay_per_epoch[loss_name] ** loss.decay_step:.4f})"
+            print(print_name, ":",  f"{loss_value.item():.4f}", end=" ")
         print()
+        if config.VERVOSE_LEVEL == "debug":
+            for key, time_value in loss.time_checker.items():
+                print(key + ":", f"{time_value:.4f}", end=" ")
+        print("total:", loss.time_checker["total"], "ms")
 
     @staticmethod
     def add_images(writer, name, data, step):

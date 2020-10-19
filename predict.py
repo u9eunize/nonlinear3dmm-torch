@@ -91,12 +91,12 @@ def main():
 			albedo = infer["albedo_comb"]
 			shape2d = infer["shape_2d_base"]
 			shape1d = infer["shape_1d_comb"]
-			exp = infer["exp"]
+			# exp = infer["exp"]
 			# lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp =
 
 		# make full
 		m_full = lv_m * std_m + mean_m
-		shape_full = (shape1d + exp) * std_shape + mean_shape
+		shape_full = (shape1d) * std_shape + mean_shape
 		shade = generate_shade(lv_il, m_full, shape_full)
 		tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
 
