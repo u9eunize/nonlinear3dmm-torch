@@ -5,22 +5,21 @@ Hence, there are "-1" subtraction to Python 0-based indexing
 from __future__ import division
 import math
 import numpy as np
-import config
 import torch
-
-from torchvision.utils import save_image
-from os import makedirs
-from os.path import join
-from glob import glob
-from torchvision.utils import make_grid
-
-import hashlib
 import os
+import hashlib
 import shutil
 import sys
 import tempfile
-
+from os import makedirs
+from os.path import join
+from glob import glob
 from urllib.request import urlopen, Request
+
+from torchvision.utils import save_image
+from torchvision.utils import make_grid
+
+from settings import CFG
 
 try:
     from tqdm.auto import tqdm  # automatically select proper tqdm submodule if available
@@ -77,22 +76,12 @@ def save(model, global_optimizer, encoder_optimizer, epoch, path, step):
     print("=> saved checkpoint '{} (epoch: {}, step: {})')".format(save_name, epoch, step))
 
 
-def load(model, global_optimizer=None, encoder_optimizer=None, start_epoch=None, start_step=None):
-    if not config.CHECKPOINT_PATH:
-        return model, global_optimizer, encoder_optimizer, 0, 0
-
-    start_epoch_str = f"{start_epoch:02d}" if start_epoch is not None else "*"
-    start_step_str = f"{start_step:06d}.pt" if start_step is not None else "*"
-
-    path = join(config.CHECKPOINT_DIR_PATH, config.CHECKPOINT_PATH,
-                f'ckpt_{start_epoch_str}', f'model_ckpt_{start_epoch_str}_{start_step_str}')
-    print(f"try load {path}")
-    ckpt_name = glob(path)
-    ckpt_name.sort()
-    ckpt_name = ckpt_name[-1]
+def load_from_name(model, global_optimizer=None, encoder_optimizer=None, ckpt_name=None):
+    if ckpt_name is None:
+        ckpt_name = join(CFG.checkpoint_root_path, CFG.checkpoint_regex)
 
     print("=> load checkpoint '{}'".format(ckpt_name))
-    checkpoint = torch.load(ckpt_name, map_location=config.DEVICE)
+    checkpoint = torch.load(ckpt_name, map_location=CFG.device)
 
     start_epoch = checkpoint['epoch']
     start_step = checkpoint['step'] if 'step' in checkpoint else 0
@@ -110,6 +99,27 @@ def load(model, global_optimizer=None, encoder_optimizer=None, start_epoch=None,
     print("=> loaded checkpoint '{}' (epoch {}, step {})".format(ckpt_name, start_epoch, start_step))
 
     return model, global_optimizer, encoder_optimizer, start_epoch, start_step
+
+
+def load(model, global_optimizer=None, encoder_optimizer=None,
+         start_epoch=CFG.checkpoint_epoch, start_step=CFG.checkpoint_step):
+    if not CFG.checkpoint_name and not CFG.checkpoint_regex:
+        return model, global_optimizer, encoder_optimizer, 0, 0
+
+    if CFG.checkpoint_name:
+        ckpt_name = join(CFG.checkpoint_root_path, CFG.checkpoint_name)
+    else:
+        start_epoch_str = f"{start_epoch:02d}" if start_epoch is not None else "*"
+        start_step_str = f"{start_step:06d}.pt" if start_step is not None else "*"
+
+        path = join(CFG.checkpoint_root_path, CFG.checkpoint_regex,
+                    f'ckpt_{start_epoch_str}', f'model_ckpt_{start_epoch_str}_{start_step_str}')
+        print(f"try load {path}")
+        ckpt_name = glob(path)
+        ckpt_name.sort()
+        ckpt_name = ckpt_name[-1]
+
+    return load_from_name(model, global_optimizer, encoder_optimizer, ckpt_name=ckpt_name)
 
 
 def get_checkpoint_dir(path, epoch):
@@ -142,13 +152,13 @@ def load_3DMM_tri(is_reduce=False):
 
     # print ('Loading 3DMM tri ...')
     if not is_reduce:
-        vertex_num = config.VERTEX_NUM
+        vertex_num = CFG.vertex_num
         postfix = ""
     else:
-        vertex_num = config.VERTEX_NUM_REDUCE
+        vertex_num = CFG.vertex_num_reduce
         postfix = "_reduce"
 
-    fd = open(config.DEFINITION_PATH + f'3DMM_tri{postfix}.dat')
+    fd = open(CFG.definition_path + f'3DMM_tri{postfix}.dat')
     tri = np.fromfile(file=fd, dtype=np.int32)
     fd.close()
     # print tri
@@ -168,12 +178,12 @@ def load_3DMM_vertex_tri(is_reduce=False):
 
     if not is_reduce:
         post_fix = ""
-        tri_num = config.TRI_NUM
+        tri_num = CFG.tri_num
     else:
         post_fix = "_reduce"
-        tri_num = config.TRI_NUM_REDUCE
+        tri_num = CFG.tri_num_reduce
 
-    fd = open(config.DEFINITION_PATH + f'3DMM_vertex_tri{post_fix}.dat')
+    fd = open(CFG.definition_path + f'3DMM_vertex_tri{post_fix}.dat')
     vertex_tri = np.fromfile(file=fd, dtype=np.int32)
     fd.close()
 
@@ -189,12 +199,12 @@ def load_3DMM_vertex_tri(is_reduce=False):
 def load_3DMM_vt2pixel():
     # Mapping in UV space
 
-    fd = open(config.DEFINITION_PATH + 'vertices_2d_u.dat')
+    fd = open(CFG.definition_path + 'vertices_2d_u.dat')
     vt2pixel_u = np.fromfile(file=fd, dtype=np.float32)
     vt2pixel_u = np.append(vt2pixel_u - 1, 0)
     fd.close()
 
-    fd = open(config.DEFINITION_PATH + 'vertices_2d_v.dat')
+    fd = open(CFG.definition_path + 'vertices_2d_v.dat')
     vt2pixel_v = np.fromfile(file=fd, dtype=np.float32)
     vt2pixel_v = np.append(vt2pixel_v - 1, 0)
     fd.close()
@@ -207,7 +217,7 @@ def load_3DMM_kpts():
 
     # print('Loading 3DMM keypoints ...')
 
-    fd = open(config.DEFINITION_PATH + '3DMM_keypoints.dat')
+    fd = open(CFG.definition_path + '3DMM_keypoints.dat')
     kpts = np.fromfile(file=fd, dtype=np.int32)
     kpts = kpts.reshape((-1, 1))
     fd.close()
@@ -216,7 +226,7 @@ def load_3DMM_kpts():
 
 
 def load_3DMM_tri_2d(with_mask=False):
-    fd = open(config.DEFINITION_PATH + '3DMM_tri_2d.dat')
+    fd = open(CFG.definition_path + '3DMM_tri_2d.dat')
     tri_2d = np.fromfile(file=fd, dtype=np.int32)
     fd.close()
 
@@ -224,7 +234,7 @@ def load_3DMM_tri_2d(with_mask=False):
 
     tri_mask = tri_2d != 0
 
-    tri_2d[tri_2d == 0] = config.TRI_NUM + 1  # VERTEX_NUM + 1
+    tri_2d[tri_2d == 0] = CFG.tri_num + 1  # VERTEX_NUM + 1
     tri_2d = tri_2d - 1
 
     if with_mask:
@@ -234,14 +244,14 @@ def load_3DMM_tri_2d(with_mask=False):
 
 
 def load_Basel_basic(element, is_reduce=False):
-    fn = config.DEFINITION_PATH + '3DMM_' + element + '_basis.dat'
+    fn = CFG.definition_path + '3DMM_' + element + '_basis.dat'
     # print('Loading ' + fn + ' ...')
 
     fd = open(fn)
     all_paras = np.fromfile(file=fd, dtype=np.float32)
     fd.close()
 
-    all_paras = np.transpose(all_paras.reshape((-1, config.N)).astype(np.float32))
+    all_paras = np.transpose(all_paras.reshape((-1, CFG.N)).astype(np.float32))
 
     mu = all_paras[:, 0]
     w = all_paras[:, 1:]
@@ -252,7 +262,7 @@ def load_Basel_basic(element, is_reduce=False):
 
 
 def load_const_alb_mask():
-    fd = open(config.DEFINITION_PATH + '3DMM_const_alb_mask.dat')
+    fd = open(CFG.definition_path + '3DMM_const_alb_mask.dat')
     const_alb_mask = np.fromfile(file=fd, dtype=np.uint8)
     fd.close()
     const_alb_mask = const_alb_mask - 1
@@ -262,7 +272,7 @@ def load_const_alb_mask():
 
 
 def load_3DMM_tri_2d_barycoord():
-    fd = open(config.DEFINITION_PATH + '3DMM_tri_2d_barycoord_reduce.dat')
+    fd = open(CFG.definition_path + '3DMM_tri_2d_barycoord_reduce.dat')
     tri_2d_barycoord = np.fromfile(file=fd, dtype=np.float32)
     fd.close()
 
@@ -273,12 +283,12 @@ def load_3DMM_tri_2d_barycoord():
 
 def load_FaceAlignment_vt2pixel(is_reduce=False):
     post_fix = "_reduce" if is_reduce else ""
-    fd = open(config.DEFINITION_PATH  + 'vertices_2d_u' + post_fix + '.dat')
+    fd = open(CFG.definition_path + 'vertices_2d_u' + post_fix + '.dat')
     vt2pixel_u = np.fromfile(file=fd, dtype=np.float32)
     vt2pixel_u = np.append(vt2pixel_u - 1, 0)
     fd.close()
 
-    fd = open(config.DEFINITION_PATH  + 'vertices_2d_v' + post_fix + '.dat')
+    fd = open(CFG.definition_path + 'vertices_2d_v' + post_fix + '.dat')
     vt2pixel_v = np.fromfile(file=fd, dtype=np.float32)
     vt2pixel_v = np.append(vt2pixel_v - 1, 0) #vt2pixel_v[VERTEX_NUM] = 0
     fd.close()

@@ -1,7 +1,6 @@
 import torch
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-import config
 from os.path import join, isdir, basename
 from PIL import Image
 from os import makedirs, cpu_count
@@ -9,6 +8,7 @@ from glob import glob
 import random
 import shutil
 from utils import *
+from settings import CFG
 import multiprocessing
 from joblib import Parallel, delayed
 from tqdm import tqdm
@@ -21,7 +21,7 @@ class NonlinearDataset(Dataset):
 			1. split raw data into train, test, and validation dataset and
 			2. load each dataset item
 	'''
-	def __init__(self, phase, frac=1.0, dataset_dir=config.DATASET_PATH):
+	def __init__(self, phase, frac=1.0, dataset_dir=CFG.dataset_path):
 		self.fdtype = np.float32
 		self.frac = frac
 
@@ -40,7 +40,7 @@ class NonlinearDataset(Dataset):
 		mu_exp, w_exp = load_Basel_basic('exp')
 
 		self.mean_shape = mu_shape + mu_exp
-		self.std_shape = np.tile(np.array([1e4, 1e4, 1e4], dtype=self.fdtype), config.VERTEX_NUM)
+		self.std_shape = np.tile(np.array([1e4, 1e4, 1e4], dtype=self.fdtype), CFG.vertex_num)
 
 		self.w_shape = w_shape
 		self.w_exp = w_exp
@@ -65,7 +65,7 @@ class NonlinearDataset(Dataset):
 		# load image
 		img_name    = self.image_filenames[idx]
 		img         = Image.open(img_name)
-		img         = transforms.functional.crop(img, ty, tx, config.IMAGE_SIZE, config.IMAGE_SIZE)
+		img         = transforms.functional.crop(img, ty, tx, CFG.image_size, CFG.image_size)
 		img_tensor  = self.transform(img)
 
 		# load mask
@@ -76,7 +76,7 @@ class NonlinearDataset(Dataset):
 		# load mask image
 		mask_img_name   = self.mask_img_filenames[idx]
 		mask_img        = Image.open(mask_img_name)
-		mask_img        = transforms.functional.crop(mask_img, ty, tx, config.IMAGE_SIZE, config.IMAGE_SIZE)
+		mask_img        = transforms.functional.crop(mask_img, ty, tx, CFG.image_size, CFG.image_size)
 		mask_img_tensor = self.transform(mask_img)
 
 		# load texture
@@ -105,13 +105,13 @@ class NonlinearDataset(Dataset):
 
 
 		# set random albedo indices
-		indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[config.CONST_PIXELS_NUM])
-		indices2 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[config.CONST_PIXELS_NUM])
+		indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CFG.const_pixels_num])
+		indices2 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CFG.const_pixels_num])
 
-		albedo_indices_x1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 1], [config.CONST_PIXELS_NUM, 1]))
-		albedo_indices_y1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 0], [config.CONST_PIXELS_NUM, 1]))
-		albedo_indices_x2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 1], [config.CONST_PIXELS_NUM, 1]))
-		albedo_indices_y2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 0], [config.CONST_PIXELS_NUM, 1]))
+		albedo_indices_x1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 1], [CFG.const_pixels_num, 1]))
+		albedo_indices_y1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 0], [CFG.const_pixels_num, 1]))
+		albedo_indices_x2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 1], [CFG.const_pixels_num, 1]))
+		albedo_indices_y2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 0], [CFG.const_pixels_num, 1]))
 
 		sample = {
 				'image_name'    : self.image_filenames[idx],

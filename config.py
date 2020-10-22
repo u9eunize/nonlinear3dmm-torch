@@ -2,14 +2,14 @@ import torch
 # Train parameters
 EPOCH = 50
 BATCH_SIZE = 5
+LEARNING_RATE = 0.0001
 BETAS = (0.5, 0.999)
 DATASET_FRAC = 1.0
 TRAIN_DATASET_FRAC = 1.0
 VALID_DATASET_FRAC = 0.1
 TEST_DATASET_FRAC = 1.0
-LEARNING_RATE = 0.0001
 SAVE_PER_RATIO = 0.1
-VERVOSE_LEVEL = "info"
+VERVOSE_LEVEL = "debug"  # debug or info
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 PREFIX = 'pretrain'
@@ -18,10 +18,9 @@ PREFIX = 'pretrain'
 # Ditectory path
 CHECKPOINT_DIR_PATH = './checkpoint'
 #CHECKPOINT_PATH = '20201008/165553_pretrain'            # ex) '20200914_005102_pretrain'
-CHECKPOINT_PATH = '20201018/*'
+CHECKPOINT_PATH = '20201019/*'
 CHECKPOINT_EPOCH = None
 CHECKPOINT_STEP = None
-LOG_PATH = './logs'
 DATASET_PATH = './dataset'
 DEFINITION_PATH = './dataset/3DMM_definition/'
 PREDICTION_SRC_PATH = './dataset/pred/src'
@@ -90,6 +89,7 @@ CONST_PIXELS_NUM = 20
 
 
 # Log parameters
+LOG_PATH = './logs'
 LOSS_LOG_INTERVAL = 10
 IMAGE_LOG_INTERVAL = 50
 IMAGE_LOG_NUMBER = 4

@@ -7,7 +7,7 @@ from configure_dataset import *
 from renderer.rendering_ops import *
 from loss import Loss
 import log_utils
-import config
+from settings import CFG, LOSSES
 
 
 class Nonlinear3DMMHelper:
@@ -22,11 +22,11 @@ class Nonlinear3DMMHelper:
         self.decay_per_epoch = decay_per_epoch
 
         self.name = f'{datetime.now(timezone("Asia/Seoul")).strftime("%Y%m%d/%H%M%S")}'
-        if config.PREFIX:
-            self.name += f'_{config.PREFIX}'
+        if CFG.name:
+            self.name += f'_{CFG.name}'
 
         # Set Logger
-        # self.writer = SummaryWriter(join(config.LOG_PATH, self.name))
+        # self.writer = SummaryWriter(join(CFG.log_path, self.name))
 
         self.logger_train = log_utils.NLLogger(self.name, "train")
         log_utils.set_logger("nl_train", self.logger_train)
@@ -34,27 +34,27 @@ class Nonlinear3DMMHelper:
         # self.logger_valid = log_utils.NLLogger(self.name, "valid")
         # log_utils.set_logger("nl_valid", self.logger_valid)
 
-        self.state_file_root_name = join(config.CHECKPOINT_DIR_PATH, self.name)
+        self.state_file_root_name = join(CFG.checkpoint_root_path, self.name)
 
         # Define losses
         self.loss = Loss(loss_coefficients, decay_per_epoch)
 
         # Load model
-        self.net = Nonlinear3DMM().to(config.DEVICE)
-        # self.net = Nonlinear3DMM_UNet().to(config.DEVICE)
+        self.net = Nonlinear3DMM().to(CFG.device)
+        # self.net = Nonlinear3DMM_UNet().to(CFG.device)
 
         # Basis
         mu_shape, w_shape = load_Basel_basic('shape')
         mu_exp, w_exp = load_Basel_basic('exp')
 
-        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype).to(config.DEVICE)
-        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), config.VERTEX_NUM), dtype=dtype).to(config.DEVICE)
+        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype).to(CFG.device)
+        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=dtype).to(CFG.device)
 
-        self.mean_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype).to(config.DEVICE)
-        self.std_m = torch.tensor(np.load(join(config.DATASET_PATH, 'std_m.npy')), dtype=dtype).to(config.DEVICE)
+        self.mean_m = torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=dtype).to(CFG.device)
+        self.std_m = torch.tensor(np.load(join(CFG.dataset_path, 'std_m.npy')), dtype=dtype).to(CFG.device)
 
-        self.w_shape = torch.tensor(w_shape, dtype=dtype).to(config.DEVICE)
-        self.w_exp = torch.tensor(w_exp, dtype=dtype).to(config.DEVICE)
+        self.w_shape = torch.tensor(w_shape, dtype=dtype).to(CFG.device)
+        self.w_exp = torch.tensor(w_exp, dtype=dtype).to(CFG.device)
 
         if True:
             self.random_m_samples = []
@@ -213,10 +213,10 @@ class Nonlinear3DMMHelper:
 
         return loss_param
 
-    def train(self, batch_size=config.BATCH_SIZE):
+    def train(self, batch_size=CFG.batch_size):
         # Load datasets
-        train_dataset = NonlinearDataset(phase='train', frac=config.TRAIN_DATASET_FRAC)
-        valid_dataset = NonlinearDataset(phase='valid', frac=config.VALID_DATASET_FRAC)
+        train_dataset = NonlinearDataset(phase='train', frac=CFG.train_dataset_frac)
+        valid_dataset = NonlinearDataset(phase='valid', frac=CFG.valid_dataset_frac)
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, shuffle=True,
                                       num_workers=1, pin_memory=True)
@@ -226,15 +226,13 @@ class Nonlinear3DMMHelper:
 
         # Set optimizers
         encoder_optimizer = torch.optim.Adam(self.net.nl_encoder.parameters(),
-                                             lr=config.LEARNING_RATE, betas=config.BETAS)
+                                             lr=CFG.lr, betas=CFG.betas)
         global_optimizer = torch.optim.Adam(self.net.parameters(),
-                                            lr=config.LEARNING_RATE, betas=config.BETAS)
+                                            lr=CFG.lr, betas=CFG.betas)
 
         # Load checkpoint
         self.net, global_optimizer, encoder_optimizer, start_epoch, start_step = load(
-            self.net, global_optimizer, encoder_optimizer,
-            start_epoch=config.CHECKPOINT_EPOCH,
-            start_step=config.CHECKPOINT_STEP
+            self.net, global_optimizer, encoder_optimizer
         )
 
         if start_step == 0:
@@ -246,12 +244,12 @@ class Nonlinear3DMMHelper:
 
         # Write graph to the tensorboard
         # _, samples = next(enumerate(train_dataloader, 0))
-        # self.writer.add_graph(self.net, samples["image"].to(config.DEVICE))
+        # self.writer.add_graph(self.net, samples["image"].to(CFG.device))
 
-        save_per = int(config.SAVE_PER_RATIO * len(train_dataloader))
+        save_per = int(CFG.save_ratio * len(train_dataloader))
         iter_size = len(train_dataloader)
 
-        for epoch in range(start_epoch, config.EPOCH):
+        for epoch in range(start_epoch, CFG.epoch):
             # For each batch in the dataloader
             # camera = []
             # il = []
@@ -333,10 +331,10 @@ class Nonlinear3DMMHelper:
 
         print("\n\n", "*" * 10, "end validation", "*" * 10, "\n")
 
-    def test(self, dataloader, load_model=False, load_dataset=False, batch_size=config.BATCH_SIZE,
-             epoch=config.CHECKPOINT_EPOCH, step=config.CHECKPOINT_STEP):
+    def test(self, dataloader, load_model=False, load_dataset=False, batch_size=CFG.batch_size,
+             epoch=CFG.checkpoint_epoch, step=CFG.checkpoint_step):
         if load_dataset:
-            dataset = NonlinearDataset(phase='test', frac=config.TEST_DATASET_FRAC)
+            dataset = NonlinearDataset(phase='test', frac=CFG.test_dataset_frac)
             dataloader = DataLoader(dataset, batch_size=batch_size,
                                     drop_last=True, shuffle=False, num_workers=1, pin_memory=True)
         if load_model:
@@ -375,57 +373,57 @@ class Nonlinear3DMMHelper:
 
     def sample_to_param(self, samples):
         return {
-            "input_images": samples["image"].to(config.DEVICE),
-            "input_masks": samples["mask_img"].to(config.DEVICE),
-            "input_texture_labels": samples["texture"].to(config.DEVICE),
-            "input_texture_masks": samples["mask"].to(config.DEVICE),
-            "input_m_labels": samples["m_label"].to(config.DEVICE),
-            "input_shape_labels": samples["shape_label"].to(config.DEVICE),
-            "input_albedo_indexes": list(map(lambda a: a.to(config.DEVICE), samples["albedo_indices"])),
-            "input_exp_labels": samples["exp_label"].to(config.DEVICE)
+            "input_images": samples["image"].to(CFG.device),
+            "input_masks": samples["mask_img"].to(CFG.device),
+            "input_texture_labels": samples["texture"].to(CFG.device),
+            "input_texture_masks": samples["mask"].to(CFG.device),
+            "input_m_labels": samples["m_label"].to(CFG.device),
+            "input_shape_labels": samples["shape_label"].to(CFG.device),
+            "input_albedo_indexes": list(map(lambda a: a.to(CFG.device), samples["albedo_indices"])),
+            "input_exp_labels": samples["exp_label"].to(CFG.device)
         }
 
 
 def pretrained_lr_test(name=None, start_epoch=-1):
-    losses = {
-        'm': 5,  # origin: 5
-        'shape': 10,  # origin: 10
-        # 'expression': 10,  # origin: 10
-        'batchwise_white_shading': 10,  # origin: 10
-
-        'base_landmark': 0.02,  # origin: 0.02
-        'comb_landmark': 0.02,  # origin: 0.02
-        'gt_landmark': 0.02,  # origin: 0.02
-
-        'base_texture': 2.5,  # if using texture loss using 0.5, else 2.5
-        'mix_ac_sb_texture': 2.5,  # if using texture loss  using 0.5, else 2.5
-        'mix_ab_sc_texture': 2.5,  # if using texture loss  using 0.5, else 2.5
-        # 'comb_texture': 0,  # if using texture loss  using 0.5, else 2.5
-
-        'base_perceptual_recon': 10 / 2 * 100,
-        'mix_ab_sc_perceptual_recon': 10 * 2 / 2 * 100,
-        'mix_ac_sb_perceptual_recon': 10 * 2 / 2 * 100,
-        # 'comb_perceptual_recon': 0,
-
-        'base_pix_recon': 10 / 2,
-        'mix_ab_sc_pix_recon': 10 * 2 / 2,
-        'mix_ac_sb_pix_recon': 10 * 2 / 2,
-        # 'comb_pix_recon': 0,
-
-        'symmetry': 10,  # origin: 10
-        'const_albedo': 10,  # origin: 10
-        # 'shade_mag': 1,  # origin: 1
-
-        'base_smoothness': 5e5,  # origin: 5e5
-        'comb_smoothness': 1,  # origin: 1
-
-        #'shape_residual': 1,  # origin: 1
-        #'albedo_residual': 1,  # origin: 1
-
-        # 'identity': 10,
-        # 'content': 10,
-        # 'gradient_difference': 10,
-    }
+    # losses = {
+    #     'm': 5,  # origin: 5
+    #     'shape': 10,  # origin: 10
+    #     # 'expression': 10,  # origin: 10
+    #     'batchwise_white_shading': 10,  # origin: 10
+    #
+    #     'base_landmark': 0.02,  # origin: 0.02
+    #     'comb_landmark': 0.02,  # origin: 0.02
+    #     'gt_landmark': 0.02,  # origin: 0.02
+    #
+    #     'base_texture': 2,  # if using texture loss using 0.5, else 2.5
+    #     'mix_ac_sb_texture': 2,  # if using texture loss  using 0.5, else 2.5
+    #     'mix_ab_sc_texture': 2,  # if using texture loss  using 0.5, else 2.5
+    #     # 'comb_texture': 0,  # if using texture loss  using 0.5, else 2.5
+    #
+    #     # 'base_perceptual_recon': 0,    # default 0
+    #     'mix_ab_sc_perceptual_recon': 10 * 100,  # default 10
+    #     'mix_ac_sb_perceptual_recon': 10 * 100,  # default 10
+    #     # 'comb_perceptual_recon': 0,
+    #
+    #     'base_pix_recon': 10 / 2,
+    #     'mix_ab_sc_pix_recon': 10 * 2 / 2,
+    #     'mix_ac_sb_pix_recon': 10 * 2 / 2,
+    #     # 'comb_pix_recon': 0,
+    #
+    #     'symmetry': 10,  # origin: 10
+    #     'const_albedo': 10,  # origin: 10
+    #     # 'shade_mag': 1,  # origin: 1
+    #
+    #     'base_smoothness': 5e5,  # origin: 5e5
+    #     'comb_smoothness': 1,  # origin: 1
+    #
+    #     #'shape_residual': 1,  # origin: 1
+    #     #'albedo_residual': 1,  # origin: 1
+    #
+    #     # 'identity': 10,
+    #     # 'content': 10,
+    #     # 'gradient_difference': 10,
+    # }
     decay_per_epoch = {
         # 'm': 0.8,
         # 'shape': 0.8,
@@ -434,7 +432,7 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         # 'mix_ab_sc_texture': 0.8,
     }
 
-    pretrained_helper = Nonlinear3DMMHelper(losses, decay_per_epoch)
+    pretrained_helper = Nonlinear3DMMHelper(LOSSES, decay_per_epoch)
     pretrained_helper.train()
 
 

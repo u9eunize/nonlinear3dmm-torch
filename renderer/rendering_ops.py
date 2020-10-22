@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import ZBuffer_cuda
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 from utils import *
+from settings import CFG
 
 
 def generate_full(vec, std, mean):
@@ -26,7 +27,7 @@ def generate_tex_mask(input_texture_labels, input_texture_masks):
     batch_size = input_texture_labels.shape[0]
     tex_vis_mask = (~input_texture_labels.eq((torch.ones_like(input_texture_labels) * -1))).float()
     tex_vis_mask = tex_vis_mask * input_texture_masks
-    tex_ratio = torch.sum(tex_vis_mask) / (batch_size * config.TEXTURE_SIZE[0] * config.TEXTURE_SIZE[1] * config.C_DIM)
+    tex_ratio = torch.sum(tex_vis_mask) / (batch_size * CFG.texture_size[0] * CFG.texture_size[1] * CFG.c_dim)
     return {
         "tex_vis_mask": tex_vis_mask,
         "tex_ratio": tex_ratio,
@@ -81,7 +82,7 @@ def ZBuffer_Rendering_CUDA_op_v2_sz224_torch(s2d, tri, vis):
 
     s2d = s2d.contiguous()
 
-    map, mask = ZBuffer_cuda.forward(s2d, tri.int(), vis, config.TRI_NUM, config.VERTEX_NUM, config.IMAGE_SIZE)
+    map, mask = ZBuffer_cuda.forward(s2d, tri.int(), vis, CFG.tri_num, CFG.vertex_num, CFG.image_size)
 
     return map, mask
 
@@ -122,7 +123,7 @@ def warping_flow(m, mshape, output_size=96, is_reduce=False):
     visible_tri = torch.gt(rotated_normalf_z, 0)
 
 
-    grid = torch.linspace(0, config.IMAGE_SIZE - 1, config.IMAGE_SIZE)
+    grid = torch.linspace(0, CFG.image_size - 1, CFG.image_size)
     u, v = torch.meshgrid(grid, grid)
     u = torch.transpose(u, 0, 1)
     v = torch.transpose(v, 0, 1)
@@ -134,7 +135,7 @@ def warping_flow(m, mshape, output_size=96, is_reduce=False):
 
     vertex2d_u, vertex2d_v, vertex2d_z = torch.split(vertex2d_i, (1, 1, 1), dim=2)
     vertex2d_u = vertex2d_u - 1
-    vertex2d_v = config.IMAGE_SIZE - vertex2d_v
+    vertex2d_v = CFG.image_size - vertex2d_v
     vertex2d_i = torch.cat((vertex2d_v, vertex2d_u, vertex2d_z), dim=2)
     vertex2d_i = torch.transpose(vertex2d_i, 1, 2)
 
@@ -170,8 +171,8 @@ def warping_flow(m, mshape, output_size=96, is_reduce=False):
     pixel_u = torch.squeeze(pixel1_u) * c1 + torch.squeeze(pixel2_u) * c2 + torch.squeeze(pixel3_u) * c3
     pixel_v = torch.squeeze(pixel1_v) * c1 + torch.squeeze(pixel2_v) * c2 + torch.squeeze(pixel3_v) * c3
 
-    pixel_u = pixel_u.view((batch_size, config.IMAGE_SIZE, config.IMAGE_SIZE))
-    pixel_v = pixel_v.view((batch_size, config.IMAGE_SIZE, config.IMAGE_SIZE))
+    pixel_u = pixel_u.view((batch_size, CFG.image_size, CFG.image_size))
+    pixel_v = pixel_v.view((batch_size, CFG.image_size, CFG.image_size))
 
     return pixel_u, pixel_v, masks
 
@@ -294,8 +295,8 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
 
     sign = 2 * torch.gt(count_s_greater_0, count_s_less_0) - 1
 
-    normal = torch.mul(normal, sign.repeat((1, config.VERTEX_NUM, 1)))
-    normalf = torch.mul(normalf, sign.repeat((1, config.TRI_NUM + 1, 1)))
+    normal = torch.mul(normal, sign.repeat((1, CFG.vertex_num, 1)))
+    normalf = torch.mul(normalf, sign.repeat((1, CFG.tri_num + 1, 1)))
 
     return normal, normalf
 
@@ -322,7 +323,7 @@ def compute_landmarks_torch(m, shape):
 
     [vertex2d_u, vertex2d_v] = torch.split(vertex2d, (1, 1), dim=2)
     vertex2d_u = vertex2d_u - 1
-    vertex2d_v = config.IMAGE_SIZE - vertex2d_v
+    vertex2d_v = CFG.image_size - vertex2d_v
 
     return vertex2d_u, vertex2d_v
 
@@ -500,8 +501,8 @@ def generate_shade(il, m, mshape, is_with_normal=False, is_clamp=False):
 
     # 명암조절 map
     shade = shading_torch(il, normalf_flat)
-    shade = shade.view((-1, config.TEXTURE_SIZE[0], config.TEXTURE_SIZE[1], 3)) # [batch, 192, 224, 3]
-    normalf_flat = normalf_flat.view((-1, config.TEXTURE_SIZE[0], config.TEXTURE_SIZE[1], 3))
+    shade = shade.view((-1, CFG.texture_size[0], CFG.texture_size[1], 3)) # [batch, 192, 224, 3]
+    normalf_flat = normalf_flat.view((-1, CFG.texture_size[0], CFG.texture_size[1], 3))
 
     if is_clamp:
         shade = torch.clamp(shade, -1, 1)

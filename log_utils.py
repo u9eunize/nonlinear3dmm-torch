@@ -7,15 +7,15 @@ import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from utils import get_checkpoint_dir
 
-import config
+from settings import CFG
 
 
 class NLLogger:
-    def __init__(self, name, phase, start_step=1, img_log_number=config.IMAGE_LOG_NUMBER):
-        self.writer = SummaryWriter(join(config.LOG_PATH, f"{name}_{phase}"))
+    def __init__(self, name, phase, start_step=1, log_image_count=CFG.log_image_count):
+        self.writer = SummaryWriter(join(CFG.log_path, f"{name}_{phase}"))
         self._step = start_step
         self.holder = {}
-        self.img_log_number = img_log_number
+        self.log_image_count = log_image_count
 
     def step(self, step=None, is_flush=True):
         if step is not None:
@@ -47,16 +47,16 @@ class NLLogger:
             self.holder[interval] = dict()
         self.holder[interval][save_name] = log_data
 
-    def write_scalar(self, name, data, interval=config.LOSS_LOG_INTERVAL):
+    def write_scalar(self, name, data, interval=CFG.log_loss_interval):
         self._write(interval, f"{name}", (NLLogger.add_scalar, data))
 
-    def write_image(self, name, images, interval=config.IMAGE_LOG_INTERVAL):
+    def write_image(self, name, images, interval=CFG.log_image_interval):
         if images is None:
             return
         if not isinstance(images, list):
             images = [images]
         result = []
-        for i in range(self.img_log_number):
+        for i in range(self.log_image_count):
             r = torch.cat([img[i:i+1, :, :, :] for img in images], dim=0)
             result.append(r)
 
@@ -73,10 +73,10 @@ class NLLogger:
                 if fn == NLLogger.add_images:
                     torchvision.utils.save_image(data, filename)
 
-    def write_func(self, name, func, data, interval=config.IMAGE_LOG_INTERVAL):
+    def write_func(self, name, func, data, interval=CFG.log_image_interval):
         self._write(interval, name, (func, data))
 
-    def write_loss_scalar(self, loss, interval=config.IMAGE_LOG_INTERVAL):
+    def write_loss_scalar(self, loss, interval=CFG.log_image_interval):
         for key, loss_value in loss.losses.items():
             self.write_scalar(key, loss_value)
 
@@ -86,7 +86,7 @@ class NLLogger:
         ret[:, :, :vec.shape[2], :] = vec
         return ret
 
-    def _write_loss_images(self, name, loss_params, keywords, img_sz=None, interval=config.IMAGE_LOG_INTERVAL):
+    def _write_loss_images(self, name, loss_params, keywords, img_sz=None, interval=CFG.log_image_interval):
         if img_sz is None:
             img_sz = loss_params[keywords[0]]
         img_list = []
@@ -96,7 +96,7 @@ class NLLogger:
             img_list.append(img)
         self.write_image(name, img_list, interval=interval)
 
-    def write_loss_images(self, loss_params, interval=config.IMAGE_LOG_INTERVAL):
+    def write_loss_images(self, loss_params, interval=CFG.log_image_interval):
 
         # self.write_image("shade", loss_params["shade"], interval=interval)
         self._write_loss_images("g_images", loss_params, [
@@ -180,7 +180,7 @@ class NLLogger:
                 print_name = print_name + f"({loss.decay_per_epoch[loss_name] ** loss.decay_step:.4f})"
             print(print_name, ":",  f"{loss_value.item():.4f}", end=" ")
         print()
-        if config.VERVOSE_LEVEL == "debug":
+        if CFG.verbose == "debug":
             for key, time_value in loss.time_checker.items():
                 print(key + ":", f"{time_value:.4f}", end=" ")
         print("total:", loss.time_checker["total"], "ms")

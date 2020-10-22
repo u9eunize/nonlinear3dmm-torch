@@ -36,8 +36,8 @@ class Nonlinear3DMM(nn.Module):
         self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM), dtype=dtype)
         # self.std_shape  = np.load('std_shape.npy')
 
-        self.mean_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype)
-        self.std_m = torch.tensor(np.load(join(config.DATASET_PATH, 'mean_m.npy')), dtype=dtype)
+        self.mean_m = torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=dtype)
+        self.std_m = torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=dtype)
 
         self.w_shape = torch.tensor(w_shape, dtype=dtype)
         self.w_exp = torch.tensor(w_exp, dtype=dtype)
