@@ -1,6 +1,5 @@
 
 from network.Nonlinear_3DMM import Nonlinear3DMM
-import config
 from loss import Loss
 from os.path import join, basename
 from glob import glob
@@ -137,7 +136,7 @@ def main():
 
 	# define model and loss
 	model = Nonlinear3DMM().to(CFG.device)
-	model, _, _, _, _ = load_from_name(model)
+	model, _, _, _, _ = load(model)
 
 	# load images for prediction
 	fnames_raw = glob(join(CFG.prediction_src_path, "*"))
@@ -155,7 +154,7 @@ def main():
 			img = Image.open(fname)
 			img = torchvision.transforms.functional.resize(img, CFG.image_size)
 			img = torchvision.transforms.functional.center_crop(img, CFG.image_size)
-			img = torchvision.transforms.functional.to_tensor(img)
+			img = torchvision.transforms.functional.to_tensor(img)[:3, :, :]
 			input_images.append(img)
 			output[fname] = dict()
 		input_images = torch.stack(input_images, dim=0).to(CFG.device)

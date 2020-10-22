@@ -184,10 +184,10 @@ def rendering_wflow(texture, flow_u, flow_v):
 
 
 def apply_mask(image, mask, background=None):
-    image = torch.mul(image, mask)
+    image = torch.mul(image, mask.float())
 
     if background is not None:
-        image = image + torch.mul(background, 1 - mask)
+        image = image + torch.mul(background, 1 - mask.float())
     return image
 
 
@@ -275,7 +275,7 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
     normal = torch.gather(normalf, 1, normal_indices.long())
 
     normal = normal.view((batch_size, 8, -1, 3))
-    multi = torch.mul(normal, mask)
+    multi = torch.mul(normal, mask.float())
     normal = torch.sum(multi, dim=1)
 
 
@@ -293,7 +293,7 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
     count_s_less_0 = torch.sum(1 * torch.lt(s, 0), 0, keepdim=True)
 
 
-    sign = 2 * torch.gt(count_s_greater_0, count_s_less_0) - 1
+    sign = 2 * torch.gt(count_s_greater_0, count_s_less_0).float() - 1
 
     normal = torch.mul(normal, sign.repeat((1, CFG.vertex_num, 1)))
     normalf = torch.mul(normalf, sign.repeat((1, CFG.tri_num + 1, 1)))
