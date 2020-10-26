@@ -9,7 +9,7 @@ from torch.nn import functional as F
 from utils import download_url_to_file
 
 from configure_dataset import *
-import config
+from settings import CFG
 import pandas as pd
 
 from os.path import join, isdir, basename

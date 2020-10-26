@@ -1,6 +1,6 @@
 
 from network.Nonlinear_3DMM import Nonlinear3DMM
-import config
+import CFG
 from loss import Loss
 from os.path import join, basename
 from glob import glob

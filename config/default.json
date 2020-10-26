@@ -1,7 +1,7 @@
 {
   "name": "pretrain",
 
-  "checkpoint_name": null,
+  "checkpoint_name": "proxy/ckpt_0/model_ckpt_17_206448.pt",
   "checkpoint_root_path":  "./checkpoint",
   "checkpoint_regex": null,
   "checkpoint_epoch":  null,
@@ -9,8 +9,8 @@
 
   "dataset_path":  "./dataset",
   "definition_path": "./dataset/3DMM_definition/",
-  "prediction_src_path":  "pred/dst",
-  "prediction_dst_path": "pred/src",
+  "prediction_src_path":  "./dataset/pred/src",
+  "prediction_dst_path": "./dataset/pred/dst",
 
   "epoch":  50,
   "batch_size": 5,
