@@ -36,6 +36,7 @@ def compute_uvs(texture, m, shape):
 def main():
    tri = load_3DMM_tri()
    face = np.transpose(tri)[:-1]
+   face = np.stack([face[:, 0], face[:, 2], face[:, 1]], axis=1)
    # checkerboard_texture = pyredner.imread('checkerboard.exr')
    # define model and loss
    model = Nonlinear3DMM().to(CFG.device)
@@ -95,62 +96,67 @@ def main():
       output_gt += input_images
       output_images += g_images_raw
       output_images_with_mask += g_images
-      output_shapes += shape_full.view(shape_full.shape[0], -1, 3)
+      output_shapes += shape_full.view(shape_full.shape[0], -1, 3) / 10000
       for m , sh, a, t, n , s in zip(m_full, output_shapes, albedo, tex,fnames_raw, shade):
-         # uv = torch.tensor(torch.cat([tu, tv]).view(-1,2), dtype=torch.float32)
-         # # texture test
-         # atext = pyredner.Texture(texels=a.permute(1,2,0), uv_scale = uvs)
-         # ttext = pyredner.Texture(texels=t.permute(1, 2, 0), uv_scale=uvs)
-         mat = pyredner.Material(diffuse_reflectance=t.permute(1,2,0), two_sided = True)
-         mat_black = pyredner.Material( diffuse_reflectance=torch.tensor([1.0, 1.0, 1.0], device=pyredner.get_device()))
-         materials = [mat, mat_black]
-         # mat = pyredner.Material()
-         pshape = pyredner.Shape(vertices=sh, indices=torch.tensor(face, dtype=torch.int32), material_id=0, uvs = uvs)
-         # pshape.normals = -pyredner.compute_vertex_normal(pshape.vertices.cpu(), pshape.indices.cpu()) # 필
-         pyredner.imwrite(t.permute(1,2,0).cpu(), join(CFG.prediction_dst_path, basename(n).split('.')[0] + '_img.jpg'))
-         z_coord = 500000
-         light_position = 150000.0
-         light_vertices = torch.tensor([[-light_position, -light_position, z_coord], [light_position, -light_position, z_coord], [-light_position, light_position, z_coord], [light_position, light_position, z_coord]],
-                                device=pyredner.get_device())
-         light_indices = torch.tensor([[0, 1, 2], [1, 2, 3]], dtype=torch.int32, device=pyredner.get_device())
-         shape_light = pyredner.Shape(light_vertices, light_indices, 1)
+
+
+         # #############################
+         # mat = pyredner.Material(diffuse_reflectance=t.permute(1,2,0), two_sided = True)
+         # mat_black = pyredner.Material( diffuse_reflectance=torch.tensor([1.0, 1.0, 1.0], device=pyredner.get_device()))
+         # materials = [mat, mat_black]
+         # # mat = pyredner.Material()
+         # pshape = pyredner.Shape(vertices=sh, indices=torch.tensor(face, dtype=torch.int32), material_id=0, uvs = uvs)
+         # # pshape.normals = -pyredner.compute_vertex_normal(pshape.vertices.cpu(), pshape.indices.cpu()) # 필
+         # pyredner.imwrite(t.permute(1,2,0).cpu(), join(CFG.prediction_dst_path, basename(n).split('.')[0] + '_img.jpg'))
+         # z_coord = 500000
+         # light_position = 150000.0
+         # light_vertices = torch.tensor([[-light_position, -light_position, z_coord], [light_position, -light_position, z_coord], [-light_position, light_position, z_coord], [light_position, light_position, z_coord]],
+         #                        device=pyredner.get_device())
+         # light_indices = torch.tensor([[0, 1, 2], [1, 2, 3]], dtype=torch.int32, device=pyredner.get_device())
+         # shape_light = pyredner.Shape(light_vertices, light_indices, 1)
+         # camera0 = pyredner.automatic_camera_placement([pshape], resolution=(224, 224))
+         # t = camera0.position
+         # camera0.position = camera0.position - t - t
+         # # camera0.look_at = camera0.look_at - t - t
+         # # camera0.look_at = camera0.position - camera0.look_at
+         # camera = pyredner.Camera(position=camera0.position + torch.tensor([0, 0, 10]),
+         #                    look_at=camera0.look_at + torch.tensor([0, 0, 0]),
+         #                    up=camera0.up + torch.tensor([0, 0, 0]),
+         #                    fov=camera0.fov,
+         #                    resolution=camera0.resolution)
+         # light = pyredner.AreaLight(1, torch.tensor([5.0, 5.0, 5.0]), two_sided=True)
+         # scene = pyredner.Scene(camera, [pshape, shape_light], materials, [light])
+         # args = pyredner.RenderFunction.serialize_scene(scene=scene,num_samples=128,max_bounces=16)
+         # # Alias of the render function
+         # render = pyredner.RenderFunction.apply
+         # # render = pyredner.render_pathtracing(*args)
+         # img = render(0, *args)
+         # pyredner.imwrite(img.cpu(), join(CFG.prediction_dst_path, basename(n).split('.')[0] + '_redner.png'))
+
+
+
+
+         ######################################################### deffered test
+         mat = pyredner.Material(diffuse_reflectance=t.permute(1, 2, 0) * 2, two_sided=True)
+         pshape = pyredner.Shape(vertices=sh, indices=torch.tensor(face, dtype=torch.int32), material_id=0, uvs=uvs)
+         pyredner.imwrite(t.permute(1, 2, 0).cpu(), join(CFG.prediction_dst_path, basename(n).split('.')[0] + '_img.jpg'))
+
          camera0 = pyredner.automatic_camera_placement([pshape], resolution=(224, 224))
-         t = camera0.position
-         camera0.position = camera0.position - t - t
-         # camera0.look_at = camera0.look_at - t - t
-         # camera0.look_at = camera0.position - camera0.look_at
+         camera0.position = -camera0.position
          camera = pyredner.Camera(position=camera0.position + torch.tensor([0, 0, 10]),
                             look_at=camera0.look_at + torch.tensor([0, 0, 0]),
                             up=camera0.up + torch.tensor([0, 0, 0]),
                             fov=camera0.fov,
                             resolution=camera0.resolution)
-         light = pyredner.AreaLight(1, torch.tensor([5.0, 5.0, 5.0]), two_sided=True)
-         scene = pyredner.Scene(camera, [pshape, shape_light], materials, [light])
-         args = pyredner.RenderFunction.serialize_scene(scene=scene,num_samples=128,max_bounces=16)
-         # Alias of the render function
-         render = pyredner.RenderFunction.apply
-         # render = pyredner.render_pathtracing(*args)
-         img = render(0, *args)
+
+         light = pyredner.PointLight(
+             position=(camera0.position + torch.tensor((0.0, 0.0, 20.0))).to(pyredner.get_device()),
+             intensity=torch.tensor((1000.0, 1000.0, 1000.0), device=pyredner.get_device()))
+         scene = pyredner.pyredner.Scene(shapes = [pshape], materials=[mat], camera = camera)
+         img = pyredner.render_deferred(scene, lights=[light])
          pyredner.imwrite(img.cpu(), join(CFG.prediction_dst_path, basename(n).split('.')[0] + '_redner.png'))
-         # deffered test
-         # uvs = compute_uvs()
-         # ptext = pyredner.Texture(texels=a.permute(1, 2, 0))
-         # mat = pyredner.Material(diffuse_reflectance=ptext)
-         # objects = pyredner.Object(vertices = sh, indices=torch.tensor(face, dtype=torch.int32), material=mat, uvs= uvs)
-         # objects.normals = pyredner.compute_vertex_normal(objects.vertices.cpu(), objects.indices.cpu())
-         #
-         # camera0 = pyredner.automatic_camera_placement([objects], resolution=(224, 224))
-         # camera = pyredner.Camera(position=camera0.look_at + torch.tensor([0,  0, 35]),
-         #                  look_at=camera0.look_at + torch.tensor([0,  0, 0]),
-         #                  up=camera0.up+ torch.tensor([0,  0, 0]),
-         #                  fov=camera0.fov,
-         #                  resolution=camera0.resolution)
-         # light = pyredner.PointLight(
-         #     position=(camera0.position + torch.tensor((0.0, 0.0, 20.0))).to(pyredner.get_device()),
-         #     intensity=torch.tensor((500.0, 500.0, 500.0), device=pyredner.get_device()))
-         # envmap=pyredner.EnvironmentMap(a.permute(1, 2, 0))
-         # scene = pyredner.pyredner.Scene(objects = [objects], camera = camera, envmap=envmap)
-         # img = pyredner.render_deferred(scene, lights=[light])
-         # save_images(torch.pow(img, 1.0/2.2).cpu(), [4, -1], basename(n).split('.')[0] + 'redner.jpg')
+         # save_images(torch.pow(img, 1.0/2.2).cpu(), [4, -1], join(CFG.prediction_dst_path, basename(n).split('.')[0] + '_redner.png'))
+
+
 if __name__ == '__main__':
    main()
