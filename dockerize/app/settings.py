@@ -5,6 +5,7 @@ import json
 
 LOSS_TYPE_LIST = ["l1", "l2", "l2,1"]
 
+
 def parse():
     parser = argparse.ArgumentParser()
 

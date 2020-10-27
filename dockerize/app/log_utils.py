@@ -177,13 +177,13 @@ class NLLogger:
             loss_name = key.replace("_loss", "")
             print_name = loss_name
             if loss_name in loss.decay_per_epoch:
-                print_name = print_name + f"({loss.decay_per_epoch[loss_name] ** loss.decay_step:.4f})"
+                print_name = print_name + f"({loss.decay_per_epoch[loss_name] ** loss.decay_step:.2f})"
             print(print_name, ":",  f"{loss_value.item():.4f}", end=" ")
         print()
         if CFG.verbose == "debug":
             for key, time_value in loss.time_checker.items():
-                print(key + ":", f"{time_value:.4f}", end=" ")
-        print("total:", loss.time_checker["total"], "ms")
+                print(key + ":", f"{time_value:.2f}", end=" ")
+        print("total:", f"{loss.time_checker['total']:.2f}", "ms")
 
     @staticmethod
     def add_images(writer, name, data, step):

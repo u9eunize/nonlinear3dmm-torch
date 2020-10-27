@@ -148,8 +148,8 @@ class Loss:
         self.cache = dict()
         pass
 
-    def expression_loss(self, exp, input_exp_labels, **kwargs):
-        g_loss_exp = norm_loss(exp, input_exp_labels, loss_type=CFG.expression_loss_type)
+    def expression_loss(self, exp_1d_base, input_exp_labels, **kwargs):
+        g_loss_exp = norm_loss(exp_1d_base, input_exp_labels, loss_type=CFG.expression_loss_type)
         return g_loss_exp
 
     def shape_loss(self, shape_1d_base, input_shape_labels, **kwargs):

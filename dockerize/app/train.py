@@ -31,8 +31,8 @@ class Nonlinear3DMMHelper:
         self.logger_train = log_utils.NLLogger(self.name, "train")
         log_utils.set_logger("nl_train", self.logger_train)
 
-        # self.logger_valid = log_utils.NLLogger(self.name, "valid")
-        # log_utils.set_logger("nl_valid", self.logger_valid)
+        self.logger_valid = log_utils.NLLogger(self.name, "valid")
+        log_utils.set_logger("nl_valid", self.logger_valid)
 
         self.state_file_root_name = join(CFG.checkpoint_root_path, self.name)
 
@@ -111,16 +111,18 @@ class Nonlinear3DMMHelper:
         albedo_comb = infer["albedo_comb"]
         shape_1d_comb = infer["shape_1d_comb"]
         shape_1d_base = infer["shape_1d_base"]
+        exp_1d_comb = infer["exp_1d_comb"]
+        exp_1d_base = infer["exp_1d_base"]
         # exp = infer["exp"]
 
         m_full = generate_full(lv_m, self.std_m, self.mean_m)
         m_full_gt = generate_full(input_m_labels, self.std_m, self.mean_m)
 
-        # shape_full_comb = generate_full((shape_1d_comb + exp), self.std_shape, self.mean_shape)
-        # shape_full_base = generate_full((shape_1d_base + exp), self.std_shape, self.mean_shape)
+        shape_full_comb = generate_full((shape_1d_comb + exp_1d_comb), self.std_shape, self.mean_shape)
+        shape_full_base = generate_full((shape_1d_base + exp_1d_base), self.std_shape, self.mean_shape)
 
-        shape_full_base = generate_full(shape_1d_base, self.std_shape, self.mean_shape)
-        shape_full_comb = generate_full(shape_1d_comb, self.std_shape, self.mean_shape)
+        # shape_full_base = generate_full(shape_1d_base, self.std_shape, self.mean_shape)
+        # shape_full_comb = generate_full(shape_1d_comb, self.std_shape, self.mean_shape)
 
         shade_base = generate_shade(lv_il, m_full, shape_full_base)
         shade_comb = generate_shade(lv_il, m_full, shape_full_comb)
@@ -176,19 +178,19 @@ class Nonlinear3DMMHelper:
             "g_img_mask_comb": g_img_mask_comb.float(),
 
             "shape_full_gt": shape_full_gt.float(),
-            "shade_gt": shade_gt.float(),
-            "mask_gt": mask_gt.float(),
-            "g_img_gt": g_img_gt.float(),
+            "shade_gt": shade_gt.float().cpu(),
+            "mask_gt": mask_gt.float().cpu(),
+            "g_img_gt": g_img_gt.float().cpu(),
 
             # for debugging
-            "g_img_raw_base": g_img_raw_base.float(),
-            "g_img_raw_ac_sb": g_img_raw_ac_sb.float(),
-            "g_img_raw_ab_sc": g_img_raw_ab_sc.float(),
-            "g_img_raw_comb": g_img_raw_comb.float(),
+            "g_img_raw_base": g_img_raw_base.float().cpu(),
+            "g_img_raw_ac_sb": g_img_raw_ac_sb.float().cpu(),
+            "g_img_raw_ab_sc": g_img_raw_ab_sc.float().cpu(),
+            "g_img_raw_comb": g_img_raw_comb.float().cpu(),
 
-            "g_img_shade_base": g_img_shade_base.float(),
-            "g_img_shade_comb": g_img_shade_comb.float(),
-            "g_img_shade_gt": g_img_shade_gt.float(),
+            "g_img_shade_base": g_img_shade_base.float().cpu(),
+            "g_img_shade_comb": g_img_shade_comb.float().cpu(),
+            "g_img_shade_gt": g_img_shade_gt.float().cpu(),
         }
 
     def run_model(self, **inputs):
@@ -296,7 +298,7 @@ class Nonlinear3DMMHelper:
                     self.logger_train.save_to_files(self.state_file_root_name, save_epoch)
                     self.logger_train.step()
 
-                    # self.validate(valid_dataloader, epoch, self.logger_train.get_step())
+                    self.validate(valid_dataloader, epoch, self.logger_train.get_step())
 
                     # np.save(f'samples/camera_{epoch}_{idx}', torch.stack(camera, dim=0).numpy())
                     # np.save(f'samples/il_{epoch}_{idx}', torch.stack(il, dim=0).numpy())
@@ -348,12 +350,12 @@ class Nonlinear3DMMHelper:
 
             print("total dataset size :", len(dataloader) * batch_size)
 
-            for idx, samples in enumerate(dataloader, 0):
+            for idx, samples in enumerate(tqdm(dataloader), 0):
                 loss_param = self.run_model(**self.sample_to_param(samples))
                 self.loss(**loss_param)
 
                 for key, loss_value in self.loss.losses.items():
-                    loss_value = loss_value.item()
+                    # loss_value = loss_value.item()
 
                     if key not in loss_avg:
                         loss_avg[key] = loss_value
@@ -369,7 +371,7 @@ class Nonlinear3DMMHelper:
                 loss_avg[key] /= len(dataloader)
                 print(key, f"(avg: {loss_avg[key]:02f}, max: {loss_max[key]:02f}, min: {loss_min[key]:02f})")
 
-            return loss_param, loss_avg, loss_max, loss_min
+        return loss_param, loss_avg, loss_max, loss_min
 
     def sample_to_param(self, samples):
         return {

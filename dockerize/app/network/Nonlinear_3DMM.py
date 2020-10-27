@@ -48,12 +48,13 @@ class Nonlinear3DMM(nn.Module):
         self.vt2pixel_u = torch.tensor(self.vt2pixel_u[:-1], dtype=dtype)
         self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=dtype)
 
-        ###################################### encoder
+        # encoder
         self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2,
                                   self.gfc_dim // 2, self.gfc_dim // 2, self.m_dim, self.il_dim)
 
         self.in_dim = self.nl_encoder.in_dim
 
+        # decoder
         self.albedo_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gf_dim * 10, self.tex_sz)
         self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
         self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
@@ -61,6 +62,10 @@ class Nonlinear3DMM(nn.Module):
         self.shape_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
         self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+
+        self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
+        self.exp_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        self.exp_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
 
         # self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         # self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
@@ -90,23 +95,36 @@ class Nonlinear3DMM(nn.Module):
         shape_1d_res = shape_1d_comb - shape_1d_base
 
         # exp
-        # exp_dec = self.exp_dec(lv_tex)
-        # exp_2d = self.exp_gen(exp_dec)
-        # exp = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
+        exp_dec = self.exp_dec(lv_tex)
+        exp_2d_base = self.exp_gen_base(exp_dec)
+        exp_2d_comb = self.exp_gen_comb(exp_dec)
 
+        exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
+        exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
+
+        exp_2d_res = exp_2d_base - exp_2d_comb
+        exp_1d_res = exp_1d_comb - exp_1d_base
         return dict(
             lv_m=lv_m,
             lv_il=lv_il,
+
             albedo_base=albedo_base,
             albedo_comb=albedo_comb,
             albedo_res=albedo_res,
+
             shape_2d_base=shape_2d_base,
             shape_2d_comb=shape_2d_comb,
             shape_1d_base=shape_1d_base,
             shape_1d_comb=shape_1d_comb,
             shape_2d_res=shape_2d_res,
             shape_1d_res=shape_1d_res,
-            # exp=exp
+
+            # exp_2d_base=exp_2d_base,
+            # exp_2d_comb=exp_2d_comb,
+            exp_1d_base=exp_1d_base,
+            exp_1d_comb=exp_1d_comb,
+            # exp_2d_res=exp_2d_res,
+            # exp_1d_res=exp_1d_res,
         )
 
     def make_1d(self, decoder_2d_result, vt2pixel_u, vt2pixel_v):

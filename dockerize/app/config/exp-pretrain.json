@@ -1,5 +1,5 @@
 {
-  "name": "pretrain",
+  "name": "epx-pretrain",
 
   "checkpoint_name": null,
   "checkpoint_root_path":  "/data/checkpoint",
@@ -13,7 +13,7 @@
   "prediction_dst_path": "/data/dataset/one_test/dst",
 
   "epoch":  40,
-  "batch_size": 5,
+  "batch_size": 4,
   "lr":  0.0002,
   "betas": [0.5, 0.999],
   "save_ratio":  0.1,
@@ -23,10 +23,10 @@
   "worker": 1,
 
   "train_dataset_frac":  1.0,
-  "valid_dataset_frac": 1.0,
+  "valid_dataset_frac": 0.2,
   "test_dataset_frac":  1.0,
 
-  "verbose": "debug",
+  "verbose": "info",
   "log_path":  "/data/logs",
   "log_loss_interval": 10,
   "log_image_interval": 200,
@@ -46,7 +46,7 @@
 
   "m_loss": 5,
   "shape_loss":  10,
-  "expression_loss": null,
+  "expression_loss": 10,
 
   "base_landmark_loss":  0.02,
   "comb_landmark_loss": 0.02,
