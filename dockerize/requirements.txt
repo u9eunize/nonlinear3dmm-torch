@@ -48,6 +48,6 @@ pytz==2020.1
 requests==2.23.0
 six==1.14.0
 soupsieve==2.0.1
-tensorboard==1.15.0
+tensorboard==2.3.0
 termcolor==1.1.0
 tqdm==4.46.0

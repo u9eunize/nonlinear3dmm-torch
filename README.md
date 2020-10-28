@@ -1,7 +1,8 @@
 # NonLinear3DMM-torch
 
-### k8s settings
+## k8s settings
 
+### nonlinear
 ```
 apiVersion: v1
 kind: Pod
@@ -38,6 +39,49 @@ spec:
           nvidia.com/gpu: '1'
       ports:
         - containerPort: 40000
+      volumeMounts:
+        - name: ag-pv-nonlinear-1
+          mountPath: /data
+        - name: dshm
+          mountPath: /dev/shm
+```
+
+### tensorboard
+
+```
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ag-1-nonlinear-tensorboard
+  namespace: agtexture
+  labels:
+    app: ag-1-uvmap
+spec:
+  nodeName: g7-1
+  volumes:
+    - name: ag-pv-nonlinear-1
+      persistentVolumeClaim:
+        claimName: pvc-ag-1-nonlinear
+    - name: dshm
+      emptyDir:
+        medium: Memory
+  imagePullSecrets:
+    - name: hpcd-registry-ag-registry
+  containers:
+    - name: ag-jhson
+      image: "ag-registry.222.122.67.52.nip.io:443/tensorboard:2.3.0"
+      command: ["/bin/bash","-c"]
+      args: 
+        - "tensorboard --logdir /data/logs --host 0.0.0.0 --port 6006"
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1Gi
+        requests:
+          cpu: 500m
+          memory: 1Gi
+      ports:
+        - containerPort: 6006
       volumeMounts:
         - name: ag-pv-nonlinear-1
           mountPath: /data
