@@ -320,6 +320,12 @@ class Loss:
     def comb_smoothness_loss(self, shape_2d_comb, **kwargs):
         return self._smoothness_loss_calculation(shape_2d_comb)
 
+    def base_exp_smoothness_loss(self, exp_2d_base, **kwargs):
+        return self._smoothness_loss_calculation(exp_2d_base)
+
+    def comb_exp_smoothness_loss(self, exp_2d_comb, **kwargs):
+        return self._smoothness_loss_calculation(exp_2d_comb)
+
     def symmetry_loss(self, albedo_base, **kwargs):
         albedo_flip = torch.flip(albedo_base, dims=[3])
         flip_diff = torch.max(torch.abs(albedo_base - albedo_flip), torch.ones_like(albedo_base) * 0.05)

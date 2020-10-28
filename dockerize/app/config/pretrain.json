@@ -1,5 +1,6 @@
 {
   "name": "pretrain",
+  "valid": false,
 
   "checkpoint_name": null,
   "checkpoint_root_path":  "/data/checkpoint",

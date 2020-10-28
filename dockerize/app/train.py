@@ -31,8 +31,9 @@ class Nonlinear3DMMHelper:
         self.logger_train = log_utils.NLLogger(self.name, "train")
         log_utils.set_logger("nl_train", self.logger_train)
 
-        self.logger_valid = log_utils.NLLogger(self.name, "valid")
-        log_utils.set_logger("nl_valid", self.logger_valid)
+        if CFG.valid:
+            self.logger_valid = log_utils.NLLogger(self.name, "valid")
+            log_utils.set_logger("nl_valid", self.logger_valid)
 
         self.state_file_root_name = join(CFG.checkpoint_root_path, self.name)
 
@@ -149,7 +150,7 @@ class Nonlinear3DMMHelper:
         g_img_comb = apply_mask(g_img_raw_comb, g_img_mask_comb, input_images)
 
         # ======= gt =======
-        shape_full_gt = generate_full(input_shape_labels, self.std_shape, self.mean_shape)
+        shape_full_gt = generate_full((input_shape_labels + input_exp_labels), self.std_shape, self.mean_shape)
         shade_gt = generate_shade(lv_il, m_full_gt, shape_full_gt)
         u_gt, v_gt, mask_gt = warping_flow(m_full_gt, shape_full_gt)
         g_img_gt = rendering_wflow(input_texture_labels, u_gt, v_gt)
@@ -298,7 +299,8 @@ class Nonlinear3DMMHelper:
                     self.logger_train.save_to_files(self.state_file_root_name, save_epoch)
                     self.logger_train.step()
 
-                    self.validate(valid_dataloader, epoch, self.logger_train.get_step())
+                    if CFG.valid:
+                        self.validate(valid_dataloader, epoch, self.logger_train.get_step())
 
                     # np.save(f'samples/camera_{epoch}_{idx}', torch.stack(camera, dim=0).numpy())
                     # np.save(f'samples/il_{epoch}_{idx}', torch.stack(il, dim=0).numpy())

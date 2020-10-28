@@ -1,5 +1,6 @@
 {
-  "name": "pretrain",
+  "name": "exp-pretrain",
+  "valid": false,
 
   "checkpoint_name": null,
   "checkpoint_root_path":  "/data/checkpoint",
@@ -23,10 +24,10 @@
   "worker": 1,
 
   "train_dataset_frac":  1.0,
-  "valid_dataset_frac": 1.0,
+  "valid_dataset_frac": 0.2,
   "test_dataset_frac":  1.0,
 
-  "verbose": "debug",
+  "verbose": "info",
   "log_path":  "/data/logs",
   "log_loss_interval": 10,
   "log_image_interval": 200,
@@ -46,15 +47,15 @@
 
   "m_loss": 5,
   "shape_loss":  10,
-  "expression_loss": null,
+  "expression_loss": 10,
 
   "base_landmark_loss":  0.02,
   "comb_landmark_loss": 0.02,
   "gt_landmark_loss":  0.02,
 
-  "base_texture_loss": 2,
-  "mix_ac_sb_texture_loss":  2,
-  "mix_ab_sc_texture_loss": 2,
+  "base_texture_loss": 10,
+  "mix_ac_sb_texture_loss": 10,
+  "mix_ab_sc_texture_loss": 10,
   "comb_texture_loss":  null,
 
   "base_pix_recon_loss": null,
@@ -73,10 +74,14 @@
   "const_albedo_loss": 10,
   "const_local_albedo_loss": 10,
   "shade_mag_loss":  null,
+
   "base_smoothness_loss": 5e5,
   "comb_smoothness_loss":  1,
-  "shape_residual_loss": 1,
-  "albedo_residual_loss":  1,
+  "base_exp_smoothness_loss": 5e5,
+  "comb_exp_smoothness_loss":  1,
+
+  "shape_residual_loss": null,
+  "albedo_residual_loss":  null,
 
   "random_camera": false,
   "random_expression":  false,

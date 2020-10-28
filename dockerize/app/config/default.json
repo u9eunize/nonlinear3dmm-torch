@@ -1,5 +1,6 @@
 {
   "name": "pretrain",
+  "valid": false,
 
   "checkpoint_name": null,
   "checkpoint_root_path":  "/checkpoint",
@@ -63,7 +64,7 @@
   "comb_pix_recon_loss":  null,
 
   "perceptual_layer": ["conv2d_1a", "conv2d_2a", "maxpool_3a", "conv2d_4a"],
-  "base_perceptual_recon_loss": null,
+  "base_perceptual_recon_loss": 5,
   "mix_ab_sc_perceptual_recon_loss": 10,
   "mix_ac_sb_perceptual_recon_loss": 10,
   "comb_perceptual_recon_loss":  null,
@@ -73,10 +74,14 @@
   "const_albedo_loss": 10,
   "const_local_albedo_loss": 10,
   "shade_mag_loss":  null,
+
   "base_smoothness_loss": 5e5,
   "comb_smoothness_loss":  1,
-  "shape_residual_loss": 1,
-  "albedo_residual_loss":  1,
+  "base_exp_smoothness_loss": 5e5,
+  "comb_exp_smoothness_loss":  1,
+
+  "shape_residual_loss": null,
+  "albedo_residual_loss":  null,
 
   "random_camera": false,
   "random_expression":  false,

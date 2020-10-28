@@ -119,8 +119,8 @@ class Nonlinear3DMM(nn.Module):
             shape_2d_res=shape_2d_res,
             shape_1d_res=shape_1d_res,
 
-            # exp_2d_base=exp_2d_base,
-            # exp_2d_comb=exp_2d_comb,
+            exp_2d_base=exp_2d_base,
+            exp_2d_comb=exp_2d_comb,
             exp_1d_base=exp_1d_base,
             exp_1d_comb=exp_1d_comb,
             # exp_2d_res=exp_2d_res,

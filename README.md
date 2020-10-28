@@ -1,12 +1,65 @@
 # NonLinear3DMM-torch
 
-## TODO
+### k8s settings
 
-- Docker automation
+```
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ag-1-nonlinear-pretrain
+  namespace: agtexture
+  labels:
+    app: ag-1-uvmap
+spec:
+  nodeName: g7-1
+  volumes:
+    - name: ag-pv-nonlinear-1
+      persistentVolumeClaim:
+        claimName: pvc-ag-1-nonlinear
+    - name: dshm
+      emptyDir:
+        medium: Memory
+  imagePullSecrets:
+    - name: hpcd-registry-ag-registry
+  containers:
+    - name: ag-jhson
+      image: "ag-registry.222.122.67.52.nip.io:443/nonlinear:proxy.1.0.6"
+      command: ["/bin/bash","-c"]
+      args: 
+        - "python setup.py install && python train.py --config_json config/k8s-default.json"
+      resources:
+        limits:
+          cpu: 4000m
+          memory: 14Gi
+          nvidia.com/gpu: '1'
+        requests:
+          cpu: 4000m
+          memory: 14Gi
+          nvidia.com/gpu: '1'
+      ports:
+        - containerPort: 40000
+      volumeMounts:
+        - name: ag-pv-nonlinear-1
+          mountPath: /data
+        - name: dshm
+          mountPath: /dev/shm
+```
 
+### using tensorboard
+
+```
+tensorboard --logdir_spec=./20201018,./20201019 --port 6006 --host 0.0.0.0
+```
 
 ## Build
 
+```
+sudo docker rm nonlinear
+sudo docker build -t ag-registry.222.122.67.52.nip.io:443/nonlinear:proxy.1.0.7 .
+sudo docker run -it -v /data/project/nonlinear3dmm-torch:/data --gpus all --name nonlinear --ipc=host ag-registry.222.122.67.52.nip.io:443/nonlinear:proxy.1.0.6 /bin/bash -c "python setup.py install && python train.py --config_json config/exp-pretrain.json"
+```
+
+### Trouble Shooting
 if you build fail
 
 1. Install nvidia-container-runtime:
@@ -30,4 +83,9 @@ if you build fail
     `sudo systemctl restart docker`
 
 4. Build image (now GPU available during build):
-    
+   
+   
+## TODO
+
+- Docker automation
+

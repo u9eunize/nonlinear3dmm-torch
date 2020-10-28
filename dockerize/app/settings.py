@@ -10,6 +10,7 @@ def parse():
     parser = argparse.ArgumentParser()
 
     #parser.add_argument("--train", type=strToBool, default=True, help="Train(True) or Demo(False)")
+    parser.add_argument("--valid", type=bool, default=False, help="do validation(true) or false (bug: don't set true)")
     # common
     parser.add_argument("--config_json", type=str, default=None, help="")
 
@@ -112,6 +113,8 @@ def parse():
     parser.add_argument("--shade_mag_loss", type=float, default=None, help="")
     parser.add_argument("--base_smoothness_loss", type=float, default=None, help="")
     parser.add_argument("--comb_smoothness_loss", type=float, default=None, help="")
+    parser.add_argument("--base_exp_smoothness_loss", type=float, default=None, help="")
+    parser.add_argument("--comb_exp_smoothness_loss", type=float, default=None, help="")
     parser.add_argument("--shape_residual_loss", type=float, default=None, help="")
     parser.add_argument("--albedo_residual_loss", type=float, default=None, help="")
 
