@@ -1,5 +1,6 @@
 from network.block import *
 from renderer.rendering_ops import *
+import utils
 from os.path import join
 
 
@@ -29,8 +30,8 @@ class Nonlinear3DMM(nn.Module):
         self.img_sz = img_sz
 
         # Basis
-        mu_shape, w_shape = load_Basel_basic('shape')
-        mu_exp, w_exp = load_Basel_basic('exp')
+        mu_shape, w_shape = utils.load_Basel_basic('shape')
+        mu_exp, w_exp = utils.load_Basel_basic('exp')
 
         self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype)
         self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM), dtype=dtype)
@@ -43,7 +44,7 @@ class Nonlinear3DMM(nn.Module):
         self.w_exp = torch.tensor(w_exp, dtype=dtype)
 
         # generate shape1d
-        self.vt2pixel_u, self.vt2pixel_v = load_3DMM_vt2pixel()
+        self.vt2pixel_u, self.vt2pixel_v = utils.load_3DMM_vt2pixel()
 
         self.vt2pixel_u = torch.tensor(self.vt2pixel_u[:-1], dtype=dtype)
         self.vt2pixel_v = torch.tensor(self.vt2pixel_v[:-1], dtype=dtype)
@@ -63,9 +64,10 @@ class Nonlinear3DMM(nn.Module):
         self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
         self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
 
-        self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
-        self.exp_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
-        self.exp_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        if CFG.using_expression:
+            self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
+            self.exp_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+            self.exp_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
 
         # self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         # self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
@@ -95,16 +97,19 @@ class Nonlinear3DMM(nn.Module):
         shape_1d_res = shape_1d_comb - shape_1d_base
 
         # exp
-        exp_dec = self.exp_dec(lv_tex)
-        exp_2d_base = self.exp_gen_base(exp_dec)
-        exp_2d_comb = self.exp_gen_comb(exp_dec)
 
-        exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
-        exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
+        if CFG.using_expression:
+            exp_dec = self.exp_dec(lv_tex)
+            exp_2d_base = self.exp_gen_base(exp_dec)
+            exp_2d_comb = self.exp_gen_comb(exp_dec)
 
-        exp_2d_res = exp_2d_base - exp_2d_comb
-        exp_1d_res = exp_1d_comb - exp_1d_base
-        return dict(
+            exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
+            exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
+
+        #exp_2d_res = exp_2d_base - exp_2d_comb
+        #exp_1d_res = exp_1d_comb - exp_1d_base
+
+        ret = dict(
             lv_m=lv_m,
             lv_il=lv_il,
 
@@ -118,14 +123,18 @@ class Nonlinear3DMM(nn.Module):
             shape_1d_comb=shape_1d_comb,
             shape_2d_res=shape_2d_res,
             shape_1d_res=shape_1d_res,
-
-            exp_2d_base=exp_2d_base,
-            exp_2d_comb=exp_2d_comb,
-            exp_1d_base=exp_1d_base,
-            exp_1d_comb=exp_1d_comb,
-            # exp_2d_res=exp_2d_res,
-            # exp_1d_res=exp_1d_res,
         )
+        if CFG.using_expression:
+            ret.update(dict(
+                exp_2d_base=exp_2d_base,
+                exp_2d_comb=exp_2d_comb,
+                exp_1d_base=exp_1d_base,
+                exp_1d_comb=exp_1d_comb,
+                # exp_2d_res=exp_2d_res,
+                # exp_1d_res=exp_1d_res,
+            ))
+
+        return ret
 
     def make_1d(self, decoder_2d_result, vt2pixel_u, vt2pixel_v):
         batch_size = decoder_2d_result.shape[0]

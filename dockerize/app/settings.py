@@ -1,7 +1,9 @@
 import argparse
 import sys
 import json
-
+import torch
+from os.path import join
+import numpy as np
 
 LOSS_TYPE_LIST = ["l1", "l2", "l2,1"]
 
@@ -11,6 +13,8 @@ def parse():
 
     #parser.add_argument("--train", type=strToBool, default=True, help="Train(True) or Demo(False)")
     parser.add_argument("--valid", type=bool, default=False, help="do validation(true) or false (bug: don't set true)")
+    parser.add_argument("--using_expression", type=bool, default=False, help="")
+
     # common
     parser.add_argument("--config_json", type=str, default=None, help="")
 
@@ -111,16 +115,19 @@ def parse():
     parser.add_argument("--const_albedo_loss", type=float, default=None, help="")
     parser.add_argument("--const_local_albedo_loss", type=float, default=None, help="")
     parser.add_argument("--shade_mag_loss", type=float, default=None, help="")
+
     parser.add_argument("--base_smoothness_loss", type=float, default=None, help="")
     parser.add_argument("--comb_smoothness_loss", type=float, default=None, help="")
     parser.add_argument("--base_exp_smoothness_loss", type=float, default=None, help="")
     parser.add_argument("--comb_exp_smoothness_loss", type=float, default=None, help="")
+
+    parser.add_argument("--smoothness_loss_type", type=str, default="l2", choices=LOSS_TYPE_LIST, help="")
+
     parser.add_argument("--shape_residual_loss", type=float, default=None, help="")
     parser.add_argument("--albedo_residual_loss", type=float, default=None, help="")
 
     parser.add_argument("--batchwise_white_shading_loss_type", type=str, default="l2", choices=LOSS_TYPE_LIST, help="")
     parser.add_argument("--symmetry_loss_type", type=str, default="l1", choices=LOSS_TYPE_LIST, help="")
-    parser.add_argument("--smoothness_loss_type", type=str, default="l2", choices=LOSS_TYPE_LIST, help="")
     parser.add_argument("--const_albedo_loss_type", type=str, default="l1", choices=LOSS_TYPE_LIST, help="")
     parser.add_argument("--const_local_albedo_loss_type", type=str, default="l2,1", choices=LOSS_TYPE_LIST, help="")
     parser.add_argument("--shade_mag_loss_type", type=str, default="l1", choices=LOSS_TYPE_LIST, help="")
@@ -167,7 +174,40 @@ def parse():
     for k, v in args.__dict__.items():
         print(k, ":", v)
     print("--- training setting finish ---\n\n")
+
     return args, losses
+
+
+def init_3dmm_settings():
+    import utils
+
+    mu_shape, w_shape = utils.load_Basel_basic('shape')
+    mu_exp, w_exp = utils.load_Basel_basic('exp')
+    tri = torch.from_numpy(utils.load_3DMM_tri()).to(CFG.device)
+    tri_trans = tri.transpose(0, 1)
+    face = torch.zeros_like(tri_trans)
+    face[:, 0:1] = tri_trans[:, 0:1]
+    face[:, 1:2] = tri_trans[:, 2:3]
+    face[:, 2:3] = tri_trans[:, 1:2]
+    face = face.unsqueeze(0).repeat(CFG.batch_size, 1, 1)
+
+    global_3dmm_setting = dict(
+        mean_shape=torch.tensor(mu_shape + mu_exp, dtype=torch.float32).to(CFG.device),
+        std_shape=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
+
+        mean_m=torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=torch.float32).to(CFG.device),
+        std_m=torch.tensor(np.load(join(CFG.dataset_path, 'std_m.npy')), dtype=torch.float32).to(CFG.device),
+
+        w_shape=torch.tensor(w_shape, dtype=torch.float32).to(CFG.device),
+        w_exp=torch.tensor(w_exp, dtype=torch.float32).to(CFG.device),
+
+        tri=tri,
+        face=face,
+    )
+
+    for key, value in global_3dmm_setting.items():
+        setattr(CFG, key, value)
+
 
 
 CFG, LOSSES = parse()

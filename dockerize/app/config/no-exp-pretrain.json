@@ -1,7 +1,7 @@
 {
-  "name": "exp-pretrain",
+  "name": "no-exp-pretrain",
   "valid": false,
-  "using_expression": true,
+  "using_expression": false,
 
   "checkpoint_name": null,
   "checkpoint_root_path":  "/data/checkpoint",
@@ -15,9 +15,9 @@
   "prediction_dst_path": "/data/dataset/one_test/dst",
 
   "epoch":  40,
-  "batch_size": 4,
-  "lr":  0.00005,
-  "betas": [0.9, 0.999],
+  "batch_size": 5,
+  "lr":  0.0001,
+  "betas": [0.5, 0.999],
   "save_ratio":  0.1,
 
   "ngpu": 1,
@@ -48,26 +48,26 @@
 
   "m_loss": 5,
   "shape_loss":  10,
-  "expression_loss": 10,
+  "expression_loss": null,
 
   "base_landmark_loss":  0.02,
   "comb_landmark_loss": 0.02,
   "gt_landmark_loss":  0.02,
 
-  "base_texture_loss": 20,
-  "mix_ac_sb_texture_loss":  20,
-  "mix_ab_sc_texture_loss": 20,
+  "base_texture_loss": 2.5,
+  "mix_ac_sb_texture_loss":  2.5,
+  "mix_ab_sc_texture_loss": 2.5,
   "comb_texture_loss":  null,
 
-  "base_pix_recon_loss": null,
-  "mix_ab_sc_pix_recon_loss":  null,
-  "mix_ac_sb_pix_recon_loss": null,
+  "base_pix_recon_loss": 500,
+  "mix_ab_sc_pix_recon_loss":  1000,
+  "mix_ac_sb_pix_recon_loss": 1000,
   "comb_pix_recon_loss":  null,
 
   "perceptual_layer": ["conv2d_1a", "conv2d_2a", "maxpool_3a", "conv2d_4a"],
-  "base_perceptual_recon_loss": 2.5,
-  "mix_ab_sc_perceptual_recon_loss": 5,
-  "mix_ac_sb_perceptual_recon_loss": 5,
+  "base_perceptual_recon_loss": 5,
+  "mix_ab_sc_perceptual_recon_loss": 10,
+  "mix_ac_sb_perceptual_recon_loss": 10,
   "comb_perceptual_recon_loss":  null,
 
   "batchwise_white_shading_loss": 10,
@@ -76,10 +76,10 @@
   "const_local_albedo_loss": 10,
   "shade_mag_loss":  null,
 
-  "base_smoothness_loss": 2.5e5,
+  "base_smoothness_loss": 5e5,
   "comb_smoothness_loss":  1,
-  "base_exp_smoothness_loss": 2.5e5,
-  "comb_exp_smoothness_loss": 1,
+  "base_exp_smoothness_loss": null,
+  "comb_exp_smoothness_loss": null,
 
   "shape_residual_loss": null,
   "albedo_residual_loss":  null,

@@ -5,9 +5,10 @@ from network.facenet import InceptionResnetV1
 
 from settings import CFG
 from os.path import join
-from torchvision.models.vgg import vgg19_bn
 from datetime import datetime
 
+import numpy as np
+import utils
 
 activation = {}
 
@@ -78,8 +79,8 @@ class Loss:
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        mu_shape, w_shape = load_Basel_basic('shape')
-        mu_exp, w_exp = load_Basel_basic('exp')
+        mu_shape, w_shape = utils.load_Basel_basic('shape')
+        mu_exp, w_exp = utils.load_Basel_basic('exp')
 
         self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype)
         self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=dtype)
@@ -87,7 +88,7 @@ class Loss:
         self.mean_m = torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=dtype)
         self.std_m = torch.tensor(np.load(join(CFG.dataset_path, 'std_m.npy')), dtype=dtype)
 
-        self.uv_tri, self.uv_mask = load_3DMM_tri_2d(with_mask=True)
+        self.uv_tri, self.uv_mask = utils.load_3DMM_tri_2d(with_mask=True)
         self.uv_tri = torch.tensor(self.uv_tri)
         self.uv_mask = torch.tensor(self.uv_mask)
 
@@ -183,13 +184,28 @@ class Loss:
         return landmark_u, landmark_v
 
     def base_landmark_loss(self, lv_m, shape_1d_base, input_m_labels, input_shape_labels, **kwargs):
-        return self._landmark_loss_calculation(lv_m, shape_1d_base, input_m_labels, input_shape_labels)
+        shape_1d = shape_1d_base
+        input_shape_1d = input_shape_labels
+        if CFG.using_expression:
+            shape_1d = shape_1d + kwargs["exp_1d_base"]
+            input_shape_1d = input_shape_1d + kwargs["input_exp_labels"]
+        return self._landmark_loss_calculation(lv_m, shape_1d, input_m_labels, input_shape_1d)
 
     def comb_landmark_loss(self, lv_m, shape_1d_comb, input_m_labels, input_shape_labels, **kwargs):
-        return self._landmark_loss_calculation(lv_m, shape_1d_comb, input_m_labels, input_shape_labels)
+        shape_1d = shape_1d_comb
+        input_shape_1d = input_shape_labels
+        if CFG.using_expression:
+            shape_1d = shape_1d + kwargs["exp_1d_comb"]
+            input_shape_1d = input_shape_1d + kwargs["input_exp_labels"]
+        return self._landmark_loss_calculation(lv_m, shape_1d, input_m_labels, input_shape_1d)
 
     def gt_landmark_loss(self, shape_1d_comb, input_m_labels, input_shape_labels, **kwargs):
-        return self._landmark_loss_calculation(input_m_labels, shape_1d_comb, input_m_labels, input_shape_labels)
+        shape_1d = shape_1d_comb
+        input_shape_1d = input_shape_labels
+        if CFG.using_expression:
+            shape_1d = shape_1d + kwargs["exp_1d_comb"]
+            input_shape_1d = input_shape_1d + kwargs["input_exp_labels"]
+        return self._landmark_loss_calculation(input_m_labels, shape_1d, input_m_labels, input_shape_1d)
 
     def batchwise_white_shading_loss(self, shade_base, **kwargs):
         uv_mask = self.uv_mask.unsqueeze(0).unsqueeze(0)

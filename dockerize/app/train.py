@@ -7,7 +7,7 @@ from configure_dataset import *
 from renderer.rendering_ops import *
 from loss import Loss
 import log_utils
-from settings import CFG, LOSSES
+from settings import CFG, LOSSES, init_3dmm_settings
 
 
 class Nonlinear3DMMHelper:
@@ -100,7 +100,6 @@ class Nonlinear3DMMHelper:
 
     def rendering(self, inputs, infer):
         input_images = inputs["input_images"]
-        input_exp_labels = inputs["input_exp_labels"]
         input_shape_labels = inputs["input_shape_labels"]
         input_masks = inputs["input_masks"]
         input_m_labels = inputs["input_m_labels"]
@@ -112,15 +111,19 @@ class Nonlinear3DMMHelper:
         albedo_comb = infer["albedo_comb"]
         shape_1d_comb = infer["shape_1d_comb"]
         shape_1d_base = infer["shape_1d_base"]
-        exp_1d_comb = infer["exp_1d_comb"]
-        exp_1d_base = infer["exp_1d_base"]
         # exp = infer["exp"]
 
         m_full = generate_full(lv_m, self.std_m, self.mean_m)
         m_full_gt = generate_full(input_m_labels, self.std_m, self.mean_m)
 
-        shape_full_comb = generate_full((shape_1d_comb + exp_1d_comb), self.std_shape, self.mean_shape)
-        shape_full_base = generate_full((shape_1d_base + exp_1d_base), self.std_shape, self.mean_shape)
+        if CFG.using_expression:
+            exp_1d_comb = infer["exp_1d_comb"]
+            exp_1d_base = infer["exp_1d_base"]
+            shape_full_comb = generate_full((shape_1d_comb + exp_1d_comb), self.std_shape, self.mean_shape)
+            shape_full_base = generate_full((shape_1d_base + exp_1d_base), self.std_shape, self.mean_shape)
+        else:
+            shape_full_comb = generate_full(shape_1d_comb, self.std_shape, self.mean_shape)
+            shape_full_base = generate_full(shape_1d_base, self.std_shape, self.mean_shape)
 
         # shape_full_base = generate_full(shape_1d_base, self.std_shape, self.mean_shape)
         # shape_full_comb = generate_full(shape_1d_comb, self.std_shape, self.mean_shape)
@@ -150,7 +153,11 @@ class Nonlinear3DMMHelper:
         g_img_comb = apply_mask(g_img_raw_comb, g_img_mask_comb, input_images)
 
         # ======= gt =======
-        shape_full_gt = generate_full((input_shape_labels + input_exp_labels), self.std_shape, self.mean_shape)
+        if CFG.using_expression:
+            input_exp_labels = inputs["input_exp_labels"]
+            shape_full_gt = generate_full((input_shape_labels + input_exp_labels), self.std_shape, self.mean_shape)
+        else:
+            shape_full_gt = generate_full(input_shape_labels, self.std_shape, self.mean_shape)
         shade_gt = generate_shade(lv_il, m_full_gt, shape_full_gt)
         u_gt, v_gt, mask_gt = warping_flow(m_full_gt, shape_full_gt)
         g_img_gt = rendering_wflow(input_texture_labels, u_gt, v_gt)
@@ -435,6 +442,8 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         # 'mix_ac_sb_texture': 0.8,
         # 'mix_ab_sc_texture': 0.8,
     }
+
+    init_3dmm_settings()
 
     pretrained_helper = Nonlinear3DMMHelper(LOSSES, decay_per_epoch)
     pretrained_helper.train()

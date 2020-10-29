@@ -5,6 +5,7 @@ from datetime import datetime
 import torch
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
+from renderer.rendering_ops import generate_full
 from utils import get_checkpoint_dir
 
 from settings import CFG
@@ -64,6 +65,14 @@ class NLLogger:
         result = torchvision.utils.make_grid(torch.cat(result, dim=0), nrow=row_limit).unsqueeze(0)
 
         self._write(interval, f"{name}", (NLLogger.add_images, result))
+
+    def write_mesh(self, name, data, interval=CFG.log_image_interval):
+        vertices = data["vertices"]
+        vertices = generate_full(vertices, CFG.std_shape, CFG.mean_shape)
+        vertices = vertices.view((CFG.batch_size, -1, 3))
+        data["vertices"] = vertices[:1, :, :].clone().cpu()
+        data["faces"] = CFG.face[:1, :CFG.tri_num, :].clone().cpu()
+        self._write(interval, f"{name}", (NLLogger.add_mesh, data))
 
     def save_to_files(self, path, epoch):
         for interval, logs in self.holder.items():
@@ -137,6 +146,26 @@ class NLLogger:
             "tex_mix_ab_sc",
         ], interval=interval)
 
+        self.write_mesh("gt_shape_mesh", {
+            "vertices": loss_params["input_shape_labels"] + loss_params["input_exp_labels"],
+        }, interval=interval)
+
+        self.write_mesh("base_shape_mesh", {
+            "vertices": loss_params["shape_1d_base"],
+        }, interval=interval)
+        self.write_mesh("comb_shape_mesh", {
+            "vertices": loss_params["shape_1d_comb"],
+        }, interval=interval)
+
+        if CFG.using_expression:
+            self.write_mesh("base_shape_mesh_with_exp", {
+                "vertices": loss_params["shape_1d_base"] + loss_params["exp_1d_base"],
+            }, interval=interval)
+
+            self.write_mesh("comb_shape_mesh_with_exp", {
+                "vertices": loss_params["shape_1d_comb"] + loss_params["exp_1d_comb"],
+            }, interval=interval)
+
         # self.write_image("g_images_rand", [
         #     loss_params["input_images"],
         #     loss_params["g_images"],
@@ -192,6 +221,12 @@ class NLLogger:
     @staticmethod
     def add_scalar(writer, name, data, step):
         writer.add_scalar(name, data, step)
+
+    @staticmethod
+    def add_mesh(writer, name, data, step):
+        writer.add_mesh(name, **data, global_step=step)
+
+
 
 
 _LOG_DICT = dict()

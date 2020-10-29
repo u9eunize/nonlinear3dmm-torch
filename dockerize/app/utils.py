@@ -20,6 +20,9 @@ from torchvision.utils import save_image
 from torchvision.utils import make_grid
 
 from settings import CFG
+import importlib
+importlib.import_module('settings', 'CFG')
+
 
 try:
     from tqdm.auto import tqdm  # automatically select proper tqdm submodule if available

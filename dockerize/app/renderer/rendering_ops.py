@@ -2,8 +2,11 @@ import os
 import torch
 import torch.nn.functional as F
 import ZBuffer_cuda
+
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-from utils import *
+
+import math
+import utils
 from settings import CFG
 
 
@@ -17,7 +20,7 @@ def minmax(vec):
 
 def generate_texture(albedo, shade, is_clamp=False):
     tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
-    # tex = torch.clamp(tex, 0, 1)
+
     if is_clamp:
         tex = torch.clamp(tex, 0, 1)
     return tex
@@ -90,9 +93,9 @@ def ZBuffer_Rendering_CUDA_op_v2_sz224_torch(s2d, tri, vis):
 def warping_flow(m, mshape, output_size=96, is_reduce=False):
     batch_size = mshape.shape[0]
 
-    tri = load_3DMM_tri(is_reduce)
-    vertex_tri = load_3DMM_vertex_tri(is_reduce)
-    vt2pixel_u, vt2pixel_v = load_FaceAlignment_vt2pixel(is_reduce)
+    tri = utils.load_3DMM_tri(is_reduce)
+    vertex_tri = utils.load_3DMM_vertex_tri(is_reduce)
+    vt2pixel_u, vt2pixel_v = utils.load_FaceAlignment_vt2pixel(is_reduce)
 
     tri = torch.from_numpy(tri).cuda().long()  # [3, TRI_NUM + 1]
     vertex_tri = torch.from_numpy(vertex_tri).cuda()  # [8, VERTEX_NUM]
@@ -306,7 +309,7 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
 def compute_landmarks_torch(m, shape):
     batch_size = m.shape[0]
 
-    kpts = torch.from_numpy(load_3DMM_kpts())
+    kpts = torch.from_numpy(utils.load_3DMM_kpts())
     kpts_num = kpts.shape[0]
     indices = torch.zeros([batch_size, kpts_num, 2]).int()
     for i in range(batch_size):
@@ -440,11 +443,11 @@ def generate_shade(il, m, mshape, is_with_normal=False, is_clamp=False):
     batch_size = il.shape[0]
 
     # load 3DMM files
-    tri = torch.from_numpy(load_3DMM_tri())  # [3, TRI_NUM + 1]
-    vertex_tri = torch.from_numpy(load_3DMM_vertex_tri())  # [8, VERTEX_NUM]
-    vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel) for vt2pixel in load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
-    tri_2d = torch.from_numpy(load_3DMM_tri_2d())  # [192, 224] (Fragment shader)
-    tri_2d_barycoord = torch.from_numpy(load_3DMM_tri_2d_barycoord()).cuda()  # [192, 224, 3]
+    tri = torch.from_numpy(utils.load_3DMM_tri())  # [3, TRI_NUM + 1]
+    vertex_tri = torch.from_numpy(utils.load_3DMM_vertex_tri())  # [8, VERTEX_NUM]
+    vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel) for vt2pixel in utils.load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
+    tri_2d = torch.from_numpy(utils.load_3DMM_tri_2d())  # [192, 224] (Fragment shader)
+    tri_2d_barycoord = torch.from_numpy(utils.load_3DMM_tri_2d_barycoord()).cuda()  # [192, 224, 3]
 
     # 삼각형의 각 vertex별로 나눈 것
     tri2vt1 = tri[0, :]
