@@ -1,3 +1,4 @@
+from functools import reduce
 from pytz import timezone
 from datetime import datetime
 from tqdm import tqdm
@@ -42,20 +43,6 @@ class Nonlinear3DMMHelper:
 
         # Load model
         self.net = Nonlinear3DMM().to(CFG.device)
-        # self.net = Nonlinear3DMM_UNet().to(CFG.device)
-
-        # Basis
-        mu_shape, w_shape = load_Basel_basic('shape')
-        mu_exp, w_exp = load_Basel_basic('exp')
-
-        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype).to(CFG.device)
-        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=dtype).to(CFG.device)
-
-        self.mean_m = torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=dtype).to(CFG.device)
-        self.std_m = torch.tensor(np.load(join(CFG.dataset_path, 'std_m.npy')), dtype=dtype).to(CFG.device)
-
-        self.w_shape = torch.tensor(w_shape, dtype=dtype).to(CFG.device)
-        self.w_exp = torch.tensor(w_exp, dtype=dtype).to(CFG.device)
 
         if True:
             self.random_m_samples = []
@@ -64,142 +51,21 @@ class Nonlinear3DMMHelper:
         else:
             pass
 
-        """
-        general loss
-        {
-            "m": 5,
-            "texture": 0.5, (기본적으로는 * 1, 만약 recon 안쓰면 * 5)
-            "reconstruction": 10, (base acsb absc comb  * 1 * 2 * 2 * 0) / 2
-            "landmark": 0.02 (base - gt, comb - gt)
-            "perceptual": 2,
-        }
-        
-        base loss (regularization 관련)
-        {
-            "shape": 10,
-            "batchwise_white_shading": 10,
-            "const_albedo": 10,
-            "const_local_albedo": 10,
-            "symmetry": 10,
-            "shade_mag": 1,
-            "smoothness": 5e5
-        }
-        
-        comb loss
-        {
-            "gradiff": 10,
-            "smoothness": 1
-        }
-        
-        res loss
-        {
-            "res_ssymmetry": 100,
-            "residual"
-        }
-        """
+    def rendering_for_train(self, lv_m, lv_il, albedo_base, albedo_comb,
+                            shape_1d_base, shape_1d_comb, exp_1d_base, exp_1d_comb,
+                            input_images, input_masks, **kwargs):
 
-    def rendering(self, inputs, infer):
-        input_images = inputs["input_images"]
-        input_shape_labels = inputs["input_shape_labels"]
-        input_masks = inputs["input_masks"]
-        input_m_labels = inputs["input_m_labels"]
-        input_texture_labels = inputs["input_texture_labels"]
+        base = render_all(lv_m, lv_il, albedo_base, shape_1d_base, exp_1d_base,
+                          input_mask=input_masks, input_background=input_images, post_fix="_base")
+        comb = render_all(lv_m, lv_il, albedo_comb, shape_1d_comb, exp_1d_comb,
+                          input_mask=input_masks, input_background=input_images, post_fix="_comb")
 
-        lv_m = infer["lv_m"]
-        lv_il = infer["lv_il"]
-        albedo_base = infer["albedo_base"]
-        albedo_comb = infer["albedo_comb"]
-        shape_1d_comb = infer["shape_1d_comb"]
-        shape_1d_base = infer["shape_1d_base"]
-        # exp = infer["exp"]
+        mix = render_mix(albedo_base, base["shade_base"], albedo_comb, comb["shade_comb"],
+                         base["u_base"], base["v_base"], comb["u_comb"], comb["v_comb"],
+                         mask_base=base["g_img_mask_base"], mask_comb=comb["g_img_mask_comb"],
+                         input_mask=input_masks, input_background=input_images)
 
-        m_full = generate_full(lv_m, self.std_m, self.mean_m)
-        m_full_gt = generate_full(input_m_labels, self.std_m, self.mean_m)
-
-        if CFG.using_expression:
-            exp_1d_comb = infer["exp_1d_comb"]
-            exp_1d_base = infer["exp_1d_base"]
-            shape_full_comb = generate_full((shape_1d_comb + exp_1d_comb), self.std_shape, self.mean_shape)
-            shape_full_base = generate_full((shape_1d_base + exp_1d_base), self.std_shape, self.mean_shape)
-        else:
-            shape_full_comb = generate_full(shape_1d_comb, self.std_shape, self.mean_shape)
-            shape_full_base = generate_full(shape_1d_base, self.std_shape, self.mean_shape)
-
-        # shape_full_base = generate_full(shape_1d_base, self.std_shape, self.mean_shape)
-        # shape_full_comb = generate_full(shape_1d_comb, self.std_shape, self.mean_shape)
-
-        shade_base = generate_shade(lv_il, m_full, shape_full_base)
-        shade_comb = generate_shade(lv_il, m_full, shape_full_comb)
-
-        tex_base = generate_texture(albedo_base, shade_base)
-        tex_mix_ac_sb = generate_texture(albedo_comb, shade_base)
-        tex_mix_ab_sc = generate_texture(albedo_base, shade_comb)  # ab = albedo_base, sc = shape_comb
-        tex_comb = generate_texture(albedo_comb, shade_comb)
-
-        u_base, v_base, mask_base = warping_flow(m_full, shape_full_base)
-        u_comb, v_comb, mask_comb = warping_flow(m_full, shape_full_comb)
-
-        g_img_mask_base = mask_base.unsqueeze(1) * input_masks
-        g_img_mask_comb = mask_comb.unsqueeze(1) * input_masks
-
-        g_img_raw_base = rendering_wflow(tex_base, u_base, v_base)
-        g_img_raw_ac_sb = rendering_wflow(tex_mix_ac_sb, u_base, v_base)
-        g_img_raw_ab_sc = rendering_wflow(tex_mix_ab_sc, u_comb, v_comb)
-        g_img_raw_comb = rendering_wflow(tex_comb, u_comb, v_comb)
-
-        g_img_base = apply_mask(g_img_raw_base, g_img_mask_base, input_images)
-        g_img_ac_sb = apply_mask(g_img_raw_ac_sb, g_img_mask_base, input_images)
-        g_img_ab_sc = apply_mask(g_img_raw_ab_sc, g_img_mask_comb, input_images)
-        g_img_comb = apply_mask(g_img_raw_comb, g_img_mask_comb, input_images)
-
-        # ======= gt =======
-        if CFG.using_expression:
-            input_exp_labels = inputs["input_exp_labels"]
-            shape_full_gt = generate_full((input_shape_labels + input_exp_labels), self.std_shape, self.mean_shape)
-        else:
-            shape_full_gt = generate_full(input_shape_labels, self.std_shape, self.mean_shape)
-        shade_gt = generate_shade(lv_il, m_full_gt, shape_full_gt)
-        u_gt, v_gt, mask_gt = warping_flow(m_full_gt, shape_full_gt)
-        g_img_gt = rendering_wflow(input_texture_labels, u_gt, v_gt)
-
-        # for debugging
-        g_img_shade_base = rendering_wflow(shade_base, u_base, v_base)
-        g_img_shade_comb = rendering_wflow(shade_comb, u_comb, v_comb)
-        g_img_shade_gt = rendering_wflow(shade_gt, u_gt, v_gt)
-
-        return {
-            "shade_base": shade_base.float(),
-            "shade_comb": shade_comb.float(),
-
-            "tex_base": tex_base.float(),
-            "tex_mix_ac_sb": tex_mix_ac_sb.float(),
-            "tex_mix_ab_sc": tex_mix_ab_sc.float(),
-            "tex_comb": tex_comb.float(),
-
-            "g_img_base": g_img_base.float(),
-            "g_img_mask_base": g_img_mask_base.float(),
-
-            "g_img_ac_sb": g_img_ac_sb.float(),
-            "g_img_ab_sc": g_img_ab_sc.float(),
-
-            "g_img_comb": g_img_comb.float(),
-            "g_img_mask_comb": g_img_mask_comb.float(),
-
-            "shape_full_gt": shape_full_gt.float(),
-            "shade_gt": shade_gt.float().cpu(),
-            "mask_gt": mask_gt.float().cpu(),
-            "g_img_gt": g_img_gt.float().cpu(),
-
-            # for debugging
-            "g_img_raw_base": g_img_raw_base.float().cpu(),
-            "g_img_raw_ac_sb": g_img_raw_ac_sb.float().cpu(),
-            "g_img_raw_ab_sc": g_img_raw_ab_sc.float().cpu(),
-            "g_img_raw_comb": g_img_raw_comb.float().cpu(),
-
-            "g_img_shade_base": g_img_shade_base.float().cpu(),
-            "g_img_shade_comb": g_img_shade_comb.float().cpu(),
-            "g_img_shade_gt": g_img_shade_gt.float().cpu(),
-        }
+        return {**base, **comb, **mix}
 
     def run_model(self, **inputs):
         # lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp = self.net(input_images)
@@ -211,7 +77,7 @@ class Nonlinear3DMMHelper:
         self.loss.time_end("infer")
 
         self.loss.time_start("render")
-        renderer_dict = self.rendering(inputs, infer)
+        renderer_dict = self.rendering_for_train(**{**infer, **inputs})
         self.loss.time_end("render")
 
         mask_dict = generate_tex_mask(inputs["input_texture_labels"], inputs["input_texture_masks"])
@@ -294,7 +160,7 @@ class Nonlinear3DMMHelper:
 
                 self.loss.time_start("set_log")
                 self.logger_train.write_loss_scalar(self.loss)
-                self.logger_train.write_loss_images(loss_param)
+                self.logger_train.write_loss_images_lazy(loss_param)
 
                 if self.logger_train.get_step() % save_per == 0:
                     save_epoch = epoch

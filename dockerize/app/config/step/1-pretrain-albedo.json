@@ -1,7 +1,8 @@
 {
-  "name": "no-exp-pretrain",
+  "name": "1-pretrain-albedo",
   "valid": false,
   "using_expression": false,
+  "using_albedo_as_tex": true,
 
   "checkpoint_name": null,
   "checkpoint_root_path":  "/data/checkpoint",
@@ -15,8 +16,8 @@
   "prediction_dst_path": "/data/dataset/one_test/dst",
 
   "epoch":  40,
-  "batch_size": 5,
-  "lr":  0.0001,
+  "batch_size": 8,
+  "lr":  0.00005,
   "betas": [0.5, 0.999],
   "save_ratio":  0.1,
 
@@ -51,12 +52,14 @@
   "expression_loss": null,
 
   "base_landmark_loss":  0.02,
-  "comb_landmark_loss": 0,
-  "gt_landmark_loss":  0,
+  "comb_landmark_loss": null,
+  "gt_landmark_loss":  null,
 
-  "base_texture_loss": 10000,
+  "base_texture_loss": 1000,
   "mix_ac_sb_texture_loss":  null,
   "mix_ab_sc_texture_loss": null,
+  "mix_ac_sg_texture_loss":  null,
+  "mix_ab_sg_texture_loss": null,
   "comb_texture_loss":  null,
 
   "base_pix_recon_loss": null,
@@ -74,9 +77,9 @@
   "symmetry_loss":  10,
   "const_albedo_loss": 10,
   "const_local_albedo_loss": 10,
-  "shade_mag_loss":  null,
+  "shade_mag_loss":  1,
 
-  "base_smoothness_loss": 5e4,
+  "base_smoothness_loss": 5e5,
   "comb_smoothness_loss":  null,
   "base_exp_smoothness_loss": null,
   "comb_exp_smoothness_loss": null,

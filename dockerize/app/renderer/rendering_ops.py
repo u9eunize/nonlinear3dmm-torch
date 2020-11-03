@@ -9,8 +9,78 @@ import math
 import utils
 from settings import CFG
 
+#
+# def generate_full(vec, std, mean):
+#     return vec * std + mean
 
-def generate_full(vec, std, mean):
+
+def render_all(lv_m, lv_il, albedo, shape_1d, exp_1d,
+               input_mask=None, input_background=None, post_fix="",
+               using_expression=CFG.using_expression,
+               using_albedo_as_tex=CFG.using_albedo_as_tex):
+    m_full = generate_full(lv_m, "m")
+    shape_full = generate_full(shape_1d, "shape")
+    exp_full = generate_full(exp_1d, "exp")
+
+    if using_expression:
+        shape_final = shape_full + exp_full
+    else:
+        shape_final = shape_full
+
+    shade = generate_shade(lv_il, m_full, shape_final)
+    tex = albedo if using_albedo_as_tex else generate_texture(albedo, shade)
+
+    u, v, mask = warping_flow(m_full, shape_final)
+    mask = mask.unsqueeze(1)
+    gen_img = rendering_wflow(tex, u, v)
+
+    masked_img_dict = dict()
+    if input_mask is not None:
+        mask = mask * input_mask
+        gen_img = apply_mask(gen_img, mask, input_background)
+
+    return {
+        f"shade{post_fix}": shade,
+        f"tex{post_fix}": tex,
+        f"u{post_fix}": u,
+        f"v{post_fix}": v,
+        f"g_img_mask{post_fix}": mask,
+        f"g_img{post_fix}": gen_img,
+        **masked_img_dict
+    }
+
+
+def render_mix(albedo_base, shade_base, albedo_comb, shade_comb,
+               u_base, v_base, u_comb, v_comb, mask_base=None, mask_comb=None,
+               input_mask=None, input_background=None,
+               using_albedo_as_tex=CFG.using_albedo_as_tex):
+    if using_albedo_as_tex:
+        tex_mix_ac_sb = albedo_comb
+        tex_mix_ab_sc = albedo_base
+    else:
+        tex_mix_ac_sb = generate_texture(albedo_comb, shade_base)
+        tex_mix_ab_sc = generate_texture(albedo_base, shade_comb)
+
+    gen_img_ac_sb = rendering_wflow(tex_mix_ac_sb, u_base, v_base)
+    gen_img_ab_sc = rendering_wflow(tex_mix_ab_sc, u_comb, v_comb)
+
+    if mask_base is not None and mask_comb is not None:
+        gen_img_ac_sb = apply_mask(gen_img_ac_sb, mask_base * input_mask, input_background)
+        gen_img_ab_sc = apply_mask(gen_img_ab_sc, mask_comb * input_mask, input_background)
+
+    return {
+        "tex_mix_ac_sb": tex_mix_ac_sb,
+        "tex_mix_ab_sc": tex_mix_ab_sc,
+        "g_img_ac_sb": gen_img_ac_sb,
+        "g_img_ab_sc": gen_img_ab_sc,
+    }
+
+
+def generate_full(vec, kind="shape"):
+    assert kind in ["shape", "m", "exp"]
+    std = getattr(CFG, f"std_{kind}")
+    mean = getattr(CFG, f"mean_{kind}")
+
     return vec * std + mean
 
 
@@ -65,20 +135,6 @@ def renderer_random(m_full, tex, shape_full, postfix=""):
         "g_images_mask"+postfix: g_images_mask.unsqueeze(1).repeat(1, 3, 1, 1),
     }
     return param_dict
-
-
-def render_from_texture(m, tex, shape, images, tex_masks, std_m, mean_m, std_shape, mean_shape):
-
-    g_images_gt, g_images_mask_gt = warp_texture_torch(tex, m * std_m + mean_m, shape * std_shape + mean_shape)
-
-#    g_images_mask_render = tex_masks * g_images_mask_gt.unsqueeze(1).repeat(1, 3, 1, 1)
-#    g_images_render = g_images_gt * g_images_mask_render + images * (torch.ones_like(g_images_mask_render) - g_images_mask_render)
-
-    param_dict = {
-        "g_images_gt": g_images_gt,
-        "g_images_mask_gt": g_images_mask_gt
-    }
-    return g_images_gt, g_images_mask_gt
 
 
 def ZBuffer_Rendering_CUDA_op_v2_sz224_torch(s2d, tri, vis):

@@ -1,4 +1,4 @@
-import argparse
+import argparse, random
 import sys
 import json
 import torch
@@ -13,7 +13,9 @@ def parse():
 
     #parser.add_argument("--train", type=strToBool, default=True, help="Train(True) or Demo(False)")
     parser.add_argument("--valid", type=bool, default=False, help="do validation(true) or false (bug: don't set true)")
+    parser.add_argument("--seed", type=int, default=None, help="fixed seed for random generator")
     parser.add_argument("--using_expression", type=bool, default=False, help="")
+    parser.add_argument("--using_albedo_as_tex", type=bool, default=False, help="")
 
     # common
     parser.add_argument("--config_json", type=str, default=None, help="")
@@ -170,6 +172,11 @@ def parse():
     # random
     setattr(args, "random_sample_num", args.batch_size * args.random_batch_sample_cnt)
 
+    if args.seed is None:
+        args.seed = random.randint(0, 1 << 30)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+
     print("--- training settings ---\n\n")
     for k, v in args.__dict__.items():
         print(k, ":", v)
@@ -192,11 +199,14 @@ def init_3dmm_settings():
     face = face.unsqueeze(0).repeat(CFG.batch_size, 1, 1)
 
     global_3dmm_setting = dict(
-        mean_shape=torch.tensor(mu_shape + mu_exp, dtype=torch.float32).to(CFG.device),
+        mean_shape=torch.tensor(mu_shape, dtype=torch.float32).to(CFG.device),
         std_shape=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
 
         mean_m=torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=torch.float32).to(CFG.device),
         std_m=torch.tensor(np.load(join(CFG.dataset_path, 'std_m.npy')), dtype=torch.float32).to(CFG.device),
+
+        mean_exp=torch.tensor(mu_exp, dtype=torch.float32).to(CFG.device),
+        std_exp=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
 
         w_shape=torch.tensor(w_shape, dtype=torch.float32).to(CFG.device),
         w_exp=torch.tensor(w_exp, dtype=torch.float32).to(CFG.device),

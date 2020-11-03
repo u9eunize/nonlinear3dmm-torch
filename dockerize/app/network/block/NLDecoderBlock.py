@@ -17,19 +17,6 @@ def create_layer_blocks(block, in_dim, params):
     return nn.Sequential(*layers)
 
 
-class ConvTranspose2dTan(nn.Module):
-    def __init__(self, in_dim, out_dim, stride=1, padding=1, *args, **kwargs):
-        super(ConvTranspose2dTan, self).__init__()
-
-        self.main = nn.Sequential(
-            nn.ConvTranspose2d(in_dim, out_dim, 3, stride=stride, padding=padding, *args, **kwargs),
-            nn.Tanh()
-        )
-
-    def forward(self, x):
-        return self.main(x)
-
-
 class ConvTranspose2dOutputResize(nn.Module):
     def __init__(self, *args, **kwargs):
         super(ConvTranspose2dOutputResize, self).__init__()
@@ -134,8 +121,8 @@ class NLDecoderTailBlock(nn.Module):
         layers = []
 
         if additional_layer:
-            layers.append(DeconvBlock(self.in_dim, gf_dim * 2, stride=1))
-            self.in_dim = gf_dim * 2
+            layers.append(DeconvBlock(self.in_dim, gf_dim, stride=1))
+            self.in_dim = gf_dim
 
         layers.append(nn.ConvTranspose2d(self.in_dim, self.out_dim, 3, stride=1, padding=1))
         layers.append(nn.Tanh())

@@ -1,11 +1,12 @@
 {
-  "name": "no-exp-pretrain",
+  "name": "3-pretrain-comb",
   "valid": false,
   "using_expression": false,
+  "using_albedo_as_tex": false,
 
   "checkpoint_name": null,
   "checkpoint_root_path":  "/data/checkpoint",
-  "checkpoint_regex": null,
+  "checkpoint_regex": "20201030/194102_2-pretrain-shade-texture",
   "checkpoint_epoch":  null,
   "checkpoint_step": null,
 
@@ -15,8 +16,8 @@
   "prediction_dst_path": "/data/dataset/one_test/dst",
 
   "epoch":  40,
-  "batch_size": 5,
-  "lr":  0.0001,
+  "batch_size": 8,
+  "lr":  0.00005,
   "betas": [0.5, 0.999],
   "save_ratio":  0.1,
 
@@ -48,20 +49,22 @@
 
   "m_loss": 5,
   "shape_loss":  10,
-  "expression_loss": null,
+  "expression_loss": 10,
 
   "base_landmark_loss":  0.02,
-  "comb_landmark_loss": 0,
-  "gt_landmark_loss":  0,
+  "comb_landmark_loss": 0.02,
+  "gt_landmark_loss":  0.02,
 
-  "base_texture_loss": 10000,
-  "mix_ac_sb_texture_loss":  null,
-  "mix_ab_sc_texture_loss": null,
-  "comb_texture_loss":  null,
+  "base_texture_loss": 10,
+  "mix_ac_sb_texture_loss":  10,
+  "mix_ab_sc_texture_loss": 10,
+  "mix_ac_sg_texture_loss":  null,
+  "mix_ab_sg_texture_loss": null,
+  "comb_texture_loss":  10,
 
-  "base_pix_recon_loss": null,
-  "mix_ab_sc_pix_recon_loss":  null,
-  "mix_ac_sb_pix_recon_loss": null,
+  "base_pix_recon_loss": 5,
+  "mix_ab_sc_pix_recon_loss": 10,
+  "mix_ac_sb_pix_recon_loss": 10,
   "comb_pix_recon_loss":  null,
 
   "perceptual_layer": ["conv2d_1a", "conv2d_2a", "maxpool_3a", "conv2d_4a"],
@@ -74,12 +77,12 @@
   "symmetry_loss":  10,
   "const_albedo_loss": 10,
   "const_local_albedo_loss": 10,
-  "shade_mag_loss":  null,
+  "shade_mag_loss":  1,
 
-  "base_smoothness_loss": 5e4,
-  "comb_smoothness_loss":  null,
-  "base_exp_smoothness_loss": null,
-  "comb_exp_smoothness_loss": null,
+  "base_smoothness_loss": 5e5,
+  "comb_smoothness_loss":  10,
+  "base_exp_smoothness_loss": 5e5,
+  "comb_exp_smoothness_loss": 10,
 
   "shape_residual_loss": null,
   "albedo_residual_loss":  null,

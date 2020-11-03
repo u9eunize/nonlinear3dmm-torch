@@ -6,17 +6,22 @@ import torch
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from renderer.rendering_ops import generate_full
-from utils import get_checkpoint_dir
+from utils import get_checkpoint_dir, save_configuration
+from renderer.rendering_ops import *
 
 from settings import CFG
 
 
 class NLLogger:
     def __init__(self, name, phase, start_step=1, log_image_count=CFG.log_image_count):
-        self.writer = SummaryWriter(join(CFG.log_path, f"{name}_{phase}"))
+        self.path = join(CFG.log_path, f"{name}_{phase}")
+        self.writer = SummaryWriter(self.path)
+
+        save_configuration(self.path)
         self._step = start_step
         self.holder = {}
         self.log_image_count = log_image_count
+        self.lazy_params = dict()
 
     def step(self, step=None, is_flush=True):
         if step is not None:
@@ -27,6 +32,13 @@ class NLLogger:
         if is_flush:
             # do flush
             use = []
+            next_lazy_params = dict()
+            for interval, lazy_args in self.lazy_params.items():
+                if self._step % interval == 0:
+                    self.write_loss_images(**lazy_args)
+                else:
+                    next_lazy_params[interval] = lazy_args
+            self.lazy_params = next_lazy_params
             for interval, logs in self.holder.items():
                 if self._step % interval == 0:
                     use.append(interval)
@@ -68,7 +80,7 @@ class NLLogger:
 
     def write_mesh(self, name, data, interval=CFG.log_image_interval):
         vertices = data["vertices"]
-        vertices = generate_full(vertices, CFG.std_shape, CFG.mean_shape)
+        vertices = generate_full(vertices, "shape")
         vertices = vertices.view((CFG.batch_size, -1, 3))
         data["vertices"] = vertices[:1, :, :].clone().cpu()
         data["faces"] = CFG.face[:1, :CFG.tri_num, :].clone().cpu()
@@ -102,35 +114,90 @@ class NLLogger:
         for key in keywords:
             img = self.match_size(img_sz, loss_params[key])
             img = img.clamp(0, 1) if "shade" not in key else img.clamp(-1, 1)
-            img_list.append(img)
+            img_list.append(img.cpu())
         self.write_image(name, img_list, interval=interval)
 
-    def write_loss_images(self, loss_params, interval=CFG.log_image_interval):
+    @staticmethod
+    def rendering_for_log(input_images, input_m_labels, input_shape_labels, input_exp_labels,
+                          input_texture_labels, input_masks,
+                          lv_m, lv_il, albedo_base, albedo_comb,
+                          shape_1d_base, shape_1d_comb, exp_1d_base, exp_1d_comb, **kwargs):
+        m_full_gt = generate_full(input_m_labels, "m")
+        shape_full_gt = generate_full(input_shape_labels, "shape")
+        exp_full_gt = generate_full(input_exp_labels, "exp")
 
+        shade_gt = generate_shade(lv_il, m_full_gt, shape_full_gt)
+        u_gt, v_gt, mask_gt = warping_flow(m_full_gt, shape_full_gt)
+        g_img_gt = rendering_wflow(input_texture_labels, u_gt, v_gt).cpu()
+
+        shade_exp_gt = generate_shade(lv_il, m_full_gt, shape_full_gt + exp_full_gt)
+        u_exp_gt, v_exp_gt, mask_exp_gt = warping_flow(m_full_gt, shape_full_gt + exp_full_gt)
+        g_img_exp_gt = rendering_wflow(input_texture_labels, u_exp_gt, v_exp_gt).cpu()
+
+        base_exp = render_all(lv_m, lv_il, albedo_base, shape_1d_base, exp_1d_base, using_expression=True)
+        base_exp_raw = base_exp["g_img"].cpu()
+        base_exp_mask = apply_mask(base_exp["g_img"], base_exp["g_img_mask"] * input_masks, input_images).cpu()
+        comb_exp = render_all(lv_m, lv_il, albedo_comb, shape_1d_comb, exp_1d_comb, using_expression=True)
+        comb_exp_raw = comb_exp["g_img"].cpu()
+        comb_exp_mask = apply_mask(base_exp["g_img"], base_exp["g_img_mask"] * input_masks, input_images).cpu()
+        base_no_exp = render_all(lv_m, lv_il, albedo_base, shape_1d_base, exp_1d_base, using_expression=False)
+        base_no_exp_raw = base_no_exp["g_img"].cpu()
+        base_no_exp_mask = apply_mask(base_exp["g_img"], base_exp["g_img_mask"] * input_masks, input_images).cpu()
+        comb_no_exp = render_all(lv_m, lv_il, albedo_comb, shape_1d_comb, exp_1d_comb, using_expression=False)
+        comb_no_exp_raw = comb_no_exp["g_img"].cpu()
+        comb_no_exp_mask = apply_mask(base_exp["g_img"], base_exp["g_img_mask"] * input_masks, input_images).cpu()
+
+        return {
+            "shade_gt": shade_gt.float().cpu(),
+            "mask_gt": mask_gt.float().cpu(),
+            "g_img_gt": g_img_gt.float().cpu(),
+
+            "shade_exp_gt": shade_exp_gt.float().cpu(),
+            "mask_exp_gt": mask_exp_gt.float().cpu(),
+            "g_img_exp_gt": g_img_exp_gt.float().cpu(),
+
+            "base_exp_raw": base_exp_raw.cpu(),
+            "base_exp_mask": base_exp_mask.cpu(),
+            "comb_exp_raw": comb_exp_raw.cpu(),
+            "comb_exp_mask": comb_exp_mask.cpu(),
+            "base_no_exp_raw": base_no_exp_raw.cpu(),
+            "base_no_exp_mask": base_no_exp_mask.cpu(),
+            "comb_no_exp_raw": comb_no_exp_raw.cpu(),
+            "comb_no_exp_mask": comb_no_exp_mask.cpu(),
+        }
+
+    def write_loss_images_lazy(self, loss_params, interval=CFG.log_image_interval):
+        self.lazy_params[interval] = {
+            "loss_params": loss_params,
+            "interval": interval,
+        }
+
+    def write_loss_images(self, loss_params, interval=CFG.log_image_interval):
+        all_dict = dict()
+        all_dict.update(loss_params)
+        all_dict.update(NLLogger.rendering_for_log(**loss_params))
         # self.write_image("shade", loss_params["shade"], interval=interval)
-        self._write_loss_images("g_images", loss_params, [
+        self._write_loss_images("g_images", all_dict, [
             "input_images",
             "g_img_base",
             "g_img_ac_sb",
             "g_img_ab_sc",
             "g_img_comb",
             "g_img_gt",
-            "g_img_raw_base",
-            "g_img_raw_comb",
+            "g_img_exp_gt",
+        ], interval=interval)
+        self._write_loss_images("g_image_exp", all_dict, [
+            "base_exp_raw",
+            "base_no_exp_raw",
+            "comb_exp_raw",
+            "comb_no_exp_raw",
+            "base_exp_mask",
+            "base_no_exp_mask",
+            "comb_exp_mask",
+            "comb_no_exp_mask",
         ], interval=interval)
 
-        self._write_loss_images("g_images_raw", loss_params, [
-            "input_images",
-            "g_img_raw_base",
-            "g_img_raw_ac_sb",
-            "g_img_raw_ab_sc",
-            "g_img_raw_comb",
-            "g_img_shade_base",
-            "g_img_shade_comb",
-            "g_img_shade_gt",
-        ], interval=interval)
-
-        self._write_loss_images("albedo_and_shade", loss_params, [
+        self._write_loss_images("albedo_and_shade", all_dict, [
             "input_texture_labels",
             "albedo_base",
             "albedo_comb",
@@ -139,7 +206,7 @@ class NLLogger:
             "shade_comb",
         ], interval=interval)
 
-        self._write_loss_images("texture", loss_params, [
+        self._write_loss_images("texture", all_dict, [
             "input_texture_labels",
             "tex_base",
             "tex_mix_ac_sb",
@@ -147,23 +214,23 @@ class NLLogger:
         ], interval=interval)
 
         self.write_mesh("gt_shape_mesh", {
-            "vertices": loss_params["input_shape_labels"] + loss_params["input_exp_labels"],
+            "vertices": all_dict["input_shape_labels"] + all_dict["input_exp_labels"],
         }, interval=interval)
 
         self.write_mesh("base_shape_mesh", {
-            "vertices": loss_params["shape_1d_base"],
+            "vertices": all_dict["shape_1d_base"],
         }, interval=interval)
         self.write_mesh("comb_shape_mesh", {
-            "vertices": loss_params["shape_1d_comb"],
+            "vertices": all_dict["shape_1d_comb"],
         }, interval=interval)
 
         if CFG.using_expression:
             self.write_mesh("base_shape_mesh_with_exp", {
-                "vertices": loss_params["shape_1d_base"] + loss_params["exp_1d_base"],
+                "vertices": all_dict["shape_1d_base"] + all_dict["exp_1d_base"],
             }, interval=interval)
 
             self.write_mesh("comb_shape_mesh_with_exp", {
-                "vertices": loss_params["shape_1d_comb"] + loss_params["exp_1d_comb"],
+                "vertices": all_dict["shape_1d_comb"] + all_dict["exp_1d_comb"],
             }, interval=interval)
 
         # self.write_image("g_images_rand", [

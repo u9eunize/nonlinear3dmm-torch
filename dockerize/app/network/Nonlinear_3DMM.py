@@ -29,20 +29,6 @@ class Nonlinear3DMM(nn.Module):
         self.tex_sz = tex_sz            # Texture size
         self.img_sz = img_sz
 
-        # Basis
-        mu_shape, w_shape = utils.load_Basel_basic('shape')
-        mu_exp, w_exp = utils.load_Basel_basic('exp')
-
-        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype)
-        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), VERTEX_NUM), dtype=dtype)
-        # self.std_shape  = np.load('std_shape.npy')
-
-        self.mean_m = torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=dtype)
-        self.std_m = torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=dtype)
-
-        self.w_shape = torch.tensor(w_shape, dtype=dtype)
-        self.w_exp = torch.tensor(w_exp, dtype=dtype)
-
         # generate shape1d
         self.vt2pixel_u, self.vt2pixel_v = utils.load_3DMM_vt2pixel()
 
@@ -57,17 +43,16 @@ class Nonlinear3DMM(nn.Module):
 
         # decoder
         self.albedo_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gf_dim * 10, self.tex_sz)
-        self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
-        self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
+        self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
         self.shape_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
-        self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
-        self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
+        self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
-        if CFG.using_expression:
-            self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
-            self.exp_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
-            self.exp_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
+        self.exp_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
+        self.exp_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
         # self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         # self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
@@ -98,13 +83,12 @@ class Nonlinear3DMM(nn.Module):
 
         # exp
 
-        if CFG.using_expression:
-            exp_dec = self.exp_dec(lv_tex)
-            exp_2d_base = self.exp_gen_base(exp_dec)
-            exp_2d_comb = self.exp_gen_comb(exp_dec)
+        exp_dec = self.exp_dec(lv_tex)
+        exp_2d_base = self.exp_gen_base(exp_dec)
+        exp_2d_comb = self.exp_gen_comb(exp_dec)
 
-            exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
-            exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
+        exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
+        exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
 
         #exp_2d_res = exp_2d_base - exp_2d_comb
         #exp_1d_res = exp_1d_comb - exp_1d_base
@@ -124,15 +108,14 @@ class Nonlinear3DMM(nn.Module):
             shape_2d_res=shape_2d_res,
             shape_1d_res=shape_1d_res,
         )
-        if CFG.using_expression:
-            ret.update(dict(
-                exp_2d_base=exp_2d_base,
-                exp_2d_comb=exp_2d_comb,
-                exp_1d_base=exp_1d_base,
-                exp_1d_comb=exp_1d_comb,
-                # exp_2d_res=exp_2d_res,
-                # exp_1d_res=exp_1d_res,
-            ))
+        ret.update(dict(
+            exp_2d_base=exp_2d_base,
+            exp_2d_comb=exp_2d_comb,
+            exp_1d_base=exp_1d_base,
+            exp_1d_comb=exp_1d_comb,
+            # exp_2d_res=exp_2d_res,
+            # exp_1d_res=exp_1d_res,
+        ))
 
         return ret
 
@@ -147,14 +130,5 @@ class Nonlinear3DMM(nn.Module):
 
         self.vt2pixel_u = self.vt2pixel_u.to(device)
         self.vt2pixel_v = self.vt2pixel_v.to(device)
-
-        self.mean_shape = self.mean_shape.to(device)
-        self.std_shape = self.std_shape.to(device)
-
-        self.mean_m = self.mean_m.to(device)
-        self.std_m = self.std_m.to(device)
-
-        self.w_shape = self.w_shape.to(device)
-        self.w_exp = self.w_exp.to(device)
         return ret
 
