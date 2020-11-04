@@ -366,6 +366,9 @@ class Loss:
     def albedo_residual_loss(self, albedo_res, **kwargs):
         return norm_loss(albedo_res, torch.zeros_like(albedo_res), loss_type=CFG.residual_loss_type)
 
+    def exp_residual_loss(self, exp_1d_res, **kwargs):
+        return norm_loss(exp_1d_res, torch.zeros_like(exp_1d_res), loss_type=CFG.residual_loss_type)
+
 
     # def residual_symmetry_loss(self, rotated_normal_2d, **kwargs):
     #     pass

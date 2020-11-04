@@ -24,15 +24,15 @@ spec:
     - name: hpcd-registry-ag-registry
   containers:
     - name: ag-jhson
-      image: "ag-registry.222.122.67.52.nip.io:443/nonlinear:proxy.1.0.11"
+      image: "ag-registry.222.122.67.52.nip.io:443/nonlinear:proxy.1.0.12"
       command: ["/bin/bash"]
       args: 
         - "-c"
         - >-
-          python setup.py install; 
-          python train.py --config_json config/k8s/1-pretrain-albedo.json --checkpoint_regex "*/*";
-          python train.py --config_json config/k8s/2-pretrain-shade-texture.json --checkpoint_regex "*/*";
-          python train.py --config_json config/k8s/3-pretrain-comb.json --checkpoint_regex */*;
+          python setup.py install;  
+          python train.py --config_json config/step/1-pretrain-albedo.json --epoch 3 --batch_size 25 --save_ratio 1.0 --log_image_interval 400; 
+          python train.py --config_json config/step/3-pretrain-comb.json --checkpoint_regex 202011*/* --epoch 25 --batch_size 25 --save_ratio 1.0 --log_image_interval 400 --log_path /data/logs/v12;
+          python train.py --config_json config/step/4-pretrain-exp.json --checkpoint_regex 202011*/* --epoch 50 --batch_size 25 --save_ratio 1.0 --log_image_interval 400 --log_path /data/logs/v12;
       resources:
         limits:
           cpu: 4000m

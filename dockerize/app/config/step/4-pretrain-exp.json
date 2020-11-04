@@ -49,7 +49,7 @@
 
   "m_loss": 5,
   "shape_loss":  10,
-  "expression_loss": 10,
+  "expression_loss": 100,
 
   "base_landmark_loss":  0.02,
   "comb_landmark_loss": 0.02,
@@ -86,6 +86,7 @@
 
   "shape_residual_loss": 1,
   "albedo_residual_loss":  1,
+  "exp_residual_loss":  1,
 
   "random_camera": false,
   "random_expression":  false,

@@ -90,8 +90,8 @@ class Nonlinear3DMM(nn.Module):
         exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
         exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
 
-        #exp_2d_res = exp_2d_base - exp_2d_comb
-        #exp_1d_res = exp_1d_comb - exp_1d_base
+        exp_2d_res = exp_2d_base - exp_2d_comb
+        exp_1d_res = exp_1d_comb - exp_1d_base
 
         ret = dict(
             lv_m=lv_m,
@@ -113,8 +113,8 @@ class Nonlinear3DMM(nn.Module):
             exp_2d_comb=exp_2d_comb,
             exp_1d_base=exp_1d_base,
             exp_1d_comb=exp_1d_comb,
-            # exp_2d_res=exp_2d_res,
-            # exp_1d_res=exp_1d_res,
+            exp_2d_res=exp_2d_res,
+            exp_1d_res=exp_1d_res,
         ))
 
         return ret

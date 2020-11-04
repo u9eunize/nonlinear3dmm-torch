@@ -121,8 +121,10 @@ class NLDecoderTailBlock(nn.Module):
         layers = []
 
         if additional_layer:
-            layers.append(DeconvBlock(self.in_dim, gf_dim, stride=1))
-            self.in_dim = gf_dim
+            layers.append(DeconvBlock(self.in_dim, gf_dim * 2, stride=1))
+            self.in_dim = gf_dim * 2
+            layers.append(DeconvBlock(gf_dim * 2, gf_dim * 2, stride=1))
+            self.in_dim = gf_dim * 2
 
         layers.append(nn.ConvTranspose2d(self.in_dim, self.out_dim, 3, stride=1, padding=1))
         layers.append(nn.Tanh())
