@@ -7,8 +7,7 @@
   "checkpoint_epoch":  null,
   "checkpoint_step": null,
 
-  "dataset_path":  "./taehwan_dataset",
-  "definition_path": "./dataset/3DMM_definition/",
+  "dataset_path":  "./deep3d",
   "prediction_src_path":  "./dataset/pred/src",
   "prediction_dst_path": "./dataset/pred/dst",
 
@@ -32,8 +31,8 @@
   "log_image_interval": 50,
   "log_image_count": 4,
 
-  "vertex_num": 53215,
-  "tri_num":  105840,
+  "vertex_num": 35709,
+  "tri_num":  70789,
   "vertex_num_reduce": 39111,
   "tri_num_reduce":  77572,
   "image_size": 224,
