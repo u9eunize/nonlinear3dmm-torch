@@ -5,7 +5,9 @@ from PIL import Image
 
 from settings import CFG
 from utils import *
-from dockerize.app.renderer.rendering_ops_redner import Batch_Renderer
+from renderer.rendering_ops_redner import Batch_Renderer
+from joblib import Parallel, delayed
+import multiprocessing
 
 
 def split_name(fname):
@@ -106,17 +108,6 @@ class NonlinearDataset(Dataset):
 		vertex, color = torch.split(vertex_with_color, (3, 3), dim=-1)
 		vertex = translate_vertex(vertex, trans)
 		vertex = rotate_vertex(vertex, rotate)
-		
-		
-		
-		# albedo indices
-		# indices1 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CFG.const_pixels_num])
-		# indices2 = np.random.randint(low=0, high=self.const_alb_mask.shape[0], size=[CFG.const_pixels_num])
-		#
-		# albedo_indices_x1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 1], [CFG.const_pixels_num, 1]))
-		# albedo_indices_y1 = torch.tensor(np.reshape(self.const_alb_mask[indices1, 0], [CFG.const_pixels_num, 1]))
-		# albedo_indices_x2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 1], [CFG.const_pixels_num, 1]))
-		# albedo_indices_y2 = torch.tensor(np.reshape(self.const_alb_mask[indices2, 0], [CFG.const_pixels_num, 1]))
 
 		sample = {
 				'image_name'    : img_name,
@@ -127,15 +118,6 @@ class NonlinearDataset(Dataset):
 
 				'camera'        : camera,
 				'light'         : light,
-				# 'rotate'        : rotate,
-				# 'trans'         : trans,
-				
-				# 'albedo_indices': [
-				# 		albedo_indices_x1,
-				# 		albedo_indices_y1,
-				# 		albedo_indices_x2,
-				# 		albedo_indices_y2
-				# ],
 		}
 
 		return sample
@@ -174,49 +156,49 @@ class NonlinearDataset(Dataset):
 		# 	with open(join(self.dataset_dir, f'{phase}.txt'), 'w') as f:
 		# 		f.writelines(images)
 
-		################### write obj file to npy
-		# def color2uv ( vcolor, uv_mapper ):
-		# 	buffer = torch.zeros([3, 256, 256])
-		#
-		# 	color = torch.from_numpy(vcolor[:, 3:])
-		# 	color = torch.cat([color, torch.zeros([1, 3])], dim=0)
-		#
-		# 	u, v = torch.transpose(uv_mapper[:, :2], 0, 1)
-		# 	v1, v2, v3 = torch.transpose(uv_mapper[:, 2:], 0, 1)
-		# 	avg_color = torch.transpose((color[v1] + color[v2] + color[v3]) / 3, 0, 1)
-		# 	buffer[:, u, v] = avg_color
-		#
-		# 	return buffer
-		#
-		# def read_obj ( obj_name ):
-		# 	vertex_with_color = []
-		# 	with open(obj_name) as f:
-		# 		for line in f.readlines():
-		# 			splited = line.split(' ')
-		# 			if len(splited) == 1:
-		# 				break
-		# 			else:
-		# 				mode, x, y, z, r, g, b = splited
-		# 				vertex_with_color.append(np.array([float(x), float(y), float(z), float(r), float(g), float(b)]))
-		#
-		# 	vcolor = np.stack(vertex_with_color).astype(np.float32)
-		# 	np.save(join(self.dataset_dir, 'vertex', basename(obj_name[:-4])), vcolor)
-		# 	texture = color2uv(vcolor, uv_mapper)
-		# 	save_image(texture, join(self.dataset_dir, 'texture', basename(obj_name[:-4] + '.jpg')))
-		#
-		# uv_mapper_ = open(join(self.dataset_dir, 'bfm2009.idx'), 'r').readlines()
-		# uv_mapper = []
-		# for line in uv_mapper_:
-		# 	uv_mapper.append(np.array([int(x) for x in line.split(' ')]))
-		#
-		# uv_mapper = np.stack(uv_mapper)
-		# uv_mapper = torch.tensor(uv_mapper)
-		#
-		# indices_black = uv_mapper[:, 2:] == torch.tensor([0, 0, 0])
-		# uv_mapper[:, 2:][indices_black] = torch.max(uv_mapper) + 1
-		#
-		# obj_names = glob(join(self.dataset_dir, 'obj/*.obj'))
-		# Parallel(n_jobs=multiprocessing.cpu_count())(delayed(read_obj)(obj_name) for obj_name in tqdm(obj_names))
+		################### write npy file from npy
+		def color2uv ( vcolor, uv_mapper ):
+			buffer = torch.zeros([3, 256, 256])
+
+			color = torch.from_numpy(vcolor[:, 3:])
+			color = torch.cat([color, torch.zeros([1, 3])], dim=0)
+
+			u, v = torch.transpose(uv_mapper[:, :2], 0, 1)
+			v1, v2, v3 = torch.transpose(uv_mapper[:, 2:], 0, 1)
+			avg_color = torch.transpose((color[v1] + color[v2] + color[v3]) / 3, 0, 1)
+			buffer[:, u, v] = avg_color
+
+			return buffer
+
+		def read_obj ( obj_name ):
+			vertex_with_color = []
+			with open(obj_name) as f:
+				for line in f.readlines():
+					splited = line.split(' ')
+					if len(splited) == 1:
+						break
+					else:
+						mode, x, y, z, r, g, b = splited
+						vertex_with_color.append(np.array([float(x), float(y), float(z), float(r), float(g), float(b)]))
+
+			vcolor = np.stack(vertex_with_color).astype(np.float32)
+			np.save(join(self.dataset_dir, 'vertex', basename(obj_name[:-4])), vcolor)
+			texture = color2uv(vcolor, uv_mapper)
+			save_image(texture, join(self.dataset_dir, 'texture', basename(obj_name[:-4] + '.jpg')))
+
+		uv_mapper_ = open(join(self.dataset_dir, 'bfm2009.idx'), 'r').readlines()
+		uv_mapper = []
+		for line in uv_mapper_:
+			uv_mapper.append(np.array([int(x) for x in line.split(' ')]))
+
+		uv_mapper = np.stack(uv_mapper)
+		uv_mapper = torch.tensor(uv_mapper)
+
+		indices_black = uv_mapper[:, 2:] == torch.tensor([0, 0, 0])
+		uv_mapper[:, 2:][indices_black] = torch.max(uv_mapper) + 1
+
+		obj_names = glob(join(self.dataset_dir, 'obj/*.obj'))
+		Parallel(n_jobs=multiprocessing.cpu_count())(delayed(read_obj)(obj_name) for obj_name in tqdm(obj_names))
 		# for obj_name in tqdm(obj_names):
 		# 	read_obj(obj_name)
 

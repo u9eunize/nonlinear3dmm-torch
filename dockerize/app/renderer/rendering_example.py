@@ -3,8 +3,9 @@ import torch
 from plyfile import PlyData
 import math
 import numpy as np
-from dockerize.app.renderer.rendering_ops_redner import Batch_Renderer
+from renderer.rendering_ops_redner import Batch_Renderer
 from utils import *
+from os.path import basename
 
 
 
@@ -12,8 +13,8 @@ def main ():
     # read ply data and split vertex and color data
     # plydata = PlyData.read('1.ply')
     # fname = '1_0.2776017385292788_0.16254296733069473_70.79018321602928.jpg'
-    plydata = PlyData.read('2.ply')
-    fname = '2_0.15897386037903233_0.2043752904048205_58.26357616953039.jpg'
+    plydata = PlyData.read('renderer/2.ply')
+    fname = 'renderer/2_0.15897386037903233_0.2043752904048205_58.26357616953039.jpg'
     # plydata = PlyData.read('3.ply')
     # fname = '3_5.584806478789926_0.013549064110521272_66.73159275208857.jpg'
     x, y, z = plydata['vertex']['x'], plydata['vertex']['y'], plydata['vertex']['z']
@@ -21,14 +22,6 @@ def main ():
     vertex = np.stack([x, y, z], axis=1)
     color = np.stack([r, g, b], axis=1)
     face = np.vstack(plydata['face']['vertex_indices'])
-
-    plydata = PlyData.read('3.ply')
-    fname = '3_5.584806478789926_0.013549064110521272_66.73159275208857.jpg'
-    x, y, z = plydata['vertex']['x'], plydata['vertex']['y'], plydata['vertex']['z']
-    r, g, b = plydata['vertex']['red'], plydata['vertex']['green'], plydata['vertex']['blue']
-    vertex = np.stack([x, y, z], axis=1)
-    color = np.stack([r, g, b], axis=1)
-    face_ = np.vstack(plydata['face']['vertex_indices'])
     
     # define 3d model
     vertex = torch.tensor(vertex, device=pyredner.get_device())
@@ -36,7 +29,7 @@ def main ():
     color = torch.tensor(color, device=pyredner.get_device()) / 255.0
 
     # set camera parameters
-    id, pi_camera, theta_camera, rho_camera = [float(t) for t in fname.split('.jpg')[0].split('_')]
+    id, pi_camera, theta_camera, rho_camera = [float(t) for t in basename(fname).split('.jpg')[0].split('_')]
     camera_param = torch.tensor([theta_camera, pi_camera, rho_camera], device=pyredner.get_device())
     
     # set light parameters
@@ -66,7 +59,7 @@ def main ():
     masked = images * masks
     # write images
     for idx, img in enumerate(images):
-        pyredner.imwrite(img.cpu(), 'taehwan_redner_{}.png'.format(idx))
+        pyredner.imwrite(img.cpu(), 'renderer/rendering_result_{}.png'.format(idx))
     
     
 
