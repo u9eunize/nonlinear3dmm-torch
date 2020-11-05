@@ -1,17 +1,11 @@
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-from os.path import join, isdir, basename, exists
+from os.path import join, basename, exists
 from PIL import Image
-from scipy import io
 
 from settings import CFG
 from utils import *
-from plyfile import PlyData
-import multiprocessing
-from joblib import Parallel, delayed
-from renderer.rendering_ops_redner import Batch_Renderer
-import pyredner
-from torchvision.utils import save_image
+from dockerize.app.renderer.rendering_ops_redner import Batch_Renderer
 
 
 def split_name(fname):

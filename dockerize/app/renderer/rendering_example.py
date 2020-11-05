@@ -3,7 +3,7 @@ import torch
 from plyfile import PlyData
 import math
 import numpy as np
-from renderer.rendering_ops_redner import Batch_Renderer
+from dockerize.app.renderer.rendering_ops_redner import Batch_Renderer
 from utils import *
 
 
