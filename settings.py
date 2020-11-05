@@ -10,7 +10,7 @@ def parse():
 
     #parser.add_argument("--train", type=strToBool, default=True, help="Train(True) or Demo(False)")
     # common
-    parser.add_argument("--config_json", type=str, default=None, help="")
+    parser.add_argument("--config_json", type=str, default="./config/redner.json", help="")
 
     parser.add_argument("--name", type=str, default="pretrain", help="running name")
 
