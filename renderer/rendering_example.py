@@ -3,7 +3,7 @@ import torch
 from plyfile import PlyData
 import math
 import numpy as np
-from renderer.rendering_ops_redner import render
+from renderer.rendering_ops_redner import Batch_Renderer
 from utils import *
 
 
@@ -42,9 +42,8 @@ def main ():
     # set light parameters
     theta_light = math.pi * -0.5
     pi_light = 0
-    rho_light = 100
-    intensity = 5
-    light_param = torch.tensor([theta_light, pi_light, rho_light, intensity], device=pyredner.get_device())
+    rho_light = 20
+    light_param = torch.tensor([theta_light, pi_light, rho_light], device=pyredner.get_device())
 
     # render
     def batch_wise(tensor, batch_size):
@@ -55,7 +54,8 @@ def main ():
     batch_size = 2
     
     pyredner.set_print_timing(False)
-    images, masks = render(vertex_batch=batch_wise(vertex, batch_size),
+    renderer = Batch_Renderer()
+    images, masks = renderer.render(vertex_batch=batch_wise(vertex, batch_size),
                       # indices_batch=batch_wise(indices, batch_size),
                       color_batch=batch_wise(color, batch_size),
                       camera_batch=batch_wise(camera_param, batch_size),
@@ -65,7 +65,7 @@ def main ():
     
     masked = images * masks
     # write images
-    for idx, img in enumerate(masked):
+    for idx, img in enumerate(images):
         pyredner.imwrite(img.cpu(), 'taehwan_redner_{}.png'.format(idx))
     
     
