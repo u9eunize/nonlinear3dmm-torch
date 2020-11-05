@@ -5,9 +5,10 @@ from network.facenet import InceptionResnetV1
 
 from settings import CFG
 from os.path import join
-from torchvision.models.vgg import vgg19_bn
 from datetime import datetime
 
+import numpy as np
+import utils
 
 activation = {}
 
@@ -56,7 +57,9 @@ class Loss:
         if decay_per_epoch is None:
             decay_per_epoch = dict()
 
-        loss_names = loss_coefficients.keys()
+        self.loss_names = loss_coefficients.keys()
+        self.is_perceptual = False
+
         for loss_name, loss_coefficient in loss_coefficients.items():
             print(loss_name, "coefficients:", loss_coefficient, end=" ")
             if loss_name not in decay_per_epoch:
@@ -64,8 +67,9 @@ class Loss:
             else:
                 print("decay per epoch:", decay_per_epoch[loss_name], end="")
             print("")
+            if "perceptual" in loss_name:
+                self.is_perceptual = True
 
-        self.loss_names = loss_names
         self.loss_coefficients = loss_coefficients
         self.decay_per_epoch = decay_per_epoch
         self.decay_step = CFG.start_loss_decay_step
@@ -78,34 +82,19 @@ class Loss:
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        mu_shape, w_shape = load_Basel_basic('shape')
-        mu_exp, w_exp = load_Basel_basic('exp')
-
-        self.mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype)
-        self.std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=dtype)
-
-        self.mean_m = torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=dtype)
-        self.std_m = torch.tensor(np.load(join(CFG.dataset_path, 'std_m.npy')), dtype=dtype)
-
-        self.uv_tri, self.uv_mask = load_3DMM_tri_2d(with_mask=True)
+        self.uv_tri, self.uv_mask = utils.load_3DMM_tri_2d(with_mask=True)
         self.uv_tri = torch.tensor(self.uv_tri)
         self.uv_mask = torch.tensor(self.uv_mask)
-
-        self.mean_shape = self.mean_shape.to(self.device)
-        self.std_shape = self.std_shape.to(
-            self.device)
-
-        self.mean_m = self.mean_m.to(self.device)
-        self.std_m = self.std_m.to(self.device)
 
         self.uv_tri = self.uv_tri.to(self.device)
         self.uv_mask = self.uv_mask.to(self.device)
 
         self.recognition_md = None
 
-        self.facenet = InceptionResnetV1('vggface2').eval().to(CFG.device)
-        for layer_idx in CFG.perceptual_layer:
-            self.facenet.__getattr__(layer_idx).register_forward_hook(get_activation(f'({layer_idx}) conv2d'))
+        if self.is_perceptual:
+            self.facenet = InceptionResnetV1('vggface2').eval().to(CFG.device)
+            for layer_idx in CFG.perceptual_layer:
+                self.facenet.__getattr__(layer_idx).register_forward_hook(get_activation(f'({layer_idx}) conv2d'))
 
         self.cache = dict()
         self.time_checker = dict()
@@ -139,17 +128,17 @@ class Loss:
         self.decay_step += 1
 
     def generate_precalculation(self, **kwargs):
-        self.time_start("pre_rec")
-        self.cache.update(self._perceptual_recon_precalculation(**kwargs))
-        self.time_end("pre_rec")
-        pass
+        if self.is_perceptual:
+            self.time_start("pre_rec")
+            self.cache.update(self._perceptual_recon_precalculation(**kwargs))
+            self.time_end("pre_rec")
 
     def release_precalculcation(self):
         self.cache = dict()
         pass
 
-    def expression_loss(self, exp, input_exp_labels, **kwargs):
-        g_loss_exp = norm_loss(exp, input_exp_labels, loss_type=CFG.expression_loss_type)
+    def expression_loss(self, exp_1d_base, input_exp_labels, **kwargs):
+        g_loss_exp = norm_loss(exp_1d_base, input_exp_labels, loss_type=CFG.expression_loss_type)
         return g_loss_exp
 
     def shape_loss(self, shape_1d_base, input_shape_labels, **kwargs):
@@ -161,10 +150,20 @@ class Loss:
         return g_loss_m
 
     # -------- landmark ---------
-    def _landmark_loss_calculation(self, lv_m, shape1d, input_m_labels, input_shape_labels):
+    def landmark_calculation(self, mv, sv, ev):
+        m_full = generate_full(mv, "m")
+        shape_full = generate_full(sv, "shape")
+        if ev is not None and CFG.using_expression:
+            shape_full += generate_full(ev, "exp")
+
+        landmark_u, landmark_v = compute_landmarks_torch(m_full, shape_full)
+        return landmark_u, landmark_v
+
+    def _landmark_loss_calculation(self, lv_m, shape1d, exp1d, input_m_labels, input_shape_labels, input_exp_labels):
         batch_size = lv_m.shape[0]
-        landmark_u, landmark_v = self.landmark_calculation(lv_m, shape1d)
-        landmark_u_labels, landmark_v_labels = self.landmark_calculation(input_m_labels, input_shape_labels)
+        landmark_u, landmark_v = self.landmark_calculation(lv_m, shape1d, exp1d)
+        landmark_u_labels, landmark_v_labels = self.landmark_calculation(input_m_labels, input_shape_labels,
+                                                                         input_exp_labels)
 
         u_loss = torch.mean(norm_loss(landmark_u, landmark_u_labels,
                                       loss_type=CFG.landmark_loss_type, reduce_mean=False))
@@ -175,21 +174,17 @@ class Loss:
 
         return landmark_loss
 
-    def landmark_calculation(self, mv, sv):
-        m_full = mv * self.std_m + self.mean_m
-        shape_full = sv * self.std_shape + self.mean_shape
-
-        landmark_u, landmark_v = compute_landmarks_torch(m_full, shape_full)
-        return landmark_u, landmark_v
-
     def base_landmark_loss(self, lv_m, shape_1d_base, input_m_labels, input_shape_labels, **kwargs):
-        return self._landmark_loss_calculation(lv_m, shape_1d_base, input_m_labels, input_shape_labels)
+        return self._landmark_loss_calculation(lv_m, shape_1d_base, kwargs.get("shape_1d_base", None),
+                                               input_m_labels, input_shape_labels, kwargs.get("input_exp_labels", None))
 
     def comb_landmark_loss(self, lv_m, shape_1d_comb, input_m_labels, input_shape_labels, **kwargs):
-        return self._landmark_loss_calculation(lv_m, shape_1d_comb, input_m_labels, input_shape_labels)
+        return self._landmark_loss_calculation(lv_m, shape_1d_comb, kwargs.get("exp_1d_comb", None),
+                                               input_m_labels, input_shape_labels, kwargs.get("input_exp_labels", None))
 
     def gt_landmark_loss(self, shape_1d_comb, input_m_labels, input_shape_labels, **kwargs):
-        return self._landmark_loss_calculation(input_m_labels, shape_1d_comb, input_m_labels, input_shape_labels)
+        return self._landmark_loss_calculation(input_m_labels, shape_1d_comb, kwargs.get("exp_1d_comb", None),
+                                               input_m_labels, input_shape_labels, kwargs.get("input_exp_labels", None))
 
     def batchwise_white_shading_loss(self, shade_base, **kwargs):
         uv_mask = self.uv_mask.unsqueeze(0).unsqueeze(0)
@@ -201,10 +196,10 @@ class Loss:
 
     # --------- reconstrcution loss -------
 
-    def _pixel_loss_calculation(self, g_images, g_images_mask, input_images):
-        batch_size = input_images.shape[0]
-        images_loss = norm_loss(g_images, input_images, loss_type="l2")
-        mask_mean = torch.sum(g_images_mask) / (batch_size * self.img_sz * self.img_sz)
+    def _pixel_loss_calculation(self, g_images, input_images, g_images_mask):
+
+        images_loss = norm_loss(g_images, input_images.double(), loss_type="l2")
+        mask_mean = torch.sum(g_images_mask) / (CFG.batch_size * self.img_sz * self.img_sz)
         g_loss_recon = images_loss / mask_mean
         return g_loss_recon
 
@@ -320,6 +315,12 @@ class Loss:
     def comb_smoothness_loss(self, shape_2d_comb, **kwargs):
         return self._smoothness_loss_calculation(shape_2d_comb)
 
+    def base_exp_smoothness_loss(self, exp_2d_base, **kwargs):
+        return self._smoothness_loss_calculation(exp_2d_base)
+
+    def comb_exp_smoothness_loss(self, exp_2d_comb, **kwargs):
+        return self._smoothness_loss_calculation(exp_2d_comb)
+
     def symmetry_loss(self, albedo_base, **kwargs):
         albedo_flip = torch.flip(albedo_base, dims=[3])
         flip_diff = torch.max(torch.abs(albedo_base - albedo_flip), torch.ones_like(albedo_base) * 0.05)
@@ -364,6 +365,9 @@ class Loss:
 
     def albedo_residual_loss(self, albedo_res, **kwargs):
         return norm_loss(albedo_res, torch.zeros_like(albedo_res), loss_type=CFG.residual_loss_type)
+
+    def exp_residual_loss(self, exp_1d_res, **kwargs):
+        return norm_loss(exp_1d_res, torch.zeros_like(exp_1d_res), loss_type=CFG.residual_loss_type)
 
 
     # def residual_symmetry_loss(self, rotated_normal_2d, **kwargs):

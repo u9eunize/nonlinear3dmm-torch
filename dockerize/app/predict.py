@@ -12,6 +12,8 @@ from PIL import Image
 from renderer.rendering_ops import *
 from configure_dataset import NonlinearDataset
 from settings import CFG
+import utils
+import numpy as np
 # d = NonlinearDataset(phase='test', frac=0.1)
 # exp_random          = np.random.normal(0, 0.5, d.std_shape.shape)
 # exp_random_tensor   = torch.tensor(exp_random)  # exp ~ N(0, 0.5)
@@ -20,8 +22,8 @@ from settings import CFG
 # return images, losses, obj file, landmark output
 dtype = torch.float32
 
-mu_shape, w_shape = load_Basel_basic('shape')
-mu_exp, w_exp = load_Basel_basic('exp')
+mu_shape, w_shape = utils.load_Basel_basic('shape')
+mu_exp, w_exp = utils.load_Basel_basic('exp')
 
 mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype).to(CFG.device)
 std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=dtype).to(CFG.device)
@@ -121,7 +123,7 @@ def rendering(input_images, infer):
 	}
 
 def main():
-	tri = load_3DMM_tri()
+	tri = utils.load_3DMM_tri()
 	face = np.transpose(tri)[:-1]
 
 	losses = [
@@ -137,7 +139,7 @@ def main():
 
 	# define model and loss
 	model = Nonlinear3DMM().to(CFG.device)
-	model, _, _, _, _ = load_from_name(model)
+	model, _, _, _, _ = utils.load(model)
 
 	# load images for prediction
 	fnames_raw = glob(join(CFG.prediction_src_path, "*"))
@@ -155,7 +157,7 @@ def main():
 			img = Image.open(fname)
 			img = torchvision.transforms.functional.resize(img, CFG.image_size)
 			img = torchvision.transforms.functional.center_crop(img, CFG.image_size)
-			img = torchvision.transforms.functional.to_tensor(img)
+			img = torchvision.transforms.functional.to_tensor(img)[:3, :, :]
 			input_images.append(img)
 			output[fname] = dict()
 		input_images = torch.stack(input_images, dim=0).to(CFG.device)

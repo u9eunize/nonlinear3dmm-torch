@@ -1,6 +1,7 @@
 import os
 import requests
 from requests.adapters import HTTPAdapter
+from settings import CFG
 
 import torch
 from torch import nn
@@ -338,7 +339,7 @@ def get_torch_home():
         )
     )
 
-    return "./dataset"
+    return CFG.dataset_path
 
 
 def main(name="vggface2", batch_size=1):

@@ -4,6 +4,7 @@ Hence, there are "-1" subtraction to Python 0-based indexing
 """
 from __future__ import division
 import math
+import json
 import numpy as np
 import torch
 import os
@@ -19,7 +20,10 @@ from urllib.request import urlopen, Request
 from torchvision.utils import save_image
 from torchvision.utils import make_grid
 
-from settings import CFG
+from settings import CFG, LOSSES
+import importlib
+importlib.import_module('settings', 'CFG')
+
 
 try:
     from tqdm.auto import tqdm  # automatically select proper tqdm submodule if available
@@ -58,12 +62,36 @@ except ImportError:
                 sys.stderr.write('\n')
 
 
+def safe_json(data):
+    if data is None:
+        return True
+    elif isinstance(data, (bool, int, float)):
+        return True
+    elif isinstance(data, (tuple, list)):
+        return all(safe_json(x) for x in data)
+    elif isinstance(data, dict):
+        return all(isinstance(k, str) and safe_json(v) for k, v in data.items())
+    return False
+
+
+def save_configuration(path, name="configuration.json"):
+    fp = open("/".join([path, CFG.name + "-" + name]), "w")
+    config = dict()
+    for key, value in CFG.__dict__.items():
+        if safe_json(value):
+            config[key] = value
+    for key, value in LOSSES.items():
+        if safe_json(value):
+            config[key+"_loss"] = value
+    json.dump(config, fp, indent=4)
+
 
 def save(model, global_optimizer, encoder_optimizer, epoch, path, step):
     dir_path = get_checkpoint_dir(path, epoch)
     makedirs(dir_path, exist_ok=True)
 
     save_name = get_checkpoint_name(path, epoch, step)
+    save_configuration(dir_path)
 
     print("=> save checkpoint '{} (epoch: {}, step: {})')".format(save_name, epoch, step))
     torch.save({
@@ -98,7 +126,7 @@ def load_from_name(model, global_optimizer=None, encoder_optimizer=None, ckpt_na
 
     print("=> loaded checkpoint '{}' (epoch {}, step {})".format(ckpt_name, start_epoch, start_step))
 
-    return model, global_optimizer, encoder_optimizer, start_epoch, start_step
+    return model, global_optimizer, encoder_optimizer, start_epoch, start_step + 1
 
 
 def load(model, global_optimizer=None, encoder_optimizer=None,

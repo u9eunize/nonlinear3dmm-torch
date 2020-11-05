@@ -39,7 +39,6 @@ class NonlinearDataset(Dataset):
 		mu_shape, w_shape = load_Basel_basic('shape')
 		mu_exp, w_exp = load_Basel_basic('exp')
 
-		self.mean_shape = mu_shape + mu_exp
 		self.std_shape = np.tile(np.array([1e4, 1e4, 1e4], dtype=self.fdtype), CFG.vertex_num)
 
 		self.w_shape = w_shape
@@ -99,7 +98,7 @@ class NonlinearDataset(Dataset):
 
 		batch_shape_para    = self.all_shape_para[idx, :]
 		shape_label         = np.matmul(batch_shape_para, np.transpose(self.w_shape))
-		shape_label         = np.divide( shape_label + exp_label, self.std_shape)
+		shape_label         = np.divide(shape_label, self.std_shape)
 		shape_tensor        = torch.tensor(shape_label)
 
 

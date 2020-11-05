@@ -2,12 +2,85 @@ import os
 import torch
 import torch.nn.functional as F
 import ZBuffer_cuda
+
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-from utils import *
+
+import math
+import utils
 from settings import CFG
 
+#
+# def generate_full(vec, std, mean):
+#     return vec * std + mean
 
-def generate_full(vec, std, mean):
+
+def render_all(lv_m, lv_il, albedo, shape_1d, exp_1d,
+               input_mask=None, input_background=None, post_fix="",
+               using_expression=CFG.using_expression,
+               using_albedo_as_tex=CFG.using_albedo_as_tex):
+    m_full = generate_full(lv_m, "m")
+    shape_full = generate_full(shape_1d, "shape")
+    exp_full = generate_full(exp_1d, "exp")
+
+    if using_expression:
+        shape_final = shape_full + exp_full
+    else:
+        shape_final = shape_full
+
+    shade = generate_shade(lv_il, m_full, shape_final)
+    tex = albedo if using_albedo_as_tex else generate_texture(albedo, shade)
+
+    u, v, mask = warping_flow(m_full, shape_final)
+    mask = mask.unsqueeze(1)
+    gen_img = rendering_wflow(tex, u, v)
+
+    masked_img_dict = dict()
+    if input_mask is not None:
+        mask = mask * input_mask
+        gen_img = apply_mask(gen_img, mask, input_background)
+
+    return {
+        f"shade{post_fix}": shade,
+        f"tex{post_fix}": tex,
+        f"u{post_fix}": u,
+        f"v{post_fix}": v,
+        f"g_img_mask{post_fix}": mask,
+        f"g_img{post_fix}": gen_img,
+        **masked_img_dict
+    }
+
+
+def render_mix(albedo_base, shade_base, albedo_comb, shade_comb,
+               u_base, v_base, u_comb, v_comb, mask_base=None, mask_comb=None,
+               input_mask=None, input_background=None,
+               using_albedo_as_tex=CFG.using_albedo_as_tex):
+    if using_albedo_as_tex:
+        tex_mix_ac_sb = albedo_comb
+        tex_mix_ab_sc = albedo_base
+    else:
+        tex_mix_ac_sb = generate_texture(albedo_comb, shade_base)
+        tex_mix_ab_sc = generate_texture(albedo_base, shade_comb)
+
+    gen_img_ac_sb = rendering_wflow(tex_mix_ac_sb, u_base, v_base)
+    gen_img_ab_sc = rendering_wflow(tex_mix_ab_sc, u_comb, v_comb)
+
+    if mask_base is not None and mask_comb is not None:
+        gen_img_ac_sb = apply_mask(gen_img_ac_sb, mask_base * input_mask, input_background)
+        gen_img_ab_sc = apply_mask(gen_img_ab_sc, mask_comb * input_mask, input_background)
+
+    return {
+        "tex_mix_ac_sb": tex_mix_ac_sb,
+        "tex_mix_ab_sc": tex_mix_ab_sc,
+        "g_img_ac_sb": gen_img_ac_sb,
+        "g_img_ab_sc": gen_img_ab_sc,
+    }
+
+
+def generate_full(vec, kind="shape"):
+    assert kind in ["shape", "m", "exp"]
+    std = getattr(CFG, f"std_{kind}")
+    mean = getattr(CFG, f"mean_{kind}")
+
     return vec * std + mean
 
 
@@ -17,7 +90,7 @@ def minmax(vec):
 
 def generate_texture(albedo, shade, is_clamp=False):
     tex = 2.0 * ((albedo + 1.0) / 2.0 * shade) - 1.0
-    # tex = torch.clamp(tex, 0, 1)
+
     if is_clamp:
         tex = torch.clamp(tex, 0, 1)
     return tex
@@ -64,20 +137,6 @@ def renderer_random(m_full, tex, shape_full, postfix=""):
     return param_dict
 
 
-def render_from_texture(m, tex, shape, images, tex_masks, std_m, mean_m, std_shape, mean_shape):
-
-    g_images_gt, g_images_mask_gt = warp_texture_torch(tex, m * std_m + mean_m, shape * std_shape + mean_shape)
-
-#    g_images_mask_render = tex_masks * g_images_mask_gt.unsqueeze(1).repeat(1, 3, 1, 1)
-#    g_images_render = g_images_gt * g_images_mask_render + images * (torch.ones_like(g_images_mask_render) - g_images_mask_render)
-
-    param_dict = {
-        "g_images_gt": g_images_gt,
-        "g_images_mask_gt": g_images_mask_gt
-    }
-    return g_images_gt, g_images_mask_gt
-
-
 def ZBuffer_Rendering_CUDA_op_v2_sz224_torch(s2d, tri, vis):
 
     s2d = s2d.contiguous()
@@ -90,9 +149,9 @@ def ZBuffer_Rendering_CUDA_op_v2_sz224_torch(s2d, tri, vis):
 def warping_flow(m, mshape, output_size=96, is_reduce=False):
     batch_size = mshape.shape[0]
 
-    tri = load_3DMM_tri(is_reduce)
-    vertex_tri = load_3DMM_vertex_tri(is_reduce)
-    vt2pixel_u, vt2pixel_v = load_FaceAlignment_vt2pixel(is_reduce)
+    tri = utils.load_3DMM_tri(is_reduce)
+    vertex_tri = utils.load_3DMM_vertex_tri(is_reduce)
+    vt2pixel_u, vt2pixel_v = utils.load_FaceAlignment_vt2pixel(is_reduce)
 
     tri = torch.from_numpy(tri).cuda().long()  # [3, TRI_NUM + 1]
     vertex_tri = torch.from_numpy(vertex_tri).cuda()  # [8, VERTEX_NUM]
@@ -184,10 +243,10 @@ def rendering_wflow(texture, flow_u, flow_v):
 
 
 def apply_mask(image, mask, background=None):
-    image = torch.mul(image, mask)
+    image = torch.mul(image, mask.float())
 
     if background is not None:
-        image = image + torch.mul(background, 1 - mask)
+        image = image + torch.mul(background, 1 - mask.float())
     return image
 
 
@@ -275,7 +334,7 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
     normal = torch.gather(normalf, 1, normal_indices.long())
 
     normal = normal.view((batch_size, 8, -1, 3))
-    multi = torch.mul(normal, mask)
+    multi = torch.mul(normal, mask.float())
     normal = torch.sum(multi, dim=1)
 
 
@@ -293,7 +352,7 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
     count_s_less_0 = torch.sum(1 * torch.lt(s, 0), 0, keepdim=True)
 
 
-    sign = 2 * torch.gt(count_s_greater_0, count_s_less_0) - 1
+    sign = 2 * torch.gt(count_s_greater_0, count_s_less_0).float() - 1
 
     normal = torch.mul(normal, sign.repeat((1, CFG.vertex_num, 1)))
     normalf = torch.mul(normalf, sign.repeat((1, CFG.tri_num + 1, 1)))
@@ -306,7 +365,7 @@ def compute_normal_torch ( vertex, tri, vertex_tri ):
 def compute_landmarks_torch(m, shape):
     batch_size = m.shape[0]
 
-    kpts = torch.from_numpy(load_3DMM_kpts())
+    kpts = torch.from_numpy(utils.load_3DMM_kpts())
     kpts_num = kpts.shape[0]
     indices = torch.zeros([batch_size, kpts_num, 2]).int()
     for i in range(batch_size):
@@ -440,11 +499,11 @@ def generate_shade(il, m, mshape, is_with_normal=False, is_clamp=False):
     batch_size = il.shape[0]
 
     # load 3DMM files
-    tri = torch.from_numpy(load_3DMM_tri())  # [3, TRI_NUM + 1]
-    vertex_tri = torch.from_numpy(load_3DMM_vertex_tri())  # [8, VERTEX_NUM]
-    vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel) for vt2pixel in load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
-    tri_2d = torch.from_numpy(load_3DMM_tri_2d())  # [192, 224] (Fragment shader)
-    tri_2d_barycoord = torch.from_numpy(load_3DMM_tri_2d_barycoord()).cuda()  # [192, 224, 3]
+    tri = torch.from_numpy(utils.load_3DMM_tri())  # [3, TRI_NUM + 1]
+    vertex_tri = torch.from_numpy(utils.load_3DMM_vertex_tri())  # [8, VERTEX_NUM]
+    vt2pixel_u, vt2pixel_v = [torch.from_numpy(vt2pixel) for vt2pixel in utils.load_3DMM_vt2pixel()]  # [VERTEX_NUM + 1, ], [VERTEX_NUM + 1, ]
+    tri_2d = torch.from_numpy(utils.load_3DMM_tri_2d())  # [192, 224] (Fragment shader)
+    tri_2d_barycoord = torch.from_numpy(utils.load_3DMM_tri_2d_barycoord()).cuda()  # [192, 224, 3]
 
     # 삼각형의 각 vertex별로 나눈 것
     tri2vt1 = tri[0, :]
