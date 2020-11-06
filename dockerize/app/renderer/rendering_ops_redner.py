@@ -10,7 +10,8 @@ from os.path import join
 
 
 
-def sphere2xyz ( theta, pi, rho ):
+def sphere2xyz ( sphere_coord ):
+    theta, pi, rho = torch.split(sphere_coord, (1,1,1))
     return torch.tensor(
         [rho * math.sin(theta) * math.cos(pi), rho * math.sin(theta) * math.sin(pi), rho * math.cos(theta)],
         device=pyredner.get_device())
@@ -113,9 +114,7 @@ class Batch_Renderer():
             face.normals = pyredner.compute_vertex_normal(vertices=face.vertices, indices=face.indices)
             
             # camera parameters
-            theta_camera, pi_camera, rho_camera = camera_param
-            rho_camera /= self.rho_divider
-            camera_position = sphere2xyz(theta_camera, pi_camera, rho_camera)
+            camera_position = sphere2xyz(camera_param)
             camera_look_at = torch.tensor([0., 0., 0.], device=self.device)
             camera_up = torch.tensor([0., 1., 0.], device=self.device)
             camera_fov = torch.tensor([45.], device=self.device)
@@ -127,7 +126,7 @@ class Batch_Renderer():
             
             # define light object
             theta_light, pi_light, rho_light = light_param
-            light_position = sphere2xyz(theta_light, pi_light, rho_light)
+            light_position = sphere2xyz(light_param)
             light = pyredner.generate_quad_light(position=light_position,
                                                  look_at=torch.zeros(3, device=self.device),
                                                  size=torch.tensor([0.1, 0.1], device=self.device),

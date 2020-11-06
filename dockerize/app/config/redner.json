@@ -8,6 +8,7 @@
   "checkpoint_step": null,
 
   "dataset_path":  "./deep3d",
+  "definition_path":  "./deep3d/3DMM_definition/",
   "prediction_src_path":  "./dataset/pred/src",
   "prediction_dst_path": "./dataset/pred/dst",
 

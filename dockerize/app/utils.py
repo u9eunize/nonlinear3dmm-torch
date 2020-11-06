@@ -323,6 +323,13 @@ def load_FaceAlignment_vt2pixel(is_reduce=False):
 
     return vt2pixel_u, vt2pixel_v
 
+def load_bfm2009_vt2pixel():
+    fd = open(join(CFG.definition_path, 'bfm2009.idx'))
+    vt2pixel = np.fromfile(file=fd, dtype=np.float32)
+    fd.close()
+    
+    return vt2pixel
+
 
 def inverse_transform(images):
     return (images + 1.) / 2.

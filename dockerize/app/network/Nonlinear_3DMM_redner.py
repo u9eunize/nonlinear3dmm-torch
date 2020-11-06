@@ -4,10 +4,11 @@ from os.path import join
 
 
 class Nonlinear3DMM_redner(nn.Module):
-    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, m_dim=8, il_dim=27,
-                 tex_sz=(192, 224), img_sz=224):
+    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, m_dim=3, il_dim=3,
+                 tex_sz=(256, 256), img_sz=224):
         super(Nonlinear3DMM_redner, self).__init__()
-        dtype = torch.float
+        
+        self.vt2pixel = torch.tensor(utils.load_bfm2009_vt2pixel(), dtype=torch.float32)
 
         # naming from https://gist.github.com/EderSantana/9b0d5fb309d775b995d5236c32238349
         # TODO: gen(gf)->encoder(ef)
@@ -36,15 +37,12 @@ class Nonlinear3DMM_redner(nn.Module):
         self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
         self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
 
-        # self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
-        # self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
-
     def forward(self, input_images):
         batch_size = input_images.shape[0]
         vt2pixel_u = self.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
         vt2pixel_v = self.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
 
-        lv_m, lv_il, lv_shape, lv_tex, lv_exp = self.nl_encoder(input_images)
+        lv_m, lv_il, lv_shape, lv_tex = self.nl_encoder(input_images)
 
         # albedo
         albedo_dec = self.albedo_dec(lv_tex)
@@ -63,11 +61,6 @@ class Nonlinear3DMM_redner(nn.Module):
         shape_2d_res = shape_2d_base - shape_2d_comb
         shape_1d_res = shape_1d_comb - shape_1d_base
 
-        # exp
-        # exp_dec = self.exp_dec(lv_tex)
-        # exp_2d = self.exp_gen(exp_dec)
-        # exp = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
-
         return dict(
             lv_m=lv_m,
             lv_il=lv_il,
@@ -80,7 +73,6 @@ class Nonlinear3DMM_redner(nn.Module):
             shape_1d_comb=shape_1d_comb,
             shape_2d_res=shape_2d_res,
             shape_1d_res=shape_1d_res,
-            # exp=exp
         )
 
     def make_1d(self, decoder_2d_result, vt2pixel_u, vt2pixel_v):
@@ -91,17 +83,7 @@ class Nonlinear3DMM_redner(nn.Module):
 
     def to(self, device, *args, **kwargs):
         ret = super(Nonlinear3DMM_redner, self).to(device, *args, **kwargs)
+        self.vt2pixel = self.vt2pixel.to(device)
 
-        self.vt2pixel_u = self.vt2pixel_u.to(device)
-        self.vt2pixel_v = self.vt2pixel_v.to(device)
-
-        self.mean_shape = self.mean_shape.to(device)
-        self.std_shape = self.std_shape.to(device)
-
-        self.mean_m = self.mean_m.to(device)
-        self.std_m = self.std_m.to(device)
-
-        self.w_shape = self.w_shape.to(device)
-        self.w_exp = self.w_exp.to(device)
         return ret
 
