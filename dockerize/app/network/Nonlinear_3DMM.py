@@ -62,7 +62,7 @@ class Nonlinear3DMM(nn.Module):
         vt2pixel_u = self.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
         vt2pixel_v = self.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
 
-        lv_m, lv_il, lv_shape, lv_tex, lv_exp = self.nl_encoder(input_images)
+        lv_m, lv_il, lv_shape, lv_tex = self.nl_encoder(input_images)
 
         # albedo
         albedo_dec = self.albedo_dec(lv_tex)

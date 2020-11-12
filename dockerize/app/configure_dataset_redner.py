@@ -75,11 +75,11 @@ class NonlinearDataset(Dataset):
 				image_path : join(self.dataset_dir, 'vertex', '_'.join(basename(image_path).split('_')[:-2]) + '.npy')
 				for image_path in self.image_paths
 		}
-		self.texture_paths = {
-				image_path : join(self.dataset_dir, 'texture', '_'.join(basename(image_path).split('_')[:-2]) + '.jpg')
-				for image_path in self.image_paths
-		}
-		self.params = torch.tensor(np.load(join(self.dataset_dir, f'params.npy')), dtype=torch.float32)
+		# self.texture_paths = {
+		# 		image_path : join(self.dataset_dir, 'texture', '_'.join(basename(image_path).split('_')[:-2]) + '.jpg')
+		# 		for image_path in self.image_paths
+		# }
+		self.params = torch.tensor(np.load(join(self.dataset_dir, f'parameters.npy')), dtype=torch.float32)
 		
 		# assert len(self.image_paths) == self.params.shape[0]
 
@@ -93,31 +93,37 @@ class NonlinearDataset(Dataset):
 		img         = Image.open(img_name)
 		img_tensor  = self.transform(img)
 		
+		# load mask
+		mask_name = self.mask_paths[img_name]
+		mask = Image.open(mask_name)
+		mask_tensor = self.transform(mask)
+		
 		# load texture
-		tex_name    = self.texture_paths[img_name]
-		tex         = Image.open(tex_name)
-		tex_tensor  = self.transform(tex)
+		# tex_name    = self.texture_paths[img_name]
+		# tex         = Image.open(tex_name)
+		# tex_tensor  = self.transform(tex)
 		
 		# load camera parameters
 		param_idx = int(img_name.split('_')[-1][:-4])
 		params = self.params[param_idx]
-		camera, light, rotate, trans = torch.split(params, (3, 3, 3, 3), dim=-1)
+		trans, rotate, light = torch.split(params, (3, 3, 3), dim=-1)
 		
 		# read shape, color numpy file
 		vertex_with_color = torch.tensor(np.load(self.vertex_paths[img_name]), dtype=torch.float32)
 		vertex, color = torch.split(vertex_with_color, (3, 3), dim=-1)
-		vertex = translate_vertex(vertex, -trans)
-		vertex = rotate_vertex(vertex, -rotate)
 
 		sample = {
 				'image_name'    : img_name,
 				'image'         : img_tensor,
+				'mask'          : mask_tensor,
+				
+				'trans'         : trans,
+				'rotate'        : rotate,
+				'light'         : light,
+				
 				'vertex'        : vertex,
 				'color'         : color,
-				'texture'       : tex_tensor,
-
-				'camera'        : camera,
-				'light'         : light,
+				
 		}
 
 		return sample
@@ -149,30 +155,63 @@ class NonlinearDataset(Dataset):
 				('test', int(total_len))
 		]
 		
-		################### write train, valid, test txt file
-		# bef = 0
-		# for phase, last_idx in phases:
-		# 	images = all_images[bef:last_idx]
-		# 	images = [line + '\n' for line in images]
-		# 	bef = last_idx
-		# 	with open(join(self.dataset_dir, f'{phase}.txt'), 'w') as f:
-		# 		f.writelines(images)
-		#
-		# ################### write npy file from npy
-		# def color2uv ( vcolor, uv_mapper ):
+		################## write train, valid, test txt file
+		bef = 0
+		for phase, last_idx in phases:
+			images = all_images[bef:last_idx]
+			images = [line + '\n' for line in images]
+			bef = last_idx
+			with open(join(self.dataset_dir, f'{phase}.txt'), 'w') as f:
+				f.writelines(images)
+
+		################### write npy file from npy
+		obj_names = sorted(glob(join(self.dataset_dir, 'obj/*.obj')))
+		mat_names = sorted(glob(join(self.dataset_dir, 'mat/*.mat')))
+		
+		def read_obj ( obj_name, mat_name ):
+			vertex = []
+			color = []
+			with open(obj_name) as f:
+				for line in f.readlines():
+					splited = line.split(' ')
+					if len(splited) == 1:
+						break
+					else:
+						mode, x, y, z, r, g, b = splited
+						vertex.append(np.array([float(x), float(y), float(z)]))
+						color.append(np.array([float(r), float(g), float(b)]))
+			vertex = torch.tensor(np.stack(vertex))
+			color = np.stack(color)
+			
+			# load translation and rotation coefficients
+			mat_file = io.loadmat(mat_name)
+			rotat = mat_file['coeff'][0][224:227]
+			trans = mat_file['coeff'][0][254:257]
+			vertex = translate_vertex(vertex, -trans)
+			vertex = rotate_vertex(vertex, -rotat)
+			
+			vertex = vertex.numpy()
+			vertex_with_color = np.concatenate([vertex, color], axis=-1)
+			
+			np.save(join(self.dataset_dir, 'vertex', basename(obj_name[:-4])), vertex_with_color)
+		
+		print("     Splitting obj files")
+		Parallel(n_jobs=multiprocessing.cpu_count())(delayed(read_obj)(obj_name, mat_name) for obj_name, mat_name in tqdm(zip(obj_names, mat_names)))
+		
+		
+		
+		
+		# def vcolor2uv ( vcolor ):
 		# 	buffer = torch.zeros([3, 256, 256])
 		#
 		# 	color = torch.from_numpy(vcolor[:, 3:])
 		# 	color = torch.cat([color, torch.zeros([1, 3])], dim=0)
-		#
-		# 	u, v = torch.transpose(uv_mapper[:, :2], 0, 1)
-		# 	v1, v2, v3 = torch.transpose(uv_mapper[:, 2:], 0, 1)
 		# 	avg_color = torch.transpose((color[v1] + color[v2] + color[v3]) / 3, 0, 1)
 		# 	buffer[:, u, v] = avg_color
 		#
 		# 	return buffer
 		#
-		# def read_obj ( obj_name ):
+		# def read_obj ( obj_name,  ):
 		# 	vertex_with_color = []
 		# 	with open(obj_name) as f:
 		# 		for line in f.readlines():
@@ -185,9 +224,10 @@ class NonlinearDataset(Dataset):
 		#
 		# 	vcolor = np.stack(vertex_with_color).astype(np.float32)
 		# 	np.save(join(self.dataset_dir, 'vertex', basename(obj_name[:-4])), vcolor)
-		# 	texture = color2uv(vcolor, uv_mapper)
+		# 	texture = vcolor2uv(vcolor)
 		# 	save_image(texture, join(self.dataset_dir, 'texture', basename(obj_name[:-4] + '.jpg')))
 		#
+		# # set uv mapper
 		# uv_mapper_ = open(join(self.dataset_dir, 'bfm2009.idx'), 'r').readlines()
 		# uv_mapper = []
 		# for line in uv_mapper_:
@@ -199,19 +239,19 @@ class NonlinearDataset(Dataset):
 		# indices_black = uv_mapper[:, 2:] == torch.tensor([0, 0, 0])
 		# uv_mapper[:, 2:][indices_black] = torch.max(uv_mapper) + 1
 		#
+		# u, v = torch.transpose(uv_mapper[:, :2], 0, 1)
+		# v1, v2, v3 = torch.transpose(uv_mapper[:, 2:], 0, 1)
+		#
 		# obj_names = glob(join(self.dataset_dir, 'obj/*.obj'))
-		# # obj_names = []
-		# # for image in all_images:
-		# # 	obj_names.append(join(self.dataset_dir, 'obj', '_'.join(basename(image).split('_')[:-2]) + '.obj'))
 		#
 		# print("     Splitting obj files")
 		# Parallel(n_jobs=multiprocessing.cpu_count())(delayed(read_obj)(obj_name) for obj_name in tqdm(obj_names))
-		#
-		# # for debugging
-		# # for obj_name in tqdm(obj_names):
-		# # 	read_obj(obj_name)
 
-		################### concat parameters and rot and trans
+		# for debugging
+		# for obj_name in tqdm(obj_names):
+		# 	read_obj(obj_name)
+
+		################## concat parameters and rot and trans
 		# camera_light = np.load(join(self.dataset_dir, 'parameter.npy'))
 		# mat_names = []
 		# for image in all_images:
@@ -225,12 +265,12 @@ class NonlinearDataset(Dataset):
 		#
 		# print("     Splitting mat files")
 		# params = Parallel(n_jobs=multiprocessing.cpu_count())(delayed(concat)(param, mat_name) for param, mat_name in tqdm(list(zip(camera_light, mat_names))))
-		#
-		# # for debugging
-		# # params = []
-		# # for param, mat_name in tqdm(list(zip(camera_light, mat_names))):
-		# # 	params.append(concat(param, mat_name))
-		#
+
+		# for debugging
+		# params = []
+		# for param, mat_name in tqdm(list(zip(camera_light, mat_names))):
+		# 	params.append(concat(param, mat_name))
+
 		# params = np.stack(params)
 		# np.save(join(self.dataset_dir, 'params'), params)
 	
@@ -251,8 +291,6 @@ def main():
 	print(len(dataloader))
 	
 	for idx, samples in enumerate(dataloader):
-		if idx > 2:
-			break
 		renderer = Batch_Renderer()
 		images, masks = renderer.render(
 							   vertex_batch=samples['vertex'].cuda(),
@@ -261,8 +299,10 @@ def main():
 		                       light_batch=samples['light'].cuda(),
 		                       resolution=(CFG.image_size, CFG.image_size),
 		                       print_timing=True)
+		image = images[0].cpu().detach().numpy()
+		image_name = samples['image_name'][0]
+		break
 
-	return
 
 
 

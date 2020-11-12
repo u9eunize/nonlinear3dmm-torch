@@ -330,6 +330,9 @@ def load_bfm2009_vt2pixel():
     
     return vt2pixel
 
+def load_bfm2009_pixel2vt():
+    return None
+
 
 def inverse_transform(images):
     return (images + 1.) / 2.

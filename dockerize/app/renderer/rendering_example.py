@@ -10,13 +10,7 @@ from os.path import basename
 
 
 def main ():
-    # read ply data and split vertex and color data
-    # plydata = PlyData.read('1.ply')
-    # fname = '1_0.2776017385292788_0.16254296733069473_70.79018321602928.jpg'
-    plydata = PlyData.read('renderer/2.ply')
-    fname = 'renderer/2_0.15897386037903233_0.2043752904048205_58.26357616953039.jpg'
-    # plydata = PlyData.read('3.ply')
-    # fname = '3_5.584806478789926_0.013549064110521272_66.73159275208857.jpg'
+    plydata = PlyData.read('renderer/0.ply')
     x, y, z = plydata['vertex']['x'], plydata['vertex']['y'], plydata['vertex']['z']
     r, g, b = plydata['vertex']['red'], plydata['vertex']['green'], plydata['vertex']['blue']
     vertex = np.stack([x, y, z], axis=1)
@@ -25,18 +19,22 @@ def main ():
     
     # define 3d model
     vertex = torch.tensor(vertex, device=pyredner.get_device())
-    indices = torch.tensor(face, device=pyredner.get_device())
     color = torch.tensor(color, device=pyredner.get_device()) / 255.0
+    color = torch.ones_like(color, device=pyredner.get_device())
 
     # set camera parameters
-    id, pi_camera, theta_camera, rho_camera = [float(t) for t in basename(fname).split('.jpg')[0].split('_')]
-    camera_param = torch.tensor([theta_camera, pi_camera, rho_camera], device=pyredner.get_device())
+    # id, pi_camera, theta_camera, rho_camera = [float(t) for t in basename(fname).split('.jpg')[0].split('_')]
+    # camera_param = torch.tensor([theta_camera, pi_camera, rho_camera], device=pyredner.get_device())
     
     # set light parameters
     theta_light = math.pi * -0.5
     pi_light = 0
     rho_light = 20
     light_param = torch.tensor([theta_light, pi_light, rho_light], device=pyredner.get_device())
+    
+    # position parameters
+    trans = torch.tensor([0.5, 0.5, 0.5], device=pyredner.get_device())
+    rot = torch.tensor([0.0, 0.0, math.pi/2], device=pyredner.get_device())
 
     # render
     def batch_wise(tensor, batch_size):
@@ -48,13 +46,14 @@ def main ():
     
     pyredner.set_print_timing(False)
     renderer = Batch_Renderer()
-    images, masks = renderer.render(vertex_batch=batch_wise(vertex, batch_size),
-                      # indices_batch=batch_wise(indices, batch_size),
-                      color_batch=batch_wise(color, batch_size),
-                      camera_batch=batch_wise(camera_param, batch_size),
-                      light_batch=batch_wise(light_param, batch_size),
-                      resolution=(224,224),
-                      print_timing=True)
+    images, masks = renderer.render(
+        vertex_batch=batch_wise(vertex, batch_size),
+        color_batch=batch_wise(color, batch_size),
+        trans_batch=batch_wise(trans, batch_size),
+        rotation_batch=batch_wise(rot, batch_size),
+        light_batch=batch_wise(light_param, batch_size),
+        print_timing=True
+    )
     
     masked = images * masks
     # write images

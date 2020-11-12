@@ -14,18 +14,13 @@ from settings import CFG
 #     return vec * std + mean
 
 
-def render_all(lv_m, lv_il, albedo, shape_1d, exp_1d,
+def render_all(lv_trans, lv_rot, lv_il, albedo, shape_1d,
                input_mask=None, input_background=None, post_fix="",
                using_expression=CFG.using_expression,
                using_albedo_as_tex=CFG.using_albedo_as_tex):
-    m_full = generate_full(lv_m, "m")
     shape_full = generate_full(shape_1d, "shape")
-    exp_full = generate_full(exp_1d, "exp")
 
-    if using_expression:
-        shape_final = shape_full + exp_full
-    else:
-        shape_final = shape_full
+    shape_final = shape_full
 
     shade = generate_shade(lv_il, m_full, shape_final)
     tex = albedo if using_albedo_as_tex else generate_texture(albedo, shade)

@@ -37,7 +37,7 @@
   "vertex_num_reduce": 39111,
   "tri_num_reduce":  77572,
   "image_size": 224,
-  "texture_size":  [192, 224],
+  "texture_size":  [256, 256],
   "landmark_num": 68,
   "c_dim":  3,
   "const_pixels_num": 20,

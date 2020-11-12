@@ -4,11 +4,15 @@ from os.path import join
 
 
 class Nonlinear3DMM_redner(nn.Module):
-    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, m_dim=3, il_dim=3,
+    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, trans_dim=3, rot_dim=3, il_dim=3,
                  tex_sz=(256, 256), img_sz=224):
         super(Nonlinear3DMM_redner, self).__init__()
+
+        h, w = CFG.texture_size
+        vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load('deep3d/BFM_uvmap.npy')), (1, 1), dim=-1)
+        vt2pixel_v = torch.ones_like(vt2pixel_v) - vt2pixel_v
+        self.vt2pixel_u, self.vt2pixel_v = vt2pixel_u * h, vt2pixel_v * w
         
-        self.vt2pixel = torch.tensor(utils.load_bfm2009_vt2pixel(), dtype=torch.float32)
 
         # naming from https://gist.github.com/EderSantana/9b0d5fb309d775b995d5236c32238349
         # TODO: gen(gf)->encoder(ef)
@@ -18,8 +22,9 @@ class Nonlinear3DMM_redner(nn.Module):
         self.dfc_dim = gfc_dim          # Dimension of decoder units for fully connected layer. [512]
 
         self.nz = nz                    # number of color channels in the input images. For color images this is 3
-        self.m_dim = m_dim              # Dimension of camera matrix latent vector [8]
-        self.il_dim = il_dim            # Dimension of illumination latent vector [27]
+        self.trans_dim = trans_dim      # Dimension of camera matrix latent vector [3]
+        self.rot_dim = rot_dim          # Dimension of camera matrix latent vector [3]
+        self.il_dim = il_dim            # Dimension of illumination latent vector [3]
         self.tex_sz = tex_sz            # Texture size
         self.img_sz = img_sz
         
@@ -42,7 +47,7 @@ class Nonlinear3DMM_redner(nn.Module):
         vt2pixel_u = self.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
         vt2pixel_v = self.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
 
-        lv_m, lv_il, lv_shape, lv_tex = self.nl_encoder(input_images)
+        lv_trans, lv_rot, lv_il, lv_shape, lv_tex = self.nl_encoder(input_images)
 
         # albedo
         albedo_dec = self.albedo_dec(lv_tex)
@@ -62,7 +67,8 @@ class Nonlinear3DMM_redner(nn.Module):
         shape_1d_res = shape_1d_comb - shape_1d_base
 
         return dict(
-            lv_m=lv_m,
+            lv_trans=lv_trans,
+            lv_rot=lv_rot,
             lv_il=lv_il,
             albedo_base=albedo_base,
             albedo_comb=albedo_comb,
@@ -79,6 +85,7 @@ class Nonlinear3DMM_redner(nn.Module):
         batch_size = decoder_2d_result.shape[0]
         decoder_1d_result = bilinear_sampler_torch(decoder_2d_result, vt2pixel_u, vt2pixel_v)
         decoder_1d_result = decoder_1d_result.view(batch_size, -1)
+
         return decoder_1d_result
 
     def to(self, device, *args, **kwargs):

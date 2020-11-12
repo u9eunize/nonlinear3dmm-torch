@@ -3,9 +3,9 @@ from pytz import timezone
 from datetime import datetime
 from tqdm import tqdm
 
-from network.Nonlinear_3DMM import Nonlinear3DMM
+from network.Nonlinear_3DMM_redner import Nonlinear3DMM_redner
 from configure_dataset import *
-from renderer.rendering_ops import *
+from renderer.rendering_ops_redner import *
 from loss import Loss
 import log_utils
 from settings import CFG, LOSSES, init_3dmm_settings
@@ -42,33 +42,29 @@ class Nonlinear3DMMHelper:
         self.loss = Loss(loss_coefficients, decay_per_epoch)
 
         # Load model
-        self.net = Nonlinear3DMM().to(CFG.device)
+        self.net = Nonlinear3DMM_redner().to(CFG.device)
 
-        if True:
-            self.random_m_samples = []
-            self.random_il_samples = []
-            self.random_exp_samples = []
-        else:
-            pass
+        self.random_m_samples = []
+        self.random_il_samples = []
 
-    def rendering_for_train(self, lv_m, lv_il, albedo_base, albedo_comb,
-                            shape_1d_base, shape_1d_comb, exp_1d_base, exp_1d_comb,
+
+    def rendering_for_train(self, lv_trans, lv_rot, lv_il, albedo_base, albedo_comb,
+                            shape_1d_base, shape_1d_comb,
                             input_images, input_masks, **kwargs):
 
-        base = render_all(lv_m, lv_il, albedo_base, shape_1d_base, exp_1d_base,
+        base = render_all(lv_trans, lv_rot, lv_il, albedo_base, shape_1d_base,
                           input_mask=input_masks, input_background=input_images, post_fix="_base")
-        comb = render_all(lv_m, lv_il, albedo_comb, shape_1d_comb, exp_1d_comb,
+        comb = render_all(lv_trans, lv_rot, lv_il, albedo_comb, shape_1d_comb,
                           input_mask=input_masks, input_background=input_images, post_fix="_comb")
 
-        mix = render_mix(albedo_base, base["shade_base"], albedo_comb, comb["shade_comb"],
-                         base["u_base"], base["v_base"], comb["u_comb"], comb["v_comb"],
+        mix = render_mix(albedo_base, base["shade_base"], shape_1d_base, albedo_comb, comb["shade_comb"], shape_1d_comb,
+                         lv_trans, lv_rot, lv_il,
                          mask_base=base["g_img_mask_base"], mask_comb=comb["g_img_mask_comb"],
                          input_mask=input_masks, input_background=input_images)
 
         return {**base, **comb, **mix}
 
     def run_model(self, **inputs):
-        # lv_m, lv_il, lv_shape, lv_tex, albedo, shape2d, shape1d, exp = self.net(input_images)
 
         loss_param = {}
 
@@ -92,13 +88,13 @@ class Nonlinear3DMMHelper:
     def train(self, batch_size=CFG.batch_size):
         # Load datasets
         train_dataset = NonlinearDataset(phase='train', frac=CFG.train_dataset_frac)
-        valid_dataset = NonlinearDataset(phase='valid', frac=CFG.valid_dataset_frac)
+        # valid_dataset = NonlinearDataset(phase='valid', frac=CFG.valid_dataset_frac)
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, shuffle=True,
                                       num_workers=1, pin_memory=True)
 
-        valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, drop_last=True, shuffle=False,
-                                      num_workers=1, pin_memory=True)
+        # valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, drop_last=True, shuffle=False,
+        #                               num_workers=1, pin_memory=True)
 
         # Set optimizers
         encoder_optimizer = torch.optim.Adam(self.net.nl_encoder.parameters(),
@@ -250,14 +246,19 @@ class Nonlinear3DMMHelper:
 
     def sample_to_param(self, samples):
         return {
-            "input_images": samples["image"].to(CFG.device),
-            "input_masks": samples["mask_img"].to(CFG.device),
-            "input_texture_labels": samples["texture"].to(CFG.device),
-            "input_texture_masks": samples["mask"].to(CFG.device),
-            "input_m_labels": samples["m_label"].to(CFG.device),
-            "input_shape_labels": samples["shape_label"].to(CFG.device),
-            "input_albedo_indexes": list(map(lambda a: a.to(CFG.device), samples["albedo_indices"])),
-            "input_exp_labels": samples["exp_label"].to(CFG.device)
+            "input_image_name": samples["image_name"].to(CFG.device),
+            "input_image": samples["image"].to(CFG.device),
+            "input_mask": samples["mask"].to(CFG.device),
+            
+            "input_trans": samples["trans"].to(CFG.device),
+            "input_rotate": samples["rotate"].to(CFG.device),
+            "input_light": samples["light"].to(CFG.device),
+        
+            "input_vertex": samples["vertex"].to(CFG.device),
+            "input_color" : samples["color"].to(CFG.device),
+            
+            # "input_albedo_indexes": list(map(lambda a: a.to(CFG.device), samples["albedo_indices"])),
+            # "input_exp_labels": samples["exp_label"].to(CFG.device)
         }
 
 
@@ -309,7 +310,7 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         # 'mix_ab_sc_texture': 0.8,
     }
 
-    init_3dmm_settings()
+    # init_3dmm_settings()
 
     pretrained_helper = Nonlinear3DMMHelper(LOSSES, decay_per_epoch)
     pretrained_helper.train()

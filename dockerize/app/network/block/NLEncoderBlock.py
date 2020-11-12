@@ -5,7 +5,7 @@ from torch import nn
 
 
 class Encoder(nn.Module):
-    def __init__(self, in_dim, gf_dim, gfc_dim_m, gfc_dim_il, gfc_dim_shape, gfc_dim_tex, gfc_dim_exp, out_dim_m, out_dim_il):
+    def __init__(self, in_dim, gf_dim, gfc_dim_m, gfc_dim_il, gfc_dim_shape, gfc_dim_tex, gfc_dim_exp, out_dim_trans, out_dim_rot, out_dim_il):
         super(Encoder, self).__init__()
         self.ngpu = 1
         self.in_dim = in_dim
@@ -32,7 +32,8 @@ class Encoder(nn.Module):
         )
 
         in_dim = gf_dim * 5
-        self.m = NLEmbeddingBlock(in_dim, gfc_dim_m, out_dim_m)
+        self.trans = NLEmbeddingBlock(in_dim, gfc_dim_m, out_dim_trans)
+        self.rot = NLEmbeddingBlock(in_dim, gfc_dim_m, out_dim_rot)
         self.il = NLEmbeddingBlock(in_dim, gfc_dim_il, out_dim_il)
         self.shape = NLEmbeddingBlock(in_dim, gfc_dim_shape)
         self.tex = NLEmbeddingBlock(in_dim, gfc_dim_tex)
@@ -45,12 +46,13 @@ class Encoder(nn.Module):
         else:
             output = self.main(x)
 
-        m = self.m(output)
+        trans = self.trans(output)
+        rot = self.rot(output)
         il = self.il(output)
         shape = self.shape(output)
         tex = self.tex(output)
         # exp = self.exp(output)
-        return m, il, shape, tex
+        return trans, rot, il, shape, tex
 
     def _make_layer(self, out_dim, kernel_size, stride):
         layers = [
