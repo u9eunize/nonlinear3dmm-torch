@@ -53,13 +53,13 @@ def rendering(input_images, infer):
 	shape_1d_base = infer["shape_1d_base"]
 	# exp = infer["exp"]
 
-	m_full = generate_full(lv_m, std_m, mean_m)
+	m_full = generate_full(lv_m, "m")
 
-	# shape_full_comb = generate_full((shape_1d_comb + exp), self.std_shape, self.mean_shape)
-	# shape_full_base = generate_full((shape_1d_base + exp), self.std_shape, self.mean_shape)
+	# shape_full_comb = generate_full((shape_1d_comb + exp), "shape")
+	# shape_full_base = generate_full((shape_1d_base + exp), "shape")
 
-	shape_full_base = generate_full(shape_1d_base, std_shape, mean_shape)
-	shape_full_comb = generate_full(shape_1d_comb, std_shape, mean_shape)
+	shape_full_base = generate_full(shape_1d_base, "shape")
+	shape_full_comb = generate_full(shape_1d_comb, "shape")
 
 	shade_base = generate_shade(lv_il, m_full, shape_full_base)
 	shade_comb = generate_shade(lv_il, m_full, shape_full_comb)
@@ -92,34 +92,34 @@ def rendering(input_images, infer):
 	g_img_shade_comb = rendering_wflow(shade_comb, u_comb, v_comb)
 
 	return {
-		"shade_base": shade_base.float(),
-		"shade_comb": shade_comb.float(),
+		"shade_base": shade_base,
+		"shade_comb": shade_comb,
 
-		"tex_base": tex_base.float(),
-		"tex_mix_ac_sb": tex_mix_ac_sb.float(),
-		"tex_mix_ab_sc": tex_mix_ab_sc.float(),
-		"tex_comb": tex_comb.float(),
+		"tex_base": tex_base,
+		"tex_mix_ac_sb": tex_mix_ac_sb,
+		"tex_mix_ab_sc": tex_mix_ab_sc,
+		"tex_comb": tex_comb,
 
-		"g_img_base": g_img_base.float(),
-		"g_img_mask_base": g_img_mask_base.float(),
+		"g_img_base": g_img_base,
+		"g_img_mask_base": g_img_mask_base,
 
-		"g_img_ac_sb": g_img_ac_sb.float(),
-		"g_img_ab_sc": g_img_ab_sc.float(),
+		"g_img_ac_sb": g_img_ac_sb,
+		"g_img_ab_sc": g_img_ab_sc,
 
-		"g_img_comb": g_img_comb.float(),
-		"g_img_mask_comb": g_img_mask_comb.float(),
+		"g_img_comb": g_img_comb,
+		"g_img_mask_comb": g_img_mask_comb,
 
 		# for debugging
-		"g_img_raw_base": g_img_raw_base.float(),
-		"g_img_raw_ac_sb": g_img_raw_ac_sb.float(),
-		"g_img_raw_ab_sc": g_img_raw_ab_sc.float(),
-		"g_img_raw_comb": g_img_raw_comb.float(),
+		"g_img_raw_base": g_img_raw_base,
+		"g_img_raw_ac_sb": g_img_raw_ac_sb,
+		"g_img_raw_ab_sc": g_img_raw_ab_sc,
+		"g_img_raw_comb": g_img_raw_comb,
 
-		"g_img_shade_base": g_img_shade_base.float(),
-		"g_img_shade_comb": g_img_shade_comb.float(),
+		"g_img_shade_base": g_img_shade_base,
+		"g_img_shade_comb": g_img_shade_comb,
 
-		"shape_full_base": shape_full_base.float(),
-		"shape_full_comb": shape_full_comb.float()
+		"shape_full_base": shape_full_base,
+		"shape_full_comb": shape_full_comb
 	}
 
 def main():

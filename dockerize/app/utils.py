@@ -158,7 +158,7 @@ def get_checkpoint_name(path, epoch, step):
     return os.path.join(f"{get_checkpoint_dir(path, epoch)}", f"model_ckpt_{epoch:02d}_{step:06d}.pt")
 
 
-def grid_viewer(images, limit=8):
+def grid_viewer(images, limit=8, split=False):
     if not isinstance(images, list):
         images = [images]
 
@@ -169,7 +169,10 @@ def grid_viewer(images, limit=8):
         p_s = list(img.shape)
         reshape_image[:p_s[0], :p_s[1], :p_s[2], :p_s[3]] = img.float()
         reshape_image = torch.flip(reshape_image, dims=[1])
-        reshape_imgs.append(reshape_image)
+        if split:
+            reshape_imgs += list(torch.split(reshape_image, 1, dim=1))
+        else:
+            reshape_imgs.append(reshape_image)
 
     image = make_grid(torch.cat(reshape_imgs, dim=0), nrow=t_s[0])
     return image.data.permute(1, 2, 0).cpu().numpy()

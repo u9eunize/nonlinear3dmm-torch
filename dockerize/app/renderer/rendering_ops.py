@@ -32,7 +32,7 @@ def render_all(lv_trans, lv_rot, lv_il, albedo, shape_1d,
     masked_img_dict = dict()
     if input_mask is not None:
         mask = mask * input_mask
-        gen_img = apply_mask(gen_img, mask, input_background)
+        masked_img_dict[f"g_img_bg{post_fix}"] = apply_mask(gen_img, mask, input_background)
 
     return {
         f"shade{post_fix}": shade,
@@ -59,15 +59,21 @@ def render_mix(albedo_base, shade_base, albedo_comb, shade_comb,
     gen_img_ac_sb = rendering_wflow(tex_mix_ac_sb, u_base, v_base)
     gen_img_ab_sc = rendering_wflow(tex_mix_ab_sc, u_comb, v_comb)
 
+    masked_img_dict = dict()
     if mask_base is not None and mask_comb is not None:
-        gen_img_ac_sb = apply_mask(gen_img_ac_sb, mask_base * input_mask, input_background)
-        gen_img_ab_sc = apply_mask(gen_img_ab_sc, mask_comb * input_mask, input_background)
+        gen_img_bg_ac_sb = apply_mask(gen_img_ac_sb, mask_base * input_mask, input_background)
+        gen_img_bg_ab_sc = apply_mask(gen_img_ab_sc, mask_comb * input_mask, input_background)
+        masked_img_dict = {
+            "g_img_bg_ac_sb": gen_img_bg_ac_sb,
+            "g_img_bg_ab_sc": gen_img_bg_ab_sc,
+        }
 
     return {
         "tex_mix_ac_sb": tex_mix_ac_sb,
         "tex_mix_ab_sc": tex_mix_ab_sc,
         "g_img_ac_sb": gen_img_ac_sb,
         "g_img_ab_sc": gen_img_ab_sc,
+        **masked_img_dict
     }
 
 

@@ -162,7 +162,7 @@ class Nonlinear3DMMHelper:
                 self.logger_train.write_loss_scalar(self.loss)
                 self.logger_train.write_loss_images_lazy(loss_param)
 
-                if self.logger_train.get_step() % save_per == 0:
+                if (idx+1) % save_per == 0:
                     save_epoch = epoch
                     if idx == len(train_dataloader) - 1:
                         save_epoch += 1
@@ -192,6 +192,10 @@ class Nonlinear3DMMHelper:
                 self.loss.time_start("data_fetching")
             if epoch % 2 == 0:
                 self.loss.decay_coefficient()
+
+            save(self.net, global_optimizer, encoder_optimizer, epoch + 1,
+                 self.state_file_root_name, self.logger_train.get_step())
+            self.logger_train.save_to_files(self.state_file_root_name, epoch + 1)
 
     def validate(self, valid_dataloader, epoch, global_step):
         print("\n\n", "*" * 10, "start validation", "*" * 10, "\n")

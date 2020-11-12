@@ -2,6 +2,7 @@
 
 ## k8s settings
 
+
 ### nonlinear
 ```
 apiVersion: v1
@@ -24,7 +25,7 @@ spec:
     - name: hpcd-registry-ag-registry
   containers:
     - name: ag-jhson
-      image: "ag-registry.222.122.67.52.nip.io:443/nonlinear:proxy.1.0.12"
+      image: "ag-registry.222.122.67.52.nip.io:443/nonlinear:proxy.1.0.13"
       command: ["/bin/bash"]
       args: 
         - "-c"
