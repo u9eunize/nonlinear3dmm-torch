@@ -139,13 +139,13 @@ class NLLogger:
         base_exp_mask = apply_mask(base_exp["g_img"], base_exp["g_img_mask"] * input_masks, input_images).cpu()
         comb_exp = render_all(lv_m, lv_il, albedo_comb, shape_1d_comb, exp_1d_comb, using_expression=True)
         comb_exp_raw = comb_exp["g_img"].cpu()
-        comb_exp_mask = apply_mask(base_exp["g_img"], base_exp["g_img_mask"] * input_masks, input_images).cpu()
+        comb_exp_mask = apply_mask(comb_exp["g_img"], comb_exp["g_img_mask"] * input_masks, input_images).cpu()
         base_no_exp = render_all(lv_m, lv_il, albedo_base, shape_1d_base, exp_1d_base, using_expression=False)
         base_no_exp_raw = base_no_exp["g_img"].cpu()
-        base_no_exp_mask = apply_mask(base_exp["g_img"], base_exp["g_img_mask"] * input_masks, input_images).cpu()
+        base_no_exp_mask = apply_mask(base_no_exp["g_img"], base_no_exp["g_img_mask"] * input_masks, input_images).cpu()
         comb_no_exp = render_all(lv_m, lv_il, albedo_comb, shape_1d_comb, exp_1d_comb, using_expression=False)
         comb_no_exp_raw = comb_no_exp["g_img"].cpu()
-        comb_no_exp_mask = apply_mask(base_exp["g_img"], base_exp["g_img_mask"] * input_masks, input_images).cpu()
+        comb_no_exp_mask = apply_mask(comb_no_exp["g_img"], comb_no_exp["g_img_mask"] * input_masks, input_images).cpu()
 
         return {
             "shade_gt": shade_gt.float().cpu(),

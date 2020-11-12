@@ -203,8 +203,9 @@ class Loss:
         g_loss_recon = images_loss / mask_mean
         return g_loss_recon
 
-    def _perceptual_recon_precalculation(self, input_images, g_img_base, g_img_ac_sb, g_img_ab_sc, **kwargs):
-        idxes, fts = self._face_calculation_multiple(input_images, g_img_base, g_img_ac_sb, g_img_ab_sc)
+    def _perceptual_recon_precalculation(self, input_images, g_img_base, g_img_ac_sb, g_img_ab_sc,
+                                         input_masks, **kwargs):
+        idxes, fts = self._face_calculation_multiple(input_images * input_masks, g_img_base, g_img_ac_sb, g_img_ab_sc)
 
         return dict(
             pcpt_input_images=(idxes[0], fts[0]),
@@ -268,17 +269,17 @@ class Loss:
     def comb_perceptual_recon_loss(self, g_img_comb, **kwargs):
         return self._perceptual_loss_calculation("g_img_comb")
 
-    def base_pix_recon_loss(self, g_img_base, g_img_mask_base, input_images, **kwargs):
-        return self._pixel_loss_calculation(g_img_base, g_img_mask_base, input_images)
+    def base_pix_recon_loss(self, g_img_bg_base, g_img_mask_base, input_images, **kwargs):
+        return self._pixel_loss_calculation(g_img_bg_base, input_images, g_img_mask_base)
 
-    def mix_ac_sb_pix_recon_loss(self, g_img_ac_sb, g_img_mask_base, input_images, **kwargs):
-        return self._pixel_loss_calculation(g_img_ac_sb, g_img_mask_base, input_images)
+    def mix_ac_sb_pix_recon_loss(self, g_img_bg_ac_sb, g_img_mask_base, input_images, **kwargs):
+        return self._pixel_loss_calculation(g_img_bg_ac_sb, input_images, g_img_mask_base)
 
-    def mix_ab_sc_pix_recon_loss(self, g_img_ab_sc, g_img_mask_comb, input_images, **kwargs):
-        return self._pixel_loss_calculation(g_img_ab_sc, g_img_mask_comb, input_images)
+    def mix_ab_sc_pix_recon_loss(self, g_img_bg_ab_sc, g_img_mask_comb, input_images, **kwargs):
+        return self._pixel_loss_calculation(g_img_bg_ab_sc, input_images, g_img_mask_comb)
 
-    def comb_recon_pix_loss(self, g_img_comb, g_img_mask_comb, input_images, **kwargs):
-        return self._pixel_loss_calculation(g_img_comb, g_img_mask_comb, input_images)
+    def comb_recon_pix_loss(self, g_img_bg_comb, g_img_mask_comb, input_images, **kwargs):
+        return self._pixel_loss_calculation(g_img_bg_comb, input_images, g_img_mask_comb)
 
     # --------- texture ---------
 
