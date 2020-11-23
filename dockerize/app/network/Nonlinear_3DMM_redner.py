@@ -4,15 +4,9 @@ from os.path import join
 
 
 class Nonlinear3DMM_redner(nn.Module):
-    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, trans_dim=3, rot_dim=3, il_dim=3,
+    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, trans_dim=3, rot_dim=3, il_dim=27,
                  tex_sz=(256, 256), img_sz=224):
         super(Nonlinear3DMM_redner, self).__init__()
-
-        h, w = CFG.texture_size
-        vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load('deep3d/BFM_uvmap.npy')), (1, 1), dim=-1)
-        vt2pixel_v = torch.ones_like(vt2pixel_v) - vt2pixel_v
-        self.vt2pixel_u, self.vt2pixel_v = vt2pixel_u * h, vt2pixel_v * w
-        
 
         # naming from https://gist.github.com/EderSantana/9b0d5fb309d775b995d5236c32238349
         # TODO: gen(gf)->encoder(ef)
@@ -30,7 +24,7 @@ class Nonlinear3DMM_redner(nn.Module):
         
         ###################################### encoder
         self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2,
-                                  self.gfc_dim // 2, self.gfc_dim // 2, self.m_dim, self.il_dim)
+                                  self.gfc_dim // 2, self.gfc_dim // 2, self.trans_dim, self.rot_dim, self.il_dim)
 
         self.in_dim = self.nl_encoder.in_dim
 
@@ -42,12 +36,16 @@ class Nonlinear3DMM_redner(nn.Module):
         self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
         self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
 
+        self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
+        self.exp_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
+        self.exp_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
+
     def forward(self, input_images):
         batch_size = input_images.shape[0]
-        vt2pixel_u = self.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
-        vt2pixel_v = self.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
+        vt2pixel_u = CFG.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
+        vt2pixel_v = CFG.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
 
-        lv_trans, lv_rot, lv_il, lv_shape, lv_tex = self.nl_encoder(input_images)
+        lv_trans, lv_angle, lv_il, lv_shape, lv_tex, lv_exp = self.nl_encoder(input_images)
 
         # albedo
         albedo_dec = self.albedo_dec(lv_tex)
@@ -66,19 +64,38 @@ class Nonlinear3DMM_redner(nn.Module):
         shape_2d_res = shape_2d_base - shape_2d_comb
         shape_1d_res = shape_1d_comb - shape_1d_base
 
+        exp_dec = self.exp_dec(lv_tex)
+        exp_2d_base = self.exp_gen_base(exp_dec)
+        exp_2d_comb = self.exp_gen_comb(exp_dec)
+
+        exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
+        exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
+
+        exp_2d_res = exp_2d_base - exp_2d_comb
+        exp_1d_res = exp_1d_comb - exp_1d_base
+
         return dict(
             lv_trans=lv_trans,
-            lv_rot=lv_rot,
+            lv_angle=lv_angle,
             lv_il=lv_il,
+            
             albedo_base=albedo_base,
             albedo_comb=albedo_comb,
             albedo_res=albedo_res,
+            
             shape_2d_base=shape_2d_base,
             shape_2d_comb=shape_2d_comb,
             shape_1d_base=shape_1d_base,
             shape_1d_comb=shape_1d_comb,
             shape_2d_res=shape_2d_res,
             shape_1d_res=shape_1d_res,
+    
+            exp_2d_base=exp_2d_base,
+            exp_2d_comb=exp_2d_comb,
+            exp_1d_base=exp_1d_base,
+            exp_1d_comb=exp_1d_comb,
+            exp_2d_res=exp_2d_res,
+            exp_1d_res=exp_1d_res,
         )
 
     def make_1d(self, decoder_2d_result, vt2pixel_u, vt2pixel_v):
@@ -90,7 +107,8 @@ class Nonlinear3DMM_redner(nn.Module):
 
     def to(self, device, *args, **kwargs):
         ret = super(Nonlinear3DMM_redner, self).to(device, *args, **kwargs)
-        self.vt2pixel = self.vt2pixel.to(device)
-
+        # self.vt2pixel_u = self.vt2pixel_u.to(device)
+        # self.vt2pixel_v = self.vt2pixel_v.to(device)
+        
         return ret
 

@@ -21,8 +21,27 @@ from torchvision.utils import save_image
 from torchvision.utils import make_grid
 
 from settings import CFG, LOSSES
+
 import importlib
 importlib.import_module('settings', 'CFG')
+
+
+blender_to_deep = np.load(join(CFG.dataset_path, 'blender_to_deep.npy'))
+blender_to_deep = torch.tensor(blender_to_deep).to(CFG.device)
+
+# def get_blender_vcf(o_v,o_c, o_f):
+#     b_to_o= CFG.blender_to_deep
+#     o_to_b= CFG.deep_to_blender
+#     n_verts = o_v[b_to_o]
+#     n_colors = o_c[b_to_o]
+#     n_faces = o_to_b[o_f]
+#     return n_verts, n_colors, n_faces
+
+def get_blender_vc(o_v,o_c):
+    b_to_o= blender_to_deep
+    n_verts = o_v[b_to_o]
+    n_colors = o_c[b_to_o]
+    return n_verts, n_colors
 
 
 try:
@@ -282,7 +301,7 @@ def load_Basel_basic(element, is_reduce=False):
     all_paras = np.fromfile(file=fd, dtype=np.float32)
     fd.close()
 
-    all_paras = np.transpose(all_paras.reshape((-1, CFG.N)).astype(np.float32))
+    all_paras = np.transpose(all_paras.reshape((-1, 53215)).astype(np.float32))
 
     mu = all_paras[:, 0]
     w = all_paras[:, 1:]

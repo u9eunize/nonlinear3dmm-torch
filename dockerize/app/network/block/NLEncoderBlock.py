@@ -37,7 +37,7 @@ class Encoder(nn.Module):
         self.il = NLEmbeddingBlock(in_dim, gfc_dim_il, out_dim_il)
         self.shape = NLEmbeddingBlock(in_dim, gfc_dim_shape)
         self.tex = NLEmbeddingBlock(in_dim, gfc_dim_tex)
-        # self.exp = NLEmbeddingBlock(in_dim, gfc_dim_exp)
+        self.exp = NLEmbeddingBlock(in_dim, gfc_dim_exp)
 
 
     def forward(self, x):
@@ -51,8 +51,8 @@ class Encoder(nn.Module):
         il = self.il(output)
         shape = self.shape(output)
         tex = self.tex(output)
-        # exp = self.exp(output)
-        return trans, rot, il, shape, tex
+        exp = self.exp(output)
+        return trans, rot, il, shape, tex, exp
 
     def _make_layer(self, out_dim, kernel_size, stride):
         layers = [

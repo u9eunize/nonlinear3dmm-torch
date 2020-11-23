@@ -4,9 +4,9 @@ from datetime import datetime
 from tqdm import tqdm
 
 from network.Nonlinear_3DMM_redner import Nonlinear3DMM_redner
-from configure_dataset import *
+from configure_dataset_redner import *
 from renderer.rendering_ops_redner import *
-from loss import Loss
+from loss_redner import Loss
 import log_utils
 from settings import CFG, LOSSES, init_3dmm_settings
 
@@ -15,7 +15,6 @@ class Nonlinear3DMMHelper:
 
     def __init__(self, loss_coefficients, decay_per_epoch=None):
         # initialize parameters
-        dtype = torch.float32
         self.losses = loss_coefficients
 
         if decay_per_epoch is None:
@@ -48,40 +47,54 @@ class Nonlinear3DMMHelper:
         self.random_il_samples = []
 
 
-    def rendering_for_train(self, lv_trans, lv_rot, lv_il, albedo_base, albedo_comb,
-                            shape_1d_base, shape_1d_comb,
-                            input_images, input_masks, **kwargs):
+    def rendering_for_train( self, lv_trans, lv_angle, lv_il, albedo_base, albedo_comb,
+                             shape_1d_base, shape_1d_comb,
+                             input_image, input_mask, **kwargs ):
+        
+        batch_size = lv_trans.shape[0]
+        
+        lv_trans_all = torch.cat([lv_trans, lv_trans, lv_trans, lv_trans], dim=0)
+        lv_angle_all = torch.cat([lv_angle, lv_angle, lv_angle, lv_angle], dim=0)
+        lv_il_all = torch.cat([lv_il, lv_il, lv_il, lv_il], dim=0)
+        albedo_all = torch.cat([albedo_base, albedo_base, albedo_comb, albedo_comb], dim=0)
+        shape_1d_all = torch.cat([shape_1d_base, shape_1d_comb, shape_1d_base, shape_1d_comb], dim=0)
+        
+        results = render_all(lv_trans_all, lv_angle_all, lv_il_all, albedo_all, shape_1d_all,
+                         input_mask=input_mask, input_background=input_image)
+        results = list(results.items())
 
-        base = render_all(lv_trans, lv_rot, lv_il, albedo_base, shape_1d_base,
-                          input_mask=input_masks, input_background=input_images, post_fix="_base")
-        comb = render_all(lv_trans, lv_rot, lv_il, albedo_comb, shape_1d_comb,
-                          input_mask=input_masks, input_background=input_images, post_fix="_comb")
+        base = { }
+        comb = { }
+        mix_ac_sb = { }
+        mix_ab_sc = { }
+        
+        for idx in range(batch_size):
+            base[results[idx] + '_base']            = results[idx + batch_size * 0][1]
+            comb[results[idx] + '_comb']            = results[idx + batch_size * 1][1]
+            mix_ac_sb[results[idx] + '_ac_sb']  = results[idx + batch_size * 2][1]
+            mix_ab_sc[results[idx] + '_ab_sc']  = results[idx + batch_size * 3][1]
+            
+        return {**base, **comb, **mix_ac_sb, **mix_ab_sc}
 
-        mix = render_mix(albedo_base, base["shade_base"], shape_1d_base, albedo_comb, comb["shade_comb"], shape_1d_comb,
-                         lv_trans, lv_rot, lv_il,
-                         mask_base=base["g_img_mask_base"], mask_comb=comb["g_img_mask_comb"],
-                         input_mask=input_masks, input_background=input_images)
-
-        return {**base, **comb, **mix}
 
     def run_model(self, **inputs):
 
         loss_param = {}
 
         self.loss.time_start("infer")
-        infer = self.net(inputs["input_images"])
+        infer = self.net(inputs["input_image"])
         self.loss.time_end("infer")
 
         self.loss.time_start("render")
         renderer_dict = self.rendering_for_train(**{**infer, **inputs})
         self.loss.time_end("render")
 
-        mask_dict = generate_tex_mask(inputs["input_texture_labels"], inputs["input_texture_masks"])
+        # mask_dict = generate_tex_mask(inputs["input_texture_label"], inputs["input_texture_mask"])
 
         loss_param.update(inputs)
         loss_param.update(infer)
         loss_param.update(renderer_dict)
-        loss_param.update(mask_dict)
+        # loss_param.update(mask_dict)
 
         return loss_param
 
@@ -168,8 +181,8 @@ class Nonlinear3DMMHelper:
                     self.logger_train.save_to_files(self.state_file_root_name, save_epoch)
                     self.logger_train.step()
 
-                    if CFG.valid:
-                        self.validate(valid_dataloader, epoch, self.logger_train.get_step())
+                    # if CFG.valid:
+                    #     self.validate(valid_dataloader, epoch, self.logger_train.get_step())
 
                     # np.save(f'samples/camera_{epoch}_{idx}', torch.stack(camera, dim=0).numpy())
                     # np.save(f'samples/il_{epoch}_{idx}', torch.stack(il, dim=0).numpy())
@@ -246,16 +259,17 @@ class Nonlinear3DMMHelper:
 
     def sample_to_param(self, samples):
         return {
-            "input_image_name": samples["image_name"].to(CFG.device),
+            "input_image_name": samples["image_name"],
             "input_image": samples["image"].to(CFG.device),
             "input_mask": samples["mask"].to(CFG.device),
             
             "input_trans": samples["trans"].to(CFG.device),
-            "input_rotate": samples["rotate"].to(CFG.device),
+            "input_angle": samples["angle"].to(CFG.device),
             "input_light": samples["light"].to(CFG.device),
+            "input_exp": samples["exp"].to(CFG.device),
         
             "input_vertex": samples["vertex"].to(CFG.device),
-            "input_color" : samples["color"].to(CFG.device),
+            "input_color" : samples["vcolor"].to(CFG.device),
             
             # "input_albedo_indexes": list(map(lambda a: a.to(CFG.device), samples["albedo_indices"])),
             # "input_exp_labels": samples["exp_label"].to(CFG.device)
@@ -309,9 +323,7 @@ def pretrained_lr_test(name=None, start_epoch=-1):
         # 'mix_ac_sb_texture': 0.8,
         # 'mix_ab_sc_texture': 0.8,
     }
-
-    # init_3dmm_settings()
-
+    init_3dmm_settings()
     pretrained_helper = Nonlinear3DMMHelper(LOSSES, decay_per_epoch)
     pretrained_helper.train()
 

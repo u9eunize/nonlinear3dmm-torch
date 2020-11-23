@@ -182,37 +182,75 @@ def parse():
         print(k, ":", v)
     print("--- training setting finish ---\n\n")
 
+    
+
     return args, losses
 
 
 def init_3dmm_settings():
-    import utils
 
-    mu_shape, w_shape = utils.load_Basel_basic('shape')
-    mu_exp, w_exp = utils.load_Basel_basic('exp')
-    tri = torch.from_numpy(utils.load_3DMM_tri()).to(CFG.device)
-    tri_trans = tri.transpose(0, 1)
-    face = torch.zeros_like(tri_trans)
-    face[:, 0:1] = tri_trans[:, 0:1]
-    face[:, 1:2] = tri_trans[:, 2:3]
-    face[:, 2:3] = tri_trans[:, 1:2]
-    face = face.unsqueeze(0).repeat(CFG.batch_size, 1, 1)
+    # mu_shape, w_shape = utils.load_Basel_basic('shape')
+    # mu_exp, w_exp = utils.load_Basel_basic('exp')
+    # tri = torch.from_numpy(utils.load_3DMM_tri()).to(CFG.device)
+    # tri_trans = tri.transpose(0, 1)
+    # face = torch.zeros_like(tri_trans)
+    # face[:, 0:1] = tri_trans[:, 0:1]
+    # face[:, 1:2] = tri_trans[:, 2:3]
+    # face[:, 2:3] = tri_trans[:, 1:2]
+    # face = face.unsqueeze(0).repeat(CFG.batch_size, 1, 1)
+    
+    mean_shape = np.load(join(CFG.dataset_path, 'mean_shape.npy'))
+    std_shape = np.load(join(CFG.dataset_path, 'std_shape.npy'))
+    exBase = np.load(join(CFG.dataset_path, 'exBase.npy'))
+    mean_tex = np.load(join(CFG.dataset_path, 'mean_tex.npy'))
+    texBase = np.load(join(CFG.dataset_path, 'texBase.npy'))
+    
+
+    h, w = CFG.texture_size
+    vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.dataset_path, 'BFM_uvmap.npy')), dtype=torch.float32), (1, 1), dim=-1)
+    vt2pixel_v = torch.ones_like(vt2pixel_v) - vt2pixel_v
+    vt2pixel_u, vt2pixel_v = vt2pixel_u * h, vt2pixel_v * w
+    
+    landmark = np.load(join(CFG.dataset_path, 'landmark.npy'))
+    
+    deep_to_blender = np.load(join(CFG.dataset_path, 'deep_to_blender.npy'))
+
+    face = np.load(join(CFG.dataset_path, 'face.npy'))
+    face = deep_to_blender[face]
+    
+    point_buf = np.load(join(CFG.dataset_path, 'point_buf.npy'))
+
+    
+    
 
     global_3dmm_setting = dict(
-        mean_shape=torch.tensor(mu_shape, dtype=torch.float32).to(CFG.device),
+        mean_shape=torch.tensor(mean_shape, dtype=torch.float32).to(CFG.device),
         std_shape=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
+        exBase=torch.tensor(exBase, dtype=torch.float32).to(CFG.device),
+        mean_tex=torch.tensor(mean_tex, dtype=torch.float32).to(CFG.device),
+        texBase=torch.tensor(texBase, dtype=torch.float32).to(CFG.device),
+    
+        face=torch.tensor(face, dtype=torch.int32).to(CFG.device),
+    
+        vt2pixel_u=vt2pixel_u.to(CFG.device),
+        vt2pixel_v=vt2pixel_v.to(CFG.device),
+        
+        landmark=torch.tensor(landmark, dtype=torch.int32).to(CFG.device),
+    
+        point_buf=torch.tensor(point_buf, dtype=torch.int32).to(CFG.device),
+        
 
-        mean_m=torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=torch.float32).to(CFG.device),
-        std_m=torch.tensor(np.load(join(CFG.dataset_path, 'std_m.npy')), dtype=torch.float32).to(CFG.device),
-
-        mean_exp=torch.tensor(mu_exp, dtype=torch.float32).to(CFG.device),
-        std_exp=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
-
-        w_shape=torch.tensor(w_shape, dtype=torch.float32).to(CFG.device),
-        w_exp=torch.tensor(w_exp, dtype=torch.float32).to(CFG.device),
-
-        tri=tri,
-        face=face,
+        # mean_m=torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=torch.float32).to(CFG.device),
+        # std_m=torch.tensor(np.load(join(CFG.dataset_path, 'std_m.npy')), dtype=torch.float32).to(CFG.device),
+        #
+        # mean_exp=torch.tensor(mu_exp, dtype=torch.float32).to(CFG.device),
+        # std_exp=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
+        #
+        # w_shape=torch.tensor(w_shape, dtype=torch.float32).to(CFG.device),
+        # w_exp=torch.tensor(w_exp, dtype=torch.float32).to(CFG.device),
+        #
+        # tri=tri,
+        # face=face,
     )
 
     for key, value in global_3dmm_setting.items():
