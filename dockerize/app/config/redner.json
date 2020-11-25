@@ -7,8 +7,8 @@
   "checkpoint_epoch":  null,
   "checkpoint_step": null,
 
-  "dataset_path":  "./Deep3d",
-  "definition_path":  "./deep3d/3DMM_definition/",
+  "dataset_path":  "/dataset",
+  "definition_path":  "/dataset/definition",
   "prediction_src_path":  "./dataset/pred/src",
   "prediction_dst_path": "./dataset/pred/dst",
 

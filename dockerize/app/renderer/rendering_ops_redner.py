@@ -53,7 +53,7 @@ class Batch_Renderer():
                 'device'                     : self.device
         }
         self.batch_render = BatchRenderFunction.apply
-        envmap_texels = 1.0 * torch.ones([1, 1, 3], requires_grad=True)
+        envmap_texels = 1.0 * torch.ones([1, 1, 3], requires_grad=True, device=pyredner.get_device())
         self.envmap = pyredner.EnvironmentMap(torch.abs(envmap_texels))
         
         # camera parameters
@@ -114,17 +114,18 @@ class Batch_Renderer():
         rotation = Compute_rotation_matrix(angle_batch)
         
         # compute vertex transformation
-        vertices = torch.bmm(vertex_batch, rotation) + trans_batch
+        vertices = torch.bmm(vertex_batch, rotation) + torch.unsqueeze(trans_batch, 1)
         
         # compute face color
         face_norm = Compute_norm(vertex_batch)
         norm_r = torch.bmm(face_norm, rotation)
         colors = Illumination_block(color_batch, norm_r, light_batch)
+        colors = color_batch
         
         
         for vertex, color in zip(vertices, colors):
             # define shape parameter
-            shape_face = pyredner.Shape(vertices=vertex, indices=CFG.face, colors=color, material_id=0)
+            shape_face = pyredner.Shape(vertices=vertex, indices=CFG.face - 1, colors=color, material_id=0)
             shape_face.normals = pyredner.compute_vertex_normal(vertices=shape_face.vertices,
                                                                 indices=shape_face.indices)
             
@@ -146,39 +147,39 @@ renderer = Batch_Renderer()
 
 
 
-def Compute_rotation_matrix ( angles ):
+def Compute_rotation_matrix ( angles, device=CFG.device ):
     n_data = angles.shape[0]
     
     # compute rotation matrix for X-axis, Y-axis, Z-axis respectively
-    rotation_X = torch.cat([torch.ones([n_data, 1]),
-                            torch.zeros([n_data, 3]),
-                            torch.cos(torch.tensor(angles[:, 0])).view([n_data, 1]),
-                            -torch.sin(torch.tensor(angles[:, 0])).view([n_data, 1]),
-                            torch.zeros([n_data, 1]),
-                            torch.sin(torch.tensor(angles[:, 0])).view([n_data, 1]),
-                            torch.cos(torch.tensor(angles[:, 0])).view([n_data, 1])],
+    rotation_X = torch.cat([torch.ones([n_data, 1]).to(device),
+                            torch.zeros([n_data, 3]).to(device),
+                            torch.cos(angles[:, 0]).view([n_data, 1]),
+                            -torch.sin(angles[:, 0]).view([n_data, 1]),
+                            torch.zeros([n_data, 1]).to(device),
+                            torch.sin(angles[:, 0]).view([n_data, 1]),
+                            torch.cos(angles[:, 0]).view([n_data, 1])],
                            dim=1
                            )
     
-    rotation_Y = torch.cat([torch.cos(torch.tensor(angles[:, 1])).view([n_data, 1]),
-                            torch.zeros([n_data, 1]),
-                            torch.sin(torch.tensor(angles[:, 1])).view([n_data, 1]),
-                            torch.zeros([n_data, 1]),
-                            torch.ones([n_data, 1]),
-                            torch.zeros([n_data, 1]),
-                            -torch.sin(torch.tensor(angles[:, 1])).view([n_data, 1]),
-                            torch.zeros([n_data, 1]),
-                            torch.cos(torch.tensor(angles[:, 1])).view([n_data, 1])],
+    rotation_Y = torch.cat([torch.cos(angles[:, 1]).view([n_data, 1]),
+                            torch.zeros([n_data, 1]).to(device),
+                            torch.sin(angles[:, 1]).view([n_data, 1]),
+                            torch.zeros([n_data, 1]).to(device),
+                            torch.ones([n_data, 1]).to(device),
+                            torch.zeros([n_data, 1]).to(device),
+                            -torch.sin(angles[:, 1]).view([n_data, 1]),
+                            torch.zeros([n_data, 1]).to(device),
+                            torch.cos(angles[:, 1]).view([n_data, 1])],
                            dim=1
                            )
     
-    rotation_Z = torch.cat([torch.cos(torch.tensor(angles[:, 2])).view([n_data, 1]),
-                            -torch.sin(torch.tensor(angles[:, 2])).view([n_data, 1]),
-                            torch.zeros([n_data, 1]),
-                            torch.sin(torch.tensor(angles[:, 2])).view([n_data, 1]),
-                            torch.cos(torch.tensor(angles[:, 2])).view([n_data, 1]),
-                            torch.zeros([n_data, 3]),
-                            torch.ones([n_data, 1])],
+    rotation_Z = torch.cat([torch.cos(angles[:, 2]).view([n_data, 1]),
+                            -torch.sin(angles[:, 2]).view([n_data, 1]),
+                            torch.zeros([n_data, 1]).to(device),
+                            torch.sin(angles[:, 2]).view([n_data, 1]),
+                            torch.cos(angles[:, 2]).view([n_data, 1]),
+                            torch.zeros([n_data, 3]).to(device),
+                            torch.ones([n_data, 1]).to(device)],
                            dim=1
                            )
     
@@ -213,7 +214,7 @@ def Compute_norm ( face_shape ):
     face_norm = torch.cross(e1, e2)
     
     face_norm = F.normalize(face_norm, dim=2)
-    face_norm = torch.cat([face_norm, torch.zeros([face_shape.shape[0], 1, 3])], dim=1)
+    face_norm = torch.cat([face_norm, torch.zeros([face_shape.shape[0], 1, 3]).to(CFG.device)], dim=1)
     
     # compute normal for each vertex using one-ring neighborhood
     v_norm = torch.squeeze(torch.sum(face_norm[:, point_id.long()], dim=2), dim=2)
@@ -227,16 +228,16 @@ def Illumination_block ( face_texture, norm_r, gamma ):
     n_point = norm_r.shape[1]
     gamma = gamma.view([batch_size, 3, 9])
     # set initial lighting with an ambient lighting
-    init_lit = torch.tensor([0.8, 0, 0, 0, 0, 0, 0, 0, 0]).view([1, 1, 9])
+    init_lit = torch.tensor([0.8, 0, 0, 0, 0, 0, 0, 0, 0]).view([1, 1, 9]).to(CFG.device)
     gamma = gamma + init_lit
     
     # compute vertex color using SH function approximation
-    a0 = torch.tensor(math.pi)
-    a1 = torch.tensor(2 * math.pi / math.sqrt(3.0))
-    a2 = torch.tensor(2 * math.pi / math.sqrt(8.0))
-    c0 = torch.tensor(1 / math.sqrt(4 * math.pi))
-    c1 = torch.tensor(math.sqrt(3.0) / math.sqrt(4 * math.pi))
-    c2 = torch.tensor(3 * math.sqrt(5.0) / math.sqrt(12 * math.pi))
+    a0 = torch.tensor(math.pi).to(CFG.device)
+    a1 = torch.tensor(2 * math.pi / math.sqrt(3.0)).to(CFG.device)
+    a2 = torch.tensor(2 * math.pi / math.sqrt(8.0)).to(CFG.device)
+    c0 = torch.tensor(1 / math.sqrt(4 * math.pi)).to(CFG.device)
+    c1 = torch.tensor(math.sqrt(3.0) / math.sqrt(4 * math.pi)).to(CFG.device)
+    c2 = torch.tensor(3 * math.sqrt(5.0) / math.sqrt(12 * math.pi)).to(CFG.device)
     
     Y = torch.cat([(a0 * c0).view([1, 1, 1]).repeat(batch_size, n_point, 1),
                    torch.unsqueeze(-a1 * c1 * norm_r[:, :, 1], 2),

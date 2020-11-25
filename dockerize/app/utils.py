@@ -26,7 +26,7 @@ import importlib
 importlib.import_module('settings', 'CFG')
 
 
-blender_to_deep = np.load(join(CFG.dataset_path, 'blender_to_deep.npy'))
+blender_to_deep = np.load(join(CFG.definition_path, 'blender_to_deep.npy'))
 blender_to_deep = torch.tensor(blender_to_deep).to(CFG.device)
 
 # def get_blender_vcf(o_v,o_c, o_f):

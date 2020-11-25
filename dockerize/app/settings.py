@@ -199,38 +199,38 @@ def init_3dmm_settings():
     # face[:, 2:3] = tri_trans[:, 1:2]
     # face = face.unsqueeze(0).repeat(CFG.batch_size, 1, 1)
     
-    mean_shape = np.load(join(CFG.dataset_path, 'mean_shape.npy'))
-    std_shape = np.load(join(CFG.dataset_path, 'std_shape.npy'))
-    exBase = np.load(join(CFG.dataset_path, 'exBase.npy'))
-    mean_tex = np.load(join(CFG.dataset_path, 'mean_tex.npy'))
-    texBase = np.load(join(CFG.dataset_path, 'texBase.npy'))
+    mean_shape = np.reshape(np.load(join(CFG.definition_path, 'mean_shape.npy')), (CFG.vertex_num, 3))
+    # std_shape = np.load(join(CFG.dataset_path, 'std_shape.npy'))
+    exBase = np.load(join(CFG.definition_path, 'exBase.npy'))
+    mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')), (CFG.vertex_num, 3)) / 255.0
+    texBase = np.load(join(CFG.definition_path, 'texBase.npy'))
     
 
     h, w = CFG.texture_size
-    vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.dataset_path, 'BFM_uvmap.npy')), dtype=torch.float32), (1, 1), dim=-1)
+    vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.definition_path, 'BFM_uvmap.npy')), dtype=torch.float32), (1, 1), dim=-1)
     vt2pixel_v = torch.ones_like(vt2pixel_v) - vt2pixel_v
     vt2pixel_u, vt2pixel_v = vt2pixel_u * h, vt2pixel_v * w
     
-    landmark = np.load(join(CFG.dataset_path, 'landmark.npy'))
+    landmark = np.load(join(CFG.definition_path, 'landmark.npy'))
     
-    deep_to_blender = np.load(join(CFG.dataset_path, 'deep_to_blender.npy'))
+    deep_to_blender = np.load(join(CFG.definition_path, 'deep_to_blender.npy'))
 
-    face = np.load(join(CFG.dataset_path, 'face.npy'))
-    face = deep_to_blender[face]
+    face = np.load(join(CFG.definition_path, 'face.npy'))
+    # face = deep_to_blender[face]
     
-    point_buf = np.load(join(CFG.dataset_path, 'point_buf.npy'))
+    point_buf = np.load(join(CFG.definition_path, 'point_buf.npy'))
 
     
     
 
     global_3dmm_setting = dict(
         mean_shape=torch.tensor(mean_shape, dtype=torch.float32).to(CFG.device),
-        std_shape=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
+        # std_shape=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
         exBase=torch.tensor(exBase, dtype=torch.float32).to(CFG.device),
         mean_tex=torch.tensor(mean_tex, dtype=torch.float32).to(CFG.device),
         texBase=torch.tensor(texBase, dtype=torch.float32).to(CFG.device),
     
-        face=torch.tensor(face, dtype=torch.int32).to(CFG.device),
+        face=torch.tensor(face, dtype=torch.int32).contiguous().to(CFG.device),
     
         vt2pixel_u=vt2pixel_u.to(CFG.device),
         vt2pixel_v=vt2pixel_v.to(CFG.device),
