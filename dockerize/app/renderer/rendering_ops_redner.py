@@ -120,8 +120,7 @@ class Batch_Renderer():
         face_norm = Compute_norm(vertex_batch)
         norm_r = torch.bmm(face_norm, rotation)
         colors = Illumination_block(color_batch, norm_r, light_batch)
-        colors = color_batch
-        
+
         
         for vertex, color in zip(vertices, colors):
             # define shape parameter
@@ -261,7 +260,33 @@ def Illumination_block ( face_texture, norm_r, gamma ):
     return face_color
 
 
+def project_vertices(vertices, trans, angle):
+    batch_size = vertices.shape[0]
 
+    vertices = torch.bmm(vertices, Compute_rotation_matrix(angle)) + torch.unsqueeze(trans, 1)
+
+    focal = 1015.0
+    half_size = CFG.image_size / 2
+    camera_pos = torch.tensor([0., 0., 10.]).view((1, 1, 3)).to(CFG.device)
+    p_matrix = torch.tensor([
+        [focal, 0,      half_size],
+        [0,     focal,  half_size],
+        [0,     0,      1],
+    ]).to(CFG.device)
+    p_matrix = torch.unsqueeze(p_matrix, 0).repeat(batch_size, 1, 1)
+
+    reverse_z = torch.tensor([[1., 0., 0.], [0., 1., 0.], [0., 0., -1.]]).to(CFG.device)
+    reverse_z = torch.unsqueeze(reverse_z, 0).repeat(batch_size, 1, 1)
+    shape = torch.bmm(vertices, reverse_z) + camera_pos
+
+    aug_projection = torch.bmm(shape, torch.transpose(p_matrix, 1, 2))
+
+    projection = aug_projection[:, :, 0:2] / aug_projection[:, :, 2].view((batch_size, aug_projection.shape[1], 1))
+
+    u = CFG.image_size - projection[:, :, 1]
+    v = projection[:, :, 0]
+
+    return u, v
 
 
 
@@ -287,10 +312,9 @@ def make_1d ( decoder_2d_result, vt2pixel_u, vt2pixel_v ):
 
 
 
-def render_all(lv_trans, lv_angle, lv_il, albedo, shape_1d, input_mask, input_background):
+def render_all(lv_trans, lv_angle, lv_il, albedo, exp_1d, shape_1d, input_mask, input_background):
     batch_size = lv_il.shape[0]
-    # shape_full = generate_full(shape_1d, "shape")
-    shape_full = CFG.mean_shape + shape_1d
+    shape_full = CFG.mean_shape + shape_1d + exp_1d
 
     vertex = shape_full.view([batch_size, -1, 3])
     
@@ -307,13 +331,14 @@ def render_all(lv_trans, lv_angle, lv_il, albedo, shape_1d, input_mask, input_ba
         angle_batch=lv_angle,
         light_batch=lv_il
     )
+    images = images.permute(0, 3, 1, 2)
+    masks = masks.permute(0, 3, 1, 2)
 
     return {
         "g_vcolor": vcolors,
         "g_mask": masks,
         "g_img": images * masks,
-        
-        "g_img_bg": images * masks + input_background * (1 - input_mask)
+        "g_img_bg": (images * masks) + input_background * (1 - input_mask)
     }
 
 

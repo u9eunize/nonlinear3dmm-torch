@@ -37,7 +37,8 @@ class NonlinearDataset(Dataset):
 			self.split_dataset()
 
 		self.load_dataset(phase)
-	
+
+
 	def load_dataset ( self , phase ):
 		'''
 			Load dataset
@@ -82,7 +83,7 @@ class NonlinearDataset(Dataset):
 		# load camera parameters
 		params = self.params[idx]
 		angle, trans, light, exp = torch.split(params, (3, 3, 27, 64), dim=-1)
-		exp = torch.einsum('ij,aj->ai', CFG.exBase.cpu(), torch.unsqueeze(exp, 0))
+		exp = torch.einsum('ij,aj->ai', CFG.exBase_cpu, torch.unsqueeze(exp, 0))
 		exp = exp.view((CFG.vertex_num, 3))
 		
 		# read shape, color numpy file
@@ -91,11 +92,12 @@ class NonlinearDataset(Dataset):
 		# vertex, color = get_blender_vc(vertex, vcolor)
 		vertex = vertex - torch.unsqueeze(trans, 0)
 		vertex = torch.bmm(torch.unsqueeze(vertex, 0), Compute_rotation_matrix(torch.unsqueeze(-angle, 0), device='cpu'))
-		vertex = vertex - CFG.mean_shape.cpu() - exp
-
 		vertex = torch.squeeze(vertex, 0)
 
-		vcolor = vcolor - CFG.mean_tex.cpu()
+		exp = exp.view(-1)
+		shape = vertex.view(-1) - CFG.mean_shape_cpu - exp
+
+		vcolor = vcolor - CFG.mean_tex_cpu
 
 		sample = {
 				'image_name'    : img_name,
@@ -105,9 +107,9 @@ class NonlinearDataset(Dataset):
 				'trans'         : trans,
 				'angle'         : angle,
 				'light'         : light,
-				'exp'           : exp, # 2d
+				'exp'           : exp,
 				
-				'vertex'        : vertex, # 2d
+				'shape'         : shape,
 				'vcolor'        : vcolor,
 				
 		}
@@ -186,8 +188,9 @@ def main():
 	dataloader = DataLoader(dataset, batch_size=CFG.batch_size, shuffle=False, num_workers=0)
 	
 	for idx, samples in enumerate(dataloader):
+		shape = (samples['shape'] + samples['exp'] + CFG.mean_shape.cpu()).view([CFG.batch_size, -1, 3])
 		images, masks, _ = renderer.render(
-							   vertex_batch=(samples['vertex'] + samples['exp'] + CFG.mean_shape.cpu()).to(CFG.device),
+							   vertex_batch=shape.to(CFG.device),
 		                       color_batch=(samples['vcolor'] + CFG.mean_tex.cpu()).to(CFG.device),
 							   trans_batch=samples['trans'].to(CFG.device),
 							   angle_batch=samples['angle'].to(CFG.device),
@@ -202,7 +205,7 @@ def main():
 		image_name = samples['image_name'][0]
 		image_label = samples['image'][0].permute(1, 2, 0).cpu().detach().numpy()
 
-		break
+		continue
 
 
 

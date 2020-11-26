@@ -43,11 +43,12 @@ class Nonlinear3DMMHelper:
         # Load model
         self.net = Nonlinear3DMM_redner().to(CFG.device)
 
-        self.random_m_samples = []
-        self.random_il_samples = []
+        self.random_angle_samples = []
+        self.random_trans_samples = []
+        self.random_light_samples = []
 
 
-    def rendering_for_train( self, lv_trans, lv_angle, lv_il, albedo_base, albedo_comb,
+    def rendering_for_train( self, lv_trans, lv_angle, lv_il, exp_1d, albedo_base, albedo_comb,
                              shape_1d_base, shape_1d_comb,
                              input_image, input_mask, **kwargs ):
         
@@ -57,22 +58,27 @@ class Nonlinear3DMMHelper:
         lv_angle_all = torch.cat([lv_angle, lv_angle, lv_angle, lv_angle], dim=0)
         lv_il_all = torch.cat([lv_il, lv_il, lv_il, lv_il], dim=0)
         albedo_all = torch.cat([albedo_base, albedo_base, albedo_comb, albedo_comb], dim=0)
+        exp_all = torch.cat([exp_1d, exp_1d, exp_1d, exp_1d], dim=0)
         shape_1d_all = torch.cat([shape_1d_base, shape_1d_comb, shape_1d_base, shape_1d_comb], dim=0)
+        input_mask_all = torch.cat([input_mask, input_mask, input_mask, input_mask], dim=0)
+        input_image_all = torch.cat([input_image, input_image, input_image, input_image], dim=0)
         
-        results = render_all(lv_trans_all, lv_angle_all, lv_il_all, albedo_all, shape_1d_all,
-                         input_mask=input_mask, input_background=input_image)
+        results = render_all(lv_trans_all, lv_angle_all, lv_il_all, albedo_all, exp_all, shape_1d_all,
+                         input_mask=input_mask_all, input_background=input_image_all)
         results = list(results.items())
 
         base = { }
         comb = { }
+        mix_ab_sc = {}
         mix_ac_sb = { }
-        mix_ab_sc = { }
         
-        for idx in range(batch_size):
-            base[results[idx] + '_base']            = results[idx + batch_size * 0][1]
-            comb[results[idx] + '_comb']            = results[idx + batch_size * 1][1]
-            mix_ac_sb[results[idx] + '_ac_sb']  = results[idx + batch_size * 2][1]
-            mix_ab_sc[results[idx] + '_ab_sc']  = results[idx + batch_size * 3][1]
+        for idx in range(4):
+            key = results[idx][0]
+            result = results[idx][1]
+            base[key + '_base']        = result[0 * batch_size:1 * batch_size]
+            mix_ab_sc[key + '_ab_sc']  = result[1 * batch_size:2 * batch_size]
+            mix_ac_sb[key + '_ac_sb']  = result[2 * batch_size:3 * batch_size]
+            comb[key + '_comb']        = result[3 * batch_size:4 * batch_size]
             
         return {**base, **comb, **mix_ac_sb, **mix_ab_sc}
 
@@ -136,30 +142,22 @@ class Nonlinear3DMMHelper:
 
         for epoch in range(start_epoch, CFG.epoch):
             # For each batch in the dataloader
-            # camera = []
-            # il = []
-            # exp = []
-
             self.loss.time_start("data_fetching")
             for idx, samples in enumerate(train_dataloader, 0):
                 self.loss.time_end("data_fetching")
                 self.loss.time_start("total")
                 loss_param = self.run_model(**self.sample_to_param(samples))
 
-                # camera += loss_param['lv_m'].detach().cpu()
-                # il += loss_param['lv_il'].detach().cpu()
-                # exp += loss_param['exp'].detach().cpu()
-
                 g_loss, g_loss_with_landmark = self.loss(**loss_param)
 
                 self.loss.time_start("optimizer")
                 if idx % 2 == 0:
                     global_optimizer.zero_grad()
-                    g_loss.backward()
+                    g_loss.backward(retain_graph=True)
                     global_optimizer.step()
                 else:
                     encoder_optimizer.zero_grad()
-                    g_loss_with_landmark.backward()
+                    g_loss_with_landmark.backward(retain_graph=True)
                     encoder_optimizer.step()
                 self.loss.time_end("optimizer")
 
@@ -259,7 +257,7 @@ class Nonlinear3DMMHelper:
 
     def sample_to_param(self, samples):
         return {
-            "input_image_name": samples["image_name"],
+            # "input_image_name": samples["image_name"],
             "input_image": samples["image"].to(CFG.device),
             "input_mask": samples["mask"].to(CFG.device),
             
@@ -268,63 +266,14 @@ class Nonlinear3DMMHelper:
             "input_light": samples["light"].to(CFG.device),
             "input_exp": samples["exp"].to(CFG.device),
         
-            "input_vertex": samples["vertex"].to(CFG.device),
-            "input_color" : samples["vcolor"].to(CFG.device),
-            
-            # "input_albedo_indexes": list(map(lambda a: a.to(CFG.device), samples["albedo_indices"])),
-            # "input_exp_labels": samples["exp_label"].to(CFG.device)
+            "input_shape": samples["shape"].to(CFG.device),
+            "input_vcolor" : samples["vcolor"].to(CFG.device),
         }
 
 
 def pretrained_lr_test(name=None, start_epoch=-1):
-    # losses = {
-    #     'm': 5,  # origin: 5
-    #     'shape': 10,  # origin: 10
-    #     # 'expression': 10,  # origin: 10
-    #     'batchwise_white_shading': 10,  # origin: 10
-    #
-    #     'base_landmark': 0.02,  # origin: 0.02
-    #     'comb_landmark': 0.02,  # origin: 0.02
-    #     'gt_landmark': 0.02,  # origin: 0.02
-    #
-    #     'base_texture': 2,  # if using texture loss using 0.5, else 2.5
-    #     'mix_ac_sb_texture': 2,  # if using texture loss  using 0.5, else 2.5
-    #     'mix_ab_sc_texture': 2,  # if using texture loss  using 0.5, else 2.5
-    #     # 'comb_texture': 0,  # if using texture loss  using 0.5, else 2.5
-    #
-    #     # 'base_perceptual_recon': 0,    # default 0
-    #     'mix_ab_sc_perceptual_recon': 10 * 100,  # default 10
-    #     'mix_ac_sb_perceptual_recon': 10 * 100,  # default 10
-    #     # 'comb_perceptual_recon': 0,
-    #
-    #     'base_pix_recon': 10 / 2,
-    #     'mix_ab_sc_pix_recon': 10 * 2 / 2,
-    #     'mix_ac_sb_pix_recon': 10 * 2 / 2,
-    #     # 'comb_pix_recon': 0,
-    #
-    #     'symmetry': 10,  # origin: 10
-    #     'const_albedo': 10,  # origin: 10
-    #     # 'shade_mag': 1,  # origin: 1
-    #
-    #     'base_smoothness': 5e5,  # origin: 5e5
-    #     'comb_smoothness': 1,  # origin: 1
-    #
-    #     #'shape_residual': 1,  # origin: 1
-    #     #'albedo_residual': 1,  # origin: 1
-    #
-    #     # 'identity': 10,f
-    #     # 'content': 10,
-    #     # 'gradient_difference': 10,
-    # }
-    decay_per_epoch = {
-        # 'm': 0.8,
-        # 'shape': 0.8,
-        # 'base_texture': 0.8,
-        # 'mix_ac_sb_texture': 0.8,
-        # 'mix_ab_sc_texture': 0.8,
-    }
     init_3dmm_settings()
-    pretrained_helper = Nonlinear3DMMHelper(LOSSES, decay_per_epoch)
+    pretrained_helper = Nonlinear3DMMHelper(LOSSES)
     pretrained_helper.train()
 
 

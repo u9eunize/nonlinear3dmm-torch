@@ -199,7 +199,7 @@ def init_3dmm_settings():
     # face[:, 2:3] = tri_trans[:, 1:2]
     # face = face.unsqueeze(0).repeat(CFG.batch_size, 1, 1)
     
-    mean_shape = np.reshape(np.load(join(CFG.definition_path, 'mean_shape.npy')), (CFG.vertex_num, 3))
+    mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy'))
     # std_shape = np.load(join(CFG.dataset_path, 'std_shape.npy'))
     exBase = np.load(join(CFG.definition_path, 'exBase.npy'))
     mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')), (CFG.vertex_num, 3)) / 255.0
@@ -225,9 +225,12 @@ def init_3dmm_settings():
 
     global_3dmm_setting = dict(
         mean_shape=torch.tensor(mean_shape, dtype=torch.float32).to(CFG.device),
+        mean_shape_cpu=torch.tensor(mean_shape, dtype=torch.float32),
         # std_shape=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
         exBase=torch.tensor(exBase, dtype=torch.float32).to(CFG.device),
+        exBase_cpu=torch.tensor(exBase, dtype=torch.float32),
         mean_tex=torch.tensor(mean_tex, dtype=torch.float32).to(CFG.device),
+        mean_tex_cpu=torch.tensor(mean_tex, dtype=torch.float32),
         texBase=torch.tensor(texBase, dtype=torch.float32).to(CFG.device),
     
         face=torch.tensor(face, dtype=torch.int32).contiguous().to(CFG.device),
@@ -235,7 +238,7 @@ def init_3dmm_settings():
         vt2pixel_u=vt2pixel_u.to(CFG.device),
         vt2pixel_v=vt2pixel_v.to(CFG.device),
         
-        landmark=torch.tensor(landmark, dtype=torch.int32).to(CFG.device),
+        landmark=torch.tensor(landmark, dtype=torch.int64).to(CFG.device),
     
         point_buf=torch.tensor(point_buf, dtype=torch.int32).to(CFG.device),
         
