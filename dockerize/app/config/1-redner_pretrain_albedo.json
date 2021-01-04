@@ -1,8 +1,8 @@
 {
   "name": "1-pretrain-albedo",
 
-  "checkpoint_name": "20201229/173543_1-pretrain-albedo/ckpt_00/model_ckpt_00_018228.pt",
-  "checkpoint_root_path":  "./checkpoint",
+  "checkpoint_name": "",
+  "checkpoint_root_path":  "/dataset/checkpoint",
   "checkpoint_regex": null,
   "checkpoint_epoch":  null,
   "checkpoint_step": null,
@@ -27,7 +27,7 @@
   "test_dataset_frac":  1.0,
 
   "verbose": "info",
-  "log_path":  "./logs",
+  "log_path":  "/dataset/logs",
   "log_loss_interval": 10,
   "log_image_interval": 50,
   "log_image_count": 4,
