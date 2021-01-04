@@ -201,8 +201,9 @@ def init_3dmm_settings():
     
     mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy'))
     # std_shape = np.load(join(CFG.dataset_path, 'std_shape.npy'))
+    shapeBase = np.load(join(CFG.definition_path, 'shapeBase.npy'))
     exBase = np.load(join(CFG.definition_path, 'exBase.npy'))
-    mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')), (CFG.vertex_num, 3)) / 255.0
+    mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])
     texBase = np.load(join(CFG.definition_path, 'texBase.npy'))
     
 
@@ -216,9 +217,11 @@ def init_3dmm_settings():
     deep_to_blender = np.load(join(CFG.definition_path, 'deep_to_blender.npy'))
 
     face = np.load(join(CFG.definition_path, 'face.npy'))
-    # face = deep_to_blender[face]
+    # face = deep_to_blender[face-1] + 1
     
     point_buf = np.load(join(CFG.definition_path, 'point_buf.npy'))
+
+    const_alb_mask = 255 - np.load(join(CFG.definition_path, 'const_alb_mask.npy'))
 
     
     
@@ -227,11 +230,14 @@ def init_3dmm_settings():
         mean_shape=torch.tensor(mean_shape, dtype=torch.float32).to(CFG.device),
         mean_shape_cpu=torch.tensor(mean_shape, dtype=torch.float32),
         # std_shape=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
+        shapeBase=torch.tensor(shapeBase, dtype=torch.float32).to(CFG.device),
+        shapeBase_cpu=torch.tensor(shapeBase, dtype=torch.float32),
         exBase=torch.tensor(exBase, dtype=torch.float32).to(CFG.device),
         exBase_cpu=torch.tensor(exBase, dtype=torch.float32),
         mean_tex=torch.tensor(mean_tex, dtype=torch.float32).to(CFG.device),
         mean_tex_cpu=torch.tensor(mean_tex, dtype=torch.float32),
         texBase=torch.tensor(texBase, dtype=torch.float32).to(CFG.device),
+        texBase_cpu=torch.tensor(texBase, dtype=torch.float32),
     
         face=torch.tensor(face, dtype=torch.int32).contiguous().to(CFG.device),
     
@@ -241,6 +247,7 @@ def init_3dmm_settings():
         landmark=torch.tensor(landmark, dtype=torch.int64).to(CFG.device),
     
         point_buf=torch.tensor(point_buf, dtype=torch.int32).to(CFG.device),
+        const_alb_mask=torch.tensor(const_alb_mask, dtype=torch.int32),
         
 
         # mean_m=torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=torch.float32).to(CFG.device),

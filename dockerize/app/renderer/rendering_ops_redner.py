@@ -9,6 +9,7 @@ import numpy as np
 from os.path import join
 from renderer.rendering_ops import bilinear_sampler_torch
 import torch.nn.functional as F
+from time import time
 
 
 class BatchRenderFunction(torch.autograd.Function):
@@ -43,13 +44,13 @@ class Batch_Renderer():
         self.mat = pyredner.Material(diffuse_reflectance=torch.zeros([1, 1, 3], device=self.device),
                                      use_vertex_color=True)
         self.args = {
-                'num_samples'                : (64, 16),
+                'num_samples'                : (64, 0),
                 'max_bounces'                : 1,
                 'channels'                   : [redner.channels.radiance, redner.channels.depth],
                 'sampler_type'               : pyredner.sampler_type.sobol,
                 'sample_pixel_center'        : False,
-                'use_primary_edge_sampling'  : True,
-                'use_secondary_edge_sampling': True,
+                'use_primary_edge_sampling'  : False,
+                'use_secondary_edge_sampling': False,
                 'device'                     : self.device
         }
         self.batch_render = BatchRenderFunction.apply
@@ -65,7 +66,7 @@ class Batch_Renderer():
                                       look_at=camera_look_at,
                                       up=camera_up,
                                       fov=camera_fov,
-                                      resolution=(224, 224))
+                                      resolution=resolution)
     
     def render ( self,
                  vertex_batch: Optional[torch.Tensor],
@@ -109,11 +110,9 @@ class Batch_Renderer():
         pyredner.set_print_timing(print_timing)
         
         batch_size = vertex_batch.shape[0]
-        scene_args = []
-        
-        rotation = Compute_rotation_matrix(angle_batch)
-        
+
         # compute vertex transformation
+        rotation = Compute_rotation_matrix(angle_batch)
         vertices = torch.bmm(vertex_batch, rotation) + torch.unsqueeze(trans_batch, 1)
         
         # compute face color
@@ -121,18 +120,18 @@ class Batch_Renderer():
         norm_r = torch.bmm(face_norm, rotation)
         colors = Illumination_block(color_batch, norm_r, light_batch)
 
-        
+        scene_args = []
         for vertex, color in zip(vertices, colors):
             # define shape parameter
             shape_face = pyredner.Shape(vertices=vertex, indices=CFG.face - 1, colors=color, material_id=0)
-            shape_face.normals = pyredner.compute_vertex_normal(vertices=shape_face.vertices,
-                                                                indices=shape_face.indices)
+            shape_face.normals = pyredner.compute_vertex_normal(vertices=shape_face.vertices, indices=shape_face.indices)
             
             # define scene parameter
             scene = pyredner.Scene(camera=self.camera, shapes=[shape_face], materials=[self.mat], envmap=self.envmap)
             scene_args += pyredner.RenderFunction.serialize_scene(scene=scene, **self.args)
         
         scene_args = [batch_size] + scene_args
+
         g_buffer = self.batch_render(0, *scene_args)
         
         images, masks = torch.split(g_buffer, (3, 1), dim=-1)
@@ -195,6 +194,7 @@ def Compute_rotation_matrix ( angles, device=CFG.device ):
     return rotation
 
 
+
 def Compute_norm ( face_shape ):
     shape = face_shape
     face_id = CFG.face
@@ -220,6 +220,7 @@ def Compute_norm ( face_shape ):
     v_norm = F.normalize(v_norm, dim=2)
     
     return v_norm
+
 
 
 def Illumination_block ( face_texture, norm_r, gamma ):
@@ -260,6 +261,7 @@ def Illumination_block ( face_texture, norm_r, gamma ):
     return face_color
 
 
+
 def project_vertices(vertices, trans, angle):
     batch_size = vertices.shape[0]
 
@@ -290,8 +292,6 @@ def project_vertices(vertices, trans, angle):
 
 
 
-
-
 def generate_full(vec, kind="shape"):
     assert kind in ["shape", "exp"]
     # std = getattr(CFG, f"std_{kind}")
@@ -299,7 +299,6 @@ def generate_full(vec, kind="shape"):
 
     # return vec * std + mean
     return vec + mean
-
 
 
 
@@ -312,34 +311,38 @@ def make_1d ( decoder_2d_result, vt2pixel_u, vt2pixel_v ):
 
 
 
-def render_all(lv_trans, lv_angle, lv_il, albedo, exp_1d, shape_1d, input_mask, input_background):
+def render_all(lv_trans, lv_angle, lv_il, vcolor, exp_1d, shape_1d, input_mask, input_background):
     batch_size = lv_il.shape[0]
     shape_full = CFG.mean_shape + shape_1d + exp_1d
-
     vertex = shape_full.view([batch_size, -1, 3])
-    
-    vt2pixel_u = CFG.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
-    vt2pixel_v = CFG.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
-    
-    vcolor = make_1d(albedo, vt2pixel_u, vt2pixel_v)
-    vcolor = vcolor.view([batch_size, -1, 3])
 
     images, masks, vcolors = renderer.render(
         vertex_batch=vertex,
         color_batch=vcolor,
         trans_batch=lv_trans,
         angle_batch=lv_angle,
-        light_batch=lv_il
+        light_batch=lv_il,
     )
     images = images.permute(0, 3, 1, 2)
     masks = masks.permute(0, 3, 1, 2)
+
+    mask_combined = masks * input_mask
 
     return {
         "g_vcolor": vcolors,
         "g_mask": masks,
         "g_img": images * masks,
-        "g_img_bg": (images * masks) + input_background * (1 - input_mask)
+        "g_img_bg": (images * mask_combined) + input_background * (1 - mask_combined)
     }
+
+
+
+def RGB2BGR(rgb):
+    bgr = torch.zeros_like(rgb, device=CFG.device)
+    bgr[:, 0, :, :] = rgb[:, 2, :, :]
+    bgr[:, 1, :, :] = rgb[:, 1, :, :]
+    bgr[:, 2, :, :] = rgb[:, 0, :, :]
+    return bgr
 
 
 

@@ -11,6 +11,7 @@ from joblib import Parallel, delayed
 import multiprocessing
 from scipy import io
 from settings import init_3dmm_settings
+import matplotlib.pyplot as plt
 
 
 
@@ -60,9 +61,8 @@ class NonlinearDataset(Dataset):
 		self.params = torch.tensor(np.load(join(self.dataset_dir, 'parameter.npy')), dtype=torch.float32)
 
 		print("Checking dataset validation")
-		for img, mask, vertex in tqdm(list(zip(self.image_paths, self.mask_paths, self.vertex_paths))):
+		for img, mask in tqdm(list(zip(self.image_paths, self.mask_paths))):
 			assert basename(img)[:-4] == basename(mask)[:-4]
-			assert basename(img)[:-4] == basename(vertex)[:-4]
 
 
 	def __len__( self ):
@@ -73,6 +73,8 @@ class NonlinearDataset(Dataset):
 		# load image
 		img_name    = self.image_paths[idx]
 		img         = Image.open(img_name)
+		b, g, r 	= img.split()
+		img 		= Image.merge("RGB", (r, g, b))
 		img_tensor  = self.transform(img)
 		
 		# load mask
@@ -82,9 +84,16 @@ class NonlinearDataset(Dataset):
 		
 		# load camera parameters
 		params = self.params[idx]
-		angle, trans, light, exp = torch.split(params, (3, 3, 27, 64), dim=-1)
+		shape, exp, tex, angle, light, trans = torch.split(params, (80, 64, 80, 3, 27, 3), dim=-1)
+
+		# shape = torch.einsum('ij,aj->ai', CFG.shapeBase_cpu, torch.unsqueeze(shape, 0))
+		# shape = shape.view(-1)
+
 		exp = torch.einsum('ij,aj->ai', CFG.exBase_cpu, torch.unsqueeze(exp, 0))
-		exp = exp.view((CFG.vertex_num, 3))
+		exp = exp.view(-1)
+
+		# tex = torch.einsum('ij,aj->ai', CFG.texBase_cpu, torch.unsqueeze(tex, 0)) + CFG.mean_tex_cpu
+		# tex = tex.view(-1) / 255.0
 		
 		# read shape, color numpy file
 		vertex_with_color = torch.tensor(np.load(self.vertex_paths[idx]), dtype=torch.float32)
@@ -93,11 +102,19 @@ class NonlinearDataset(Dataset):
 		vertex = vertex - torch.unsqueeze(trans, 0)
 		vertex = torch.bmm(torch.unsqueeze(vertex, 0), Compute_rotation_matrix(torch.unsqueeze(-angle, 0), device='cpu'))
 		vertex = torch.squeeze(vertex, 0)
-
 		exp = exp.view(-1)
 		shape = vertex.view(-1) - CFG.mean_shape_cpu - exp
 
-		vcolor = vcolor - CFG.mean_tex_cpu
+		vcolor = vcolor.view([-1, 3])
+
+		# set random albedo indices
+		indices1 = np.random.randint(low=0, high=CFG.const_alb_mask.shape[0], size=[CFG.const_pixels_num])
+		indices2 = np.random.randint(low=0, high=CFG.const_alb_mask.shape[0], size=[CFG.const_pixels_num])
+
+		albedo_indices_x1 = CFG.const_alb_mask[indices1, 0].view([CFG.const_pixels_num, 1]).long()
+		albedo_indices_y1 = CFG.const_alb_mask[indices1, 1].view([CFG.const_pixels_num, 1]).long()
+		albedo_indices_x2 = CFG.const_alb_mask[indices2, 0].view([CFG.const_pixels_num, 1]).long()
+		albedo_indices_y2 = CFG.const_alb_mask[indices2, 1].view([CFG.const_pixels_num, 1]).long()
 
 		sample = {
 				'image_name'    : img_name,
@@ -111,7 +128,13 @@ class NonlinearDataset(Dataset):
 				
 				'shape'         : shape,
 				'vcolor'        : vcolor,
-				
+
+				'albedo_indices': [
+					albedo_indices_x1,
+					albedo_indices_y1,
+					albedo_indices_x2,
+					albedo_indices_y2
+				],
 		}
 
 		return sample
@@ -149,15 +172,18 @@ class NonlinearDataset(Dataset):
 		def read_mat ( mat_name ):
 			# load translation and rotation coefficients
 			mat_file = io.loadmat(mat_name)
-			angle = mat_file['coeff'][0][224:227]
-			trans = mat_file['coeff'][0][254:257]
-			light = mat_file['coeff'][0][227:254]
-			ex_coeff = mat_file['coeff'][0][80:144]  # expression
-			return np.concatenate([angle, trans, light, ex_coeff])
+			# shape 	= mat_file['coeff'][0][:80]
+			# exp		= mat_file['coeff'][0][80:144]
+			# tex 	= mat_file['coeff'][0][144:224]
+			# angle 	= mat_file['coeff'][0][224:227]
+			# light 	= mat_file['coeff'][0][227:254]
+			# trans 	= mat_file['coeff'][0][254:257]
+
+			return mat_file['coeff'][0]
 
 		print("     Parsing mat files")
 		parameters = Parallel(n_jobs=multiprocessing.cpu_count())(delayed(read_mat)(mat_name) for mat_name in tqdm(mat_names))
-
+		#
 		# parameters = []
 		# for mat_name in tqdm(mat_names):
 		# 	parameters.append(read_mat(mat_name))
@@ -185,25 +211,42 @@ class NonlinearDataset(Dataset):
 def main():
 	init_3dmm_settings()
 	dataset = NonlinearDataset(phase='train', frac=0.1)
-	dataloader = DataLoader(dataset, batch_size=CFG.batch_size, shuffle=False, num_workers=0)
-	
+	dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
+
 	for idx, samples in enumerate(dataloader):
-		shape = (samples['shape'] + samples['exp'] + CFG.mean_shape.cpu()).view([CFG.batch_size, -1, 3])
+		shape = (samples['shape'] + samples['exp'] + CFG.mean_shape_cpu).view([1, -1, 3])
+
+		angle = samples['angle']
+		trans = samples['trans']
+		# angle = torch.zeros_like(samples['angle'])
+		# trans = torch.zeros_like(samples['trans'])
 		images, masks, _ = renderer.render(
 							   vertex_batch=shape.to(CFG.device),
-		                       color_batch=(samples['vcolor'] + CFG.mean_tex.cpu()).to(CFG.device),
-							   trans_batch=samples['trans'].to(CFG.device),
-							   angle_batch=samples['angle'].to(CFG.device),
+		                       color_batch=samples['vcolor'].to(CFG.device),
+							   trans_batch=trans.to(CFG.device),
+							   angle_batch=angle.to(CFG.device),
 		                       light_batch=samples['light'].to(CFG.device),
 		                       print_timing=True)
+
 		image_ = torch.zeros_like(images[0])
 		image_[:, :, 0] = images[0, :, :, 2]
 		image_[:, :, 1] = images[0, :, :, 1]
 		image_[:, :, 2] = images[0, :, :, 0]
+
+		image_label = samples['image'][0].permute(1, 2, 0)
+		image_label_ = torch.zeros_like(image_label)
+		image_label_[:, :, 0] = image_label[:, :, 2]
+		image_label_[:, :, 1] = image_label[:, :, 1]
+		image_label_[:, :, 2] = image_label[:, :, 0]
+
 		image = image_.cpu().detach().numpy()
 		mask = masks[0].cpu().detach().numpy()
 		image_name = samples['image_name'][0]
-		image_label = samples['image'][0].permute(1, 2, 0).cpu().detach().numpy()
+		image_label = image_label_.cpu().detach().numpy()
+
+		mask = samples['mask'][0].permute(1, 2, 0).cpu().detach().numpy()
+
+		masked = image * mask + image_label * (1 - mask)
 
 		continue
 

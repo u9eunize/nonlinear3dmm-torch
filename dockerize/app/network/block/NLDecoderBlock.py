@@ -42,7 +42,9 @@ class DeconvBlock(nn.Module):
         layers = [
             ("deconv", ConvTranspose2dOutputResize(in_dim, out_dim, 3, stride=stride,
                                                    padding=1, output_size=output_size)),
-            ("bat", nn.BatchNorm2d(out_dim)),
+            # ("bat", nn.BatchNorm2d(out_dim)),
+            # ("bat", nn.GroupNorm(out_dim//2, out_dim)) if not last_layer else ("bat", nn.GroupNorm(1, out_dim)),
+            ("bat", nn.GroupNorm(32, out_dim)),
             ("relu", nn.ReLU(inplace=True))
         ]
         self.in_dim = out_dim
@@ -68,7 +70,8 @@ class NLDecoderBlock(nn.Module):
 
         self.linear = nn.Linear(in_dim, self.gfc_dim * self.s32_h * self.s32_w)
         self.bn_relu = nn.Sequential(
-            nn.BatchNorm2d(self.gfc_dim),
+            # nn.BatchNorm2d(self.gfc_dim),
+            nn.GroupNorm(32, self.gfc_dim),
             nn.ReLU(inplace=True)
         )
 
@@ -113,10 +116,11 @@ class NLDecoderTailBlock(nn.Module):
     Output: uv_texture [N, tex_sz[0], tex_sz[1], self.c_dim]
     """
 
-    def __init__(self, in_dim, out_dim, gf_dim, additional_layer=False):
+    def __init__(self, in_dim, out_dim, gf_dim, additional_layer=False, is_sigmoid=False):
         super(NLDecoderTailBlock, self).__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
+        self.is_sigmoid = is_sigmoid
 
         layers = []
 
@@ -127,7 +131,10 @@ class NLDecoderTailBlock(nn.Module):
             self.in_dim = gf_dim * 2
 
         layers.append(nn.ConvTranspose2d(self.in_dim, self.out_dim, 3, stride=1, padding=1))
-        layers.append(nn.Tanh())
+        if self.is_sigmoid:
+            layers.append(nn.Sigmoid())
+        else:
+            layers.append(nn.Tanh())
 
         self.main = nn.Sequential(*layers)
 

@@ -48,39 +48,52 @@ class Nonlinear3DMMHelper:
         self.random_light_samples = []
 
 
-    def rendering_for_train( self, lv_trans, lv_angle, lv_il, exp_1d, albedo_base, albedo_comb,
-                             shape_1d_base, shape_1d_comb,
-                             input_image, input_mask, **kwargs ):
+    def rendering_for_train( self, input_trans, input_angle, input_light, input_exp, input_shape, input_vcolor, input_image, input_mask,
+                             lv_trans, lv_angle, lv_il, exp_1d, albedo_base, albedo_comb,
+                             shape_1d_base, shape_1d_comb, **kwargs ):
         
         batch_size = lv_trans.shape[0]
+
+        vt2pixel_u = CFG.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
+        vt2pixel_v = CFG.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
+
+        vcolor_base = make_1d(albedo_base, vt2pixel_u, vt2pixel_v)
+        vcolor_base = vcolor_base.view([batch_size, -1, 3])
+
+        vcolor_comb = make_1d(albedo_comb, vt2pixel_u, vt2pixel_v)
+        vcolor_comb = vcolor_comb.view([batch_size, -1, 3])
         
-        lv_trans_all = torch.cat([lv_trans, lv_trans, lv_trans, lv_trans], dim=0)
-        lv_angle_all = torch.cat([lv_angle, lv_angle, lv_angle, lv_angle], dim=0)
-        lv_il_all = torch.cat([lv_il, lv_il, lv_il, lv_il], dim=0)
-        albedo_all = torch.cat([albedo_base, albedo_base, albedo_comb, albedo_comb], dim=0)
-        exp_all = torch.cat([exp_1d, exp_1d, exp_1d, exp_1d], dim=0)
-        shape_1d_all = torch.cat([shape_1d_base, shape_1d_comb, shape_1d_base, shape_1d_comb], dim=0)
-        input_mask_all = torch.cat([input_mask, input_mask, input_mask, input_mask], dim=0)
-        input_image_all = torch.cat([input_image, input_image, input_image, input_image], dim=0)
-        
+        lv_trans_all    = torch.cat([input_trans, lv_trans, lv_trans, lv_trans, lv_trans], dim=0)
+        lv_angle_all    = torch.cat([input_angle, lv_angle, lv_angle, lv_angle, lv_angle], dim=0)
+        lv_il_all       = torch.cat([input_light, lv_il, lv_il, lv_il, lv_il], dim=0)
+        albedo_all      = torch.cat([input_vcolor, vcolor_base, vcolor_base, vcolor_comb, vcolor_comb], dim=0)
+        exp_all         = torch.cat([input_exp, exp_1d, exp_1d, exp_1d, exp_1d], dim=0)
+        exp_all         = torch.zeros_like(exp_all, device=CFG.device)
+        shape_1d_all    = torch.cat([input_shape, shape_1d_base, shape_1d_comb, shape_1d_base, shape_1d_comb], dim=0)
+        input_mask_all  = torch.cat([input_mask, input_mask, input_mask, input_mask, input_mask], dim=0)
+        input_image_all = torch.cat([input_image, input_image, input_image, input_image, input_image], dim=0)
+
         results = render_all(lv_trans_all, lv_angle_all, lv_il_all, albedo_all, exp_all, shape_1d_all,
                          input_mask=input_mask_all, input_background=input_image_all)
         results = list(results.items())
 
+        gt = { }
         base = { }
         comb = { }
-        mix_ab_sc = {}
+        mix_ab_sc = { }
         mix_ac_sb = { }
         
-        for idx in range(4):
+        for idx in range(4):    # 4 : base, ab_sc, ac_sb, comb
             key = results[idx][0]
             result = results[idx][1]
-            base[key + '_base']        = result[0 * batch_size:1 * batch_size]
-            mix_ab_sc[key + '_ab_sc']  = result[1 * batch_size:2 * batch_size]
-            mix_ac_sb[key + '_ac_sb']  = result[2 * batch_size:3 * batch_size]
-            comb[key + '_comb']        = result[3 * batch_size:4 * batch_size]
+
+            gt[key + '_gt']            = result[0 * batch_size:1 * batch_size]
+            base[key + '_base']        = result[1 * batch_size:2 * batch_size]
+            mix_ab_sc[key + '_ab_sc']  = result[2 * batch_size:3 * batch_size]
+            mix_ac_sb[key + '_ac_sb']  = result[3 * batch_size:4 * batch_size]
+            comb[key + '_comb']        = result[4 * batch_size:5 * batch_size]
             
-        return {**base, **comb, **mix_ac_sb, **mix_ab_sc}
+        return {**gt, **base, **comb, **mix_ac_sb, **mix_ab_sc}
 
 
     def run_model(self, **inputs):
@@ -179,16 +192,6 @@ class Nonlinear3DMMHelper:
                     self.logger_train.save_to_files(self.state_file_root_name, save_epoch)
                     self.logger_train.step()
 
-                    # if CFG.valid:
-                    #     self.validate(valid_dataloader, epoch, self.logger_train.get_step())
-
-                    # np.save(f'samples/camera_{epoch}_{idx}', torch.stack(camera, dim=0).numpy())
-                    # np.save(f'samples/il_{epoch}_{idx}', torch.stack(il, dim=0).numpy())
-                    # np.save(f'samples/exp_{epoch}_{idx}', torch.stack(exp, dim=0).numpy())
-                    # camera = []
-                    # il = []
-                    # exp = []
-
                 else:
                     self.logger_train.step()
 
@@ -268,6 +271,8 @@ class Nonlinear3DMMHelper:
         
             "input_shape": samples["shape"].to(CFG.device),
             "input_vcolor" : samples["vcolor"].to(CFG.device),
+
+            "input_albedo_indexes": list(map(lambda a: a.to(CFG.device), samples["albedo_indices"])),
         }
 
 

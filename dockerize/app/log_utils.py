@@ -4,6 +4,7 @@ from datetime import datetime
 
 import torch
 import torchvision
+from torchvision.utils import *
 from torch.utils.tensorboard import SummaryWriter
 from renderer.rendering_ops import generate_full
 from utils import get_checkpoint_dir, save_configuration
@@ -75,15 +76,16 @@ class NLLogger:
 
         row_limit = (8 // len(images)) * len(images)
         result = torchvision.utils.make_grid(torch.cat(result, dim=0), nrow=row_limit).unsqueeze(0)
-
+        # save_image(result, f'./logs/{self.get_step()}_{name}.jpg')
         self._write(interval, f"{name}", (NLLogger.add_images, result))
 
     def write_mesh(self, name, data, interval=CFG.log_image_interval):
         vertices = data["vertices"]
-        vertices = generate_full(vertices, "shape")
+        vertices = vertices + CFG.mean_shape
         vertices = vertices.view((CFG.batch_size, -1, 3))
         data["vertices"] = vertices[:1, :, :].clone().cpu()
-        data["faces"] = CFG.face[:1, :CFG.tri_num, :].clone().cpu()
+        # data["faces"] = CFG.face[:1, :CFG.tri_num, :].clone().cpu()
+        data["faces"] = CFG.face.unsqueeze(0).clone().cpu() - 1
         self._write(interval, f"{name}", (NLLogger.add_mesh, data))
 
     def save_to_files(self, path, epoch):
@@ -116,6 +118,7 @@ class NLLogger:
             img = img.clamp(0, 1) if "shade" not in key else img.clamp(-1, 1)
             img_list.append(img.cpu())
         self.write_image(name, img_list, interval=interval)
+
 
     @staticmethod
     def rendering_for_log(input_images, input_m_labels, input_shape_labels, input_exp_labels,
@@ -175,63 +178,80 @@ class NLLogger:
     def write_loss_images(self, loss_params, interval=CFG.log_image_interval):
         all_dict = dict()
         all_dict.update(loss_params)
-        all_dict.update(NLLogger.rendering_for_log(**loss_params))
+        # all_dict.update(NLLogger.rendering_for_log(**loss_params))
         # self.write_image("shade", loss_params["shade"], interval=interval)
         self._write_loss_images("g_images", all_dict, [
-            "input_images",
-            "g_img_base",
-            "g_img_ac_sb",
-            "g_img_ab_sc",
-            "g_img_comb",
-            "g_img_gt",
-            "g_img_exp_gt",
-        ], interval=interval)
-        self._write_loss_images("g_image_exp", all_dict, [
-            "base_exp_raw",
-            "base_no_exp_raw",
-            "comb_exp_raw",
-            "comb_no_exp_raw",
-            "base_exp_mask",
-            "base_no_exp_mask",
-            "comb_exp_mask",
-            "comb_no_exp_mask",
-        ], interval=interval)
+            "input_image",
+            "g_img_bg_gt",
+            "g_img_bg_base",
+            "g_img_bg_ac_sb",
+            "g_img_bg_ab_sc",
+            "g_img_bg_comb",
 
-        self._write_loss_images("albedo_and_shade", all_dict, [
-            "input_texture_labels",
+            # "input_images",
+            # "g_img_base",
+            # "g_img_ac_sb",
+            # "g_img_ab_sc",
+            # "g_img_comb",
+            # "g_img_gt",
+            # "g_img_exp_gt",
+        ], interval=interval)
+        self._write_loss_images("g_albedo", all_dict, [
             "albedo_base",
             "albedo_comb",
-            "shade_gt",
-            "shade_base",
-            "shade_comb",
-        ], interval=interval)
+        ])
+        # self._write_loss_images("g_image_exp", all_dict, [
+        #     "base_exp_raw",
+        #     "base_no_exp_raw",
+        #     "comb_exp_raw",
+        #     "comb_no_exp_raw",
+        #     "base_exp_mask",
+        #     "base_no_exp_mask",
+        #     "comb_exp_mask",
+        #     "comb_no_exp_mask",
+        # ], interval=interval)
 
-        self._write_loss_images("texture", all_dict, [
-            "input_texture_labels",
-            "tex_base",
-            "tex_mix_ac_sb",
-            "tex_mix_ab_sc",
-        ], interval=interval)
+        # self._write_loss_images("albedo_and_shade", all_dict, [
+        #     "input_texture_labels",
+        #     "albedo_base",
+        #     "albedo_comb",
+        #     "shade_gt",
+        #     "shade_base",
+        #     "shade_comb",
+        # ], interval=interval)
 
-        self.write_mesh("gt_shape_mesh", {
-            "vertices": all_dict["input_shape_labels"] + all_dict["input_exp_labels"],
-        }, interval=interval)
+        # self._write_loss_images("texture", all_dict, [
+        #     "input_texture_labels",
+        #     "tex_base",
+        #     "tex_mix_ac_sb",
+        #     "tex_mix_ab_sc",
+        # ], interval=interval)
 
+        # self.write_mesh("gt_shape_mesh", {
+        #     "vertices": all_dict["input_shape_labels"] + all_dict["input_exp_labels"],
+        # }, interval=interval)
+        #
+        # self.write_mesh("gt_shape_mesh", {
+        #     "vertices": all_dict["input_shape"] + all_dict["input_exp"],
+        # }, interval=interval)
         self.write_mesh("base_shape_mesh", {
             "vertices": all_dict["shape_1d_base"],
         }, interval=interval)
-        self.write_mesh("comb_shape_mesh", {
-            "vertices": all_dict["shape_1d_comb"],
+        self.write_mesh("base_shape_exp_mesh", {
+            "vertices": all_dict["shape_1d_base"] + all_dict["exp_1d"],
         }, interval=interval)
+        # self.write_mesh("comb_shape_exp_mesh", {
+        #     "vertices": all_dict["shape_1d_comb"] + all_dict["exp_1d"],
+        # }, interval=interval)
 
-        if CFG.using_expression:
-            self.write_mesh("base_shape_mesh_with_exp", {
-                "vertices": all_dict["shape_1d_base"] + all_dict["exp_1d_base"],
-            }, interval=interval)
-
-            self.write_mesh("comb_shape_mesh_with_exp", {
-                "vertices": all_dict["shape_1d_comb"] + all_dict["exp_1d_comb"],
-            }, interval=interval)
+        # if CFG.using_expression:
+        #     self.write_mesh("base_shape_mesh_with_exp", {
+        #         "vertices": all_dict["shape_1d_base"] + all_dict["exp_1d_base"],
+        #     }, interval=interval)
+        #
+        #     self.write_mesh("comb_shape_mesh_with_exp", {
+        #         "vertices": all_dict["shape_1d_comb"] + all_dict["exp_1d_comb"],
+        #     }, interval=interval)
 
         # self.write_image("g_images_rand", [
         #     loss_params["input_images"],

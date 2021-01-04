@@ -13,7 +13,7 @@
   "prediction_dst_path": "/dataset/pred/dst",
 
   "epoch":  50,
-  "batch_size": 2,
+  "batch_size": 3,
   "lr":  0.0001,
   "betas": [0.5, 0.999],
   "save_ratio":  0.1,
@@ -26,7 +26,7 @@
   "valid_dataset_frac": 1.0,
   "test_dataset_frac":  1.0,
 
-  "verbose": "info",
+  "verbose": "debug",
   "log_path":  "./logs",
   "log_loss_interval": 10,
   "log_image_interval": 50,
@@ -42,12 +42,12 @@
   "start_loss_decay_step":  0,
 
   "m_loss": null,
-  "shape_loss":  10,
-  "expression_loss": 10,
+  "shape_loss":  100,
+  "expression_loss": 10000,
 
-  "base_landmark_loss":  0.02,
-  "comb_landmark_loss": 0.02,
-  "gt_landmark_loss":  0.02,
+  "base_landmark_loss":  0.2,
+  "comb_landmark_loss": 0.2,
+  "gt_landmark_loss":  0.2,
 
   "base_texture_loss": 20,
   "mix_ac_sb_texture_loss":  2,
@@ -66,7 +66,7 @@
   "comb_perceptual_recon_loss":  null,
 
   "batchwise_white_shading_loss": null,
-  "symmetry_loss":  10,
+  "symmetry_loss":  100,
   "const_albedo_loss": null,
   "const_local_albedo_loss": null,
   "shade_mag_loss":  null,
@@ -77,9 +77,9 @@
   "albedo_residual_loss":  1,
 
   "exp_smoothness_loss": 1,
-  "light_loss": 100,
-  "trans_loss": 100,
-  "angle_loss": 100,
+  "light_loss": 1000,
+  "trans_loss": 1000,
+  "angle_loss": 1000,
 
   "exp_smoothness_loss_type": "l2",
   "light_loss_type": "l1",

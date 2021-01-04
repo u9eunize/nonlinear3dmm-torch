@@ -13,7 +13,7 @@ class Nonlinear3DMM_redner(nn.Module):
         self.gf_dim = gf_dim            # Dimension of encoder filters in first conv layer. [32]
         self.df_dim = df_dim            # Dimension of decoder filters in first conv layer. [32]
         self.gfc_dim = gfc_dim          # Dimension of gen encoder for for fully connected layer. [512]
-        self.dfc_dim = gfc_dim          # Dimension of decoder units for fully connected layer. [512]
+        self.dfc_dim = dfc_dim          # Dimension of decoder units for fully connected layer. [512]
 
         self.nz = nz                    # number of color channels in the input images. For color images this is 3
         self.trans_dim = trans_dim      # Dimension of camera matrix latent vector [3]
@@ -29,12 +29,12 @@ class Nonlinear3DMM_redner(nn.Module):
         self.in_dim = self.nl_encoder.in_dim
 
         self.albedo_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gf_dim * 10, self.tex_sz)
-        self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
-        self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True, is_sigmoid=True)
+        self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True, is_sigmoid=True)
 
         self.shape_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
-        self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
-        self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True, is_sigmoid=True)
+        self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True, is_sigmoid=True)
 
         self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         # self.exp_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
@@ -55,14 +55,14 @@ class Nonlinear3DMM_redner(nn.Module):
         albedo_res = albedo_comb - albedo_base
 
         # shape
-        shape_dec = self.shape_dec(lv_tex)
-        shape_2d_base = self.shape_gen_base(shape_dec)
-        shape_2d_comb = self.shape_gen_comb(shape_dec)
+        shape_dec = self.shape_dec(lv_shape)
+        shape_2d_base = self.shape_gen_base(shape_dec) - 0.9
+        shape_2d_comb = self.shape_gen_comb(shape_dec) - 0.9
 
         shape_1d_base = self.make_1d(shape_2d_base, vt2pixel_u, vt2pixel_v)
         shape_1d_comb = self.make_1d(shape_2d_comb, vt2pixel_u, vt2pixel_v)
 
-        shape_2d_res = shape_2d_base - shape_2d_comb
+        shape_2d_res = shape_2d_comb - shape_2d_base
         shape_1d_res = shape_1d_comb - shape_1d_base
 
         exp_dec = self.exp_dec(lv_exp)
