@@ -13,7 +13,7 @@
   "prediction_dst_path": "/dataset/pred/dst",
 
   "epoch":  50,
-  "batch_size": 16,
+  "batch_size": 12,
   "lr":  0.0001,
   "betas": [0.5, 0.999],
   "save_ratio":  0.05,
