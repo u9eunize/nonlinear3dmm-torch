@@ -188,6 +188,9 @@ class NLLogger:
             "g_img_bg_ab_sc",
             "g_img_bg_comb",
 
+            "input_image",
+            "g_img_bg",
+
             # "input_images",
             # "g_img_base",
             # "g_img_ac_sb",
