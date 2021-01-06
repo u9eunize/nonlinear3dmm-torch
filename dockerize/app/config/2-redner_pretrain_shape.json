@@ -42,8 +42,8 @@
   "start_loss_decay_step":  0,
 
   "m_loss": null,
-  "shape_loss":  200,
-  "expression_loss": 20000,
+  "shape_loss":  5000,
+  "expression_loss": 2000,
 
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
