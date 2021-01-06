@@ -2,7 +2,7 @@
   "name": "2-pretrain-shape",
 
   "checkpoint_name": "20210105/152716_1-pretrain-albedo/ckpt_00/model_ckpt_00_015180.pt",
-  "checkpoint_root_path":  "./checkpoint",
+  "checkpoint_root_path":  "/dataset/checkpoint",
   "checkpoint_regex": null,
   "checkpoint_epoch":  null,
   "checkpoint_step": null,
