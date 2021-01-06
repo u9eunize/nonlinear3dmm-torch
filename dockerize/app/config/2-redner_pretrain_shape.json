@@ -27,7 +27,7 @@
   "test_dataset_frac":  1.0,
 
   "verbose": "info",
-  "log_path":  "./logs",
+  "log_path":  "/dataset/logs",
   "log_loss_interval": 10,
   "log_image_interval": 50,
   "log_image_count": 4,
