@@ -42,8 +42,8 @@ class DeconvBlock(nn.Module):
         layers = [
             ("deconv", ConvTranspose2dOutputResize(in_dim, out_dim, 3, stride=stride,
                                                    padding=1, output_size=output_size)),
-            ("bat", nn.BatchNorm2d(out_dim)),
-            # ("bat", nn.GroupNorm(32, out_dim)),
+            # ("bat", nn.BatchNorm2d(out_dim)),
+            ("bat", nn.GroupNorm(32, out_dim)),
             ("relu", nn.ReLU(inplace=True))
         ]
         self.in_dim = out_dim
@@ -69,8 +69,8 @@ class NLDecoderBlock(nn.Module):
 
         self.linear = nn.Linear(in_dim, self.gfc_dim * self.s32_h * self.s32_w)
         self.bn_relu = nn.Sequential(
-            nn.BatchNorm2d(self.gfc_dim),
-            # nn.GroupNorm(32, self.gfc_dim),
+            # nn.BatchNorm2d(self.gfc_dim),
+            nn.GroupNorm(32, self.gfc_dim),
             nn.ReLU(inplace=True)
         )
 

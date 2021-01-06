@@ -68,7 +68,7 @@ class Nonlinear3DMM_redner(nn.Module):
         exp_dec = self.exp_dec(lv_exp)
         # exp_2d_base = self.exp_gen_base(exp_dec)
         # exp_2d_comb = self.exp_gen_comb(exp_dec)
-        exp_2d = self.exp_gen(exp_dec)
+        exp_2d = self.exp_gen(exp_dec) - 0.9
 
         # exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
         # exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
