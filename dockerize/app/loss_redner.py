@@ -128,7 +128,7 @@ class Loss:
         g_loss_exp_regularization = norm_loss(exp_1d, torch.zeros_like(exp_1d, device=CFG.device), loss_type=CFG.exp_regularization_loss_type)
         return g_loss_exp_regularization
 
-    def shape_loss(self, shape_1d_base, input_shape, **kwargs):
+    def shape_loss(self, shape_1d_base, input_shape, input_exp, **kwargs):
         # shape_1d_base = shape_1d_base.view([-1, 3])
         # input_shape = input_shape.view([-1, 3])
         # g_loss_shape_x = norm_loss(shape_1d_base[:, 0], (input_shape[:, 0] + 0) * 10, loss_type=CFG.shape_loss_type)
@@ -136,7 +136,7 @@ class Loss:
         # g_loss_shape_z = norm_loss(shape_1d_base[:, 2], (input_shape[:, 2] + 0.75) * 10, loss_type=CFG.shape_loss_type)
         # g_loss_shape = g_loss_shape_x + g_loss_shape_y + g_loss_shape_z
 
-        g_loss_shape = norm_loss(shape_1d_base, input_shape, loss_type=CFG.shape_loss_type)
+        g_loss_shape = norm_loss(shape_1d_base, input_shape + input_exp, loss_type=CFG.shape_loss_type)
         return g_loss_shape
 
     def shape_regularization_loss(self, shape_2d_base, **kwargs):
