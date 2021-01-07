@@ -43,7 +43,7 @@
 
   "m_loss": null,
   "shape_loss":  200,
-  "expression_loss": 200,
+  "expression_loss": null,
 
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
