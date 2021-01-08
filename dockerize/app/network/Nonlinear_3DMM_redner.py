@@ -33,13 +33,13 @@ class Nonlinear3DMM_redner(nn.Module):
         self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True, is_sigmoid=True)
 
         self.shape_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
-        self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True, is_sigmoid=True)
-        self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True, is_sigmoid=True)
+        self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
+        self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=True)
 
         self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         # self.exp_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
         # self.exp_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
-        self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False, is_sigmoid=True)
+        self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
     def forward(self, input_images):
         batch_size = input_images.shape[0]
@@ -56,8 +56,8 @@ class Nonlinear3DMM_redner(nn.Module):
 
         # shape
         shape_dec = self.shape_dec(lv_shape)
-        shape_2d_base = self.shape_gen_base(shape_dec) - 0.9
-        shape_2d_comb = self.shape_gen_comb(shape_dec) - 0.9
+        shape_2d_base = self.shape_gen_base(shape_dec)
+        shape_2d_comb = self.shape_gen_comb(shape_dec)
 
         shape_1d_base = self.make_1d(shape_2d_base, vt2pixel_u, vt2pixel_v)
         shape_1d_comb = self.make_1d(shape_2d_comb, vt2pixel_u, vt2pixel_v)
@@ -68,7 +68,7 @@ class Nonlinear3DMM_redner(nn.Module):
         exp_dec = self.exp_dec(lv_exp)
         # exp_2d_base = self.exp_gen_base(exp_dec)
         # exp_2d_comb = self.exp_gen_comb(exp_dec)
-        exp_2d = self.exp_gen(exp_dec) - 0.9
+        exp_2d = self.exp_gen(exp_dec)
 
         # exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
         # exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)

@@ -209,25 +209,27 @@ class NonlinearDataset(Dataset):
 		
 
 def main():
+	batch_size = 12
 	init_3dmm_settings()
 	dataset = NonlinearDataset(phase='train', frac=0.1)
-	dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
+	dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
 	for idx, samples in enumerate(dataloader):
-		shape = (samples['shape'] + samples['exp'] + CFG.mean_shape_cpu).view([1, -1, 3])
+		shape = (samples['shape'] + samples['exp'] + CFG.mean_shape_cpu).view([batch_size, -1, 3])
 
 		angle = samples['angle']
 		trans = samples['trans']
 		# angle = torch.zeros_like(samples['angle'])
 		# trans = torch.zeros_like(samples['trans'])
+		start = time()
 		images, masks, _ = renderer.render(
 							   vertex_batch=shape.to(CFG.device),
 		                       color_batch=samples['vcolor'].to(CFG.device),
 							   trans_batch=trans.to(CFG.device),
 							   angle_batch=angle.to(CFG.device),
 		                       light_batch=samples['light'].to(CFG.device),
-		                       print_timing=True)
-
+		                       print_timing=False)
+		print(f'***** rendering time : {time() - start}')
 		image_ = torch.zeros_like(images[0])
 		image_[:, :, 0] = images[0, :, :, 2]
 		image_[:, :, 1] = images[0, :, :, 1]
