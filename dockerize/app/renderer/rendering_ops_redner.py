@@ -128,6 +128,7 @@ class Batch_Renderer():
         face_norm = Compute_norm(vertex_batch)
         norm_r = torch.bmm(face_norm, rotation)
         colors = Illumination_block(color_batch, norm_r, light_batch)
+        colors = color_batch
 
         scene_args = []
         for vertex, color in zip(vertices, colors):
