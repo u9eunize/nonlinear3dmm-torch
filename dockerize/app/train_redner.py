@@ -95,7 +95,7 @@ class Nonlinear3DMMHelper:
         #
         # return {**gt, **base, **comb, **mix_ac_sb, **mix_ab_sc}
 
-        results = render_all(lv_trans, lv_angle, lv_il, vcolor_base, torch.zeros_like(exp_1d), shape_1d_base / 10, input_mask, input_image)
+        results = render_all(lv_trans, lv_angle, lv_il, vcolor_base, torch.zeros_like(exp_1d), shape_1d_base / 10 , input_mask, input_image)
         base = {f"{key}_base" : result for key, result in results.items()}
         return {**base}
 

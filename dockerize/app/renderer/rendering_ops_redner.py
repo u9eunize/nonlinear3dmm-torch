@@ -21,15 +21,17 @@ class BatchRenderFunction(torch.autograd.Function):
         args_old_format = args[1:]
         chunk_len = int(len(args_old_format) / batch_dims)
         h, w = args_old_format[12]
-        # result = torch.zeros(batch_dims, h, w, 4, device=pyredner.get_device(), requires_grad=True)
-        # for k in range(0, batch_dims):
-        #     sub_args = args_old_format[k * chunk_len:(k + 1) * chunk_len]
-        #     result[k, :, :, :] = pyredner.RenderFunction.forward(ctx, seed, *sub_args)
-        def _render_sample(idx):
-            sub_args = args_old_format[idx * chunk_len:(idx + 1) * chunk_len]
-            return pyredner.RenderFunction.forward(ctx, seed, *sub_args)
-        results = Parallel(n_jobs=multiprocessing.cpu_count())(delayed(_render_sample)(idx) for idx in range(batch_dims))
-        result = torch.stack(results)
+        result = torch.zeros(batch_dims, h, w, 4, device=pyredner.get_device(), requires_grad=True)
+        for k in range(0, batch_dims):
+            sub_args = args_old_format[k * chunk_len:(k + 1) * chunk_len]
+            result[k, :, :, :] = pyredner.RenderFunction.forward(ctx, seed, *sub_args)
+
+        # def _render_sample(idx):
+        #     sub_args = args_old_format[idx * chunk_len:(idx + 1) * chunk_len]
+        #     return pyredner.RenderFunction.forward(ctx, seed, *sub_args)
+        # results = Parallel(n_jobs=multiprocessing.cpu_count())(delayed(_render_sample)(idx) for idx in range(batch_dims))
+        # result = torch.stack(results)
+
         return result
     
     @staticmethod
