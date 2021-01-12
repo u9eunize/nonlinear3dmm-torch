@@ -114,7 +114,7 @@ class NLLogger:
             img_sz = loss_params[keywords[0]]
         img_list = []
         for key in keywords:
-            img = self.match_size(img_sz, loss_params[key])
+            img = self.match_size(img_sz, loss_params[key]) + CFG.mean_tex
             img = img.clamp(0, 1) if "shade" not in key else img.clamp(-1, 1)
             img_list.append(img.cpu())
         self.write_image(name, img_list, interval=interval)
