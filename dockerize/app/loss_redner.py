@@ -373,8 +373,8 @@ class Loss:
         return g_loss_symmetry_shape_x
 
     def const_albedo_loss(self, albedo_base, input_albedo_indexes, **kwargs):
-        albedo_1 = (albedo_base + CFG.mean_tex)[:, :, input_albedo_indexes[0], input_albedo_indexes[1]]
-        albedo_2 = (albedo_base + CFG.mean_tex)[:, :, input_albedo_indexes[2], input_albedo_indexes[3]]
+        albedo_1 = albedo_base[:, :, input_albedo_indexes[0], input_albedo_indexes[1]]
+        albedo_2 = albedo_base[:, :, input_albedo_indexes[2], input_albedo_indexes[3]]
         diff = torch.max(torch.abs(albedo_1 - albedo_2), torch.ones_like(albedo_1) * 0.05)
         g_loss_albedo_const = norm_loss(diff, torch.zeros_like(diff),
                                         loss_type=CFG.const_albedo_loss_type)
@@ -382,11 +382,11 @@ class Loss:
         return g_loss_albedo_const
     #
     def const_local_albedo_loss(self, albedo_base, **kwargs):
-        u_albedo_norm = norm_loss((albedo_base + CFG.mean_tex)[:, :, :-1, :], (albedo_base + CFG.mean_tex)[:, :, 1:, :],
+        u_albedo_norm = norm_loss(albedo_base[:, :, :-1, :], albedo_base[:, :, 1:, :],
                                   loss_type=CFG.const_local_albedo_loss_type, p=0.8, reduce_mean=False)
         loss_local_albedo_u = torch.mean(u_albedo_norm)
 
-        v_albedo_norm = norm_loss((albedo_base + CFG.mean_tex)[:, :, :, :-1], (albedo_base + CFG.mean_tex)[:, :, :, 1:],
+        v_albedo_norm = norm_loss(albedo_base[:, :, :, :-1], albedo_base[:, :, :, 1:],
                                   loss_type=CFG.const_local_albedo_loss_type, p=0.8, reduce_mean=False)
         loss_local_albedo_v = torch.mean(v_albedo_norm)
         loss_local_albedo = (loss_local_albedo_u + loss_local_albedo_v)
