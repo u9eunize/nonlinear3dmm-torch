@@ -215,8 +215,12 @@ def Compute_rotation_matrix ( angles, device=CFG.device ):
 
 def Compute_norm ( face_shape, device=CFG.device ):
     shape = face_shape
-    face_id = CFG.face
-    point_id = CFG.point_buf
+    if device == "cpu":
+        face_id = CFG.face_cpu
+        point_id = CFG.point_buf_cpu
+    else:
+        face_id = CFG.face
+        point_id = CFG.point_buf
     
     # face_id and point_id index starts from 1
     face_id = face_id - 1

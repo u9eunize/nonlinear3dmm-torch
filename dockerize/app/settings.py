@@ -238,14 +238,16 @@ def init_3dmm_settings():
         mean_tex_cpu=torch.tensor(mean_tex, dtype=torch.float32),
         texBase=torch.tensor(texBase, dtype=torch.float32).to(CFG.device),
         texBase_cpu=torch.tensor(texBase, dtype=torch.float32),
-    
+
+        face_cpu=torch.tensor(face, dtype=torch.int32).contiguous(),
         face=torch.tensor(face, dtype=torch.int32).contiguous().to(CFG.device),
     
         vt2pixel_u=vt2pixel_u.to(CFG.device),
         vt2pixel_v=vt2pixel_v.to(CFG.device),
         
         landmark=torch.tensor(landmark, dtype=torch.int64).to(CFG.device),
-    
+
+        point_buf_cpu=torch.tensor(point_buf, dtype=torch.int32),
         point_buf=torch.tensor(point_buf, dtype=torch.int32).to(CFG.device),
         const_alb_mask=torch.tensor(const_alb_mask, dtype=torch.int32),
         
