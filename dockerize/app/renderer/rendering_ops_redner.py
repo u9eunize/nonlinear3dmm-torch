@@ -45,6 +45,14 @@ class BatchRenderFunction(torch.autograd.Function):
         return ret_list
 
 
+def remove_light(vertex_batch, color_batch, light_batch, angle_batch, device="cpu"):
+    rotation = Compute_rotation_matrix(angle_batch, device=device)
+
+    # compute face color
+    face_norm = Compute_norm(vertex_batch, device=device)
+    norm_r = torch.bmm(face_norm, rotation)
+    colors = Illumination_block_inverse(color_batch, norm_r, light_batch, device=device)
+    return colors
 
 class Batch_Renderer():
     def __init__ ( self, resolution=(224, 224) ):
@@ -128,6 +136,7 @@ class Batch_Renderer():
         face_norm = Compute_norm(vertex_batch)
         norm_r = torch.bmm(face_norm, rotation)
         colors = Illumination_block(color_batch, norm_r, light_batch)
+        # colors = Illumination_block_inverse(color_batch, norm_r, light_batch)
 
         scene_args = []
         for vertex, color in zip(vertices, colors):
@@ -204,7 +213,7 @@ def Compute_rotation_matrix ( angles, device=CFG.device ):
 
 
 
-def Compute_norm ( face_shape ):
+def Compute_norm ( face_shape, device=CFG.device ):
     shape = face_shape
     face_id = CFG.face
     point_id = CFG.point_buf
@@ -222,7 +231,7 @@ def Compute_norm ( face_shape ):
     face_norm = torch.cross(e1, e2)
     
     face_norm = F.normalize(face_norm, dim=2)
-    face_norm = torch.cat([face_norm, torch.zeros([face_shape.shape[0], 1, 3]).to(CFG.device)], dim=1)
+    face_norm = torch.cat([face_norm, torch.zeros([face_shape.shape[0], 1, 3]).to(device)], dim=1)
     
     # compute normal for each vertex using one-ring neighborhood
     v_norm = torch.squeeze(torch.sum(face_norm[:, point_id.long()], dim=2), dim=2)
@@ -269,6 +278,43 @@ def Illumination_block ( face_texture, norm_r, gamma ):
     
     return face_color
 
+
+def Illumination_block_inverse(face_texture, norm_r, gamma, device=CFG.device):
+    batch_size = gamma.shape[0]
+    n_point = norm_r.shape[1]
+    gamma = gamma.view([batch_size, 3, 9])
+    # set initial lighting with an ambient lighting
+    init_lit = torch.tensor([0.8, 0, 0, 0, 0, 0, 0, 0, 0]).view([1, 1, 9]).to(device)
+    gamma = gamma + init_lit
+
+    # compute vertex color using SH function approximation
+    a0 = torch.tensor(math.pi).to(device)
+    a1 = torch.tensor(2 * math.pi / math.sqrt(3.0)).to(device)
+    a2 = torch.tensor(2 * math.pi / math.sqrt(8.0)).to(device)
+    c0 = torch.tensor(1 / math.sqrt(4 * math.pi)).to(device)
+    c1 = torch.tensor(math.sqrt(3.0) / math.sqrt(4 * math.pi)).to(device)
+    c2 = torch.tensor(3 * math.sqrt(5.0) / math.sqrt(12 * math.pi)).to(device)
+
+    Y = torch.cat([(a0 * c0).view([1, 1, 1]).repeat(batch_size, n_point, 1),
+                   torch.unsqueeze(-a1 * c1 * norm_r[:, :, 1], 2),
+                   torch.unsqueeze(a1 * c1 * norm_r[:, :, 2], 2),
+                   torch.unsqueeze(-a1 * c1 * norm_r[:, :, 0], 2),
+                   torch.unsqueeze(a2 * c2 * norm_r[:, :, 0] * norm_r[:, :, 1], 2),
+                   torch.unsqueeze(-a2 * c2 * norm_r[:, :, 1] * norm_r[:, :, 2], 2),
+                   torch.unsqueeze(a2 * c2 * 0.5 / math.sqrt(3.0) * (3 * torch.square(norm_r[:, :, 2]) - 1), 2),
+                   torch.unsqueeze(-a2 * c2 * norm_r[:, :, 0] * norm_r[:, :, 2], 2),
+                   torch.unsqueeze(a2 * c2 * 0.5 * (torch.square(norm_r[:, :, 0]) - torch.square(norm_r[:, :, 1])), 2)],
+                  dim=2)
+
+    color_r = torch.squeeze(torch.bmm(Y, torch.unsqueeze(gamma[:, 0, :], dim=2)), dim=2)
+    color_g = torch.squeeze(torch.bmm(Y, torch.unsqueeze(gamma[:, 1, :], dim=2)), dim=2)
+    color_b = torch.squeeze(torch.bmm(Y, torch.unsqueeze(gamma[:, 2, :], dim=2)), dim=2)
+
+    # [batchsize,N,3] vertex color in RGB order
+    face_color = torch.stack(
+        [face_texture[:, :, 0] / color_r, face_texture[:, :, 1] / color_g, face_texture[:, :, 2] / color_b], dim=2)
+
+    return face_color
 
 
 def project_vertices(vertices, trans, angle):
@@ -324,10 +370,11 @@ def render_all(lv_trans, lv_angle, lv_il, vcolor, exp_1d, shape_1d, input_mask, 
     batch_size = lv_il.shape[0]
     shape_full = CFG.mean_shape + shape_1d + exp_1d
     vertex = shape_full.view([batch_size, -1, 3])
+    vcolor_full = CFG.mean_tex + vcolor
 
     images, masks, vcolors = renderer.render(
         vertex_batch=vertex,
-        color_batch=vcolor,
+        color_batch=vcolor_full,
         trans_batch=lv_trans,
         angle_batch=lv_angle,
         light_batch=lv_il,
@@ -341,7 +388,8 @@ def render_all(lv_trans, lv_angle, lv_il, vcolor, exp_1d, shape_1d, input_mask, 
         "g_vcolor": vcolors,
         "g_mask": masks,
         "g_img": images * masks,
-        "g_img_bg": (images * mask_combined) + input_background * (1 - mask_combined)
+        # "g_img_bg": (images * mask_combined) + input_background * (1 - mask_combined),
+        "g_img_bg": (images * masks) + input_background * (1 - masks),
     }
 
 

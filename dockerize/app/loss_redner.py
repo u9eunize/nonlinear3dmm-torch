@@ -136,7 +136,7 @@ class Loss:
         # g_loss_shape_z = norm_loss(shape_1d_base[:, 2], (input_shape[:, 2] + 0.75) * 10, loss_type=CFG.shape_loss_type)
         # g_loss_shape = g_loss_shape_x + g_loss_shape_y + g_loss_shape_z
 
-        g_loss_shape = norm_loss(shape_1d_base, input_shape * 100, loss_type=CFG.shape_loss_type)
+        g_loss_shape = norm_loss(shape_1d_base, input_shape * 10, loss_type=CFG.shape_loss_type)
         return g_loss_shape
 
     def shape_regularization_loss(self, shape_2d_base, **kwargs):
@@ -311,8 +311,8 @@ class Loss:
         g_loss_vcolor = norm_loss(vcolor, input_vcolor, loss_type=CFG.texture_loss_type)
         return g_loss_vcolor
 
-    def base_texture_loss(self, g_vcolor_base, input_vcolor, **kwargs):
-        return self._texture_loss_calculation(g_vcolor_base, input_vcolor)
+    def base_texture_loss(self, albedo_base, input_vcolor, **kwargs):
+        return self._texture_loss_calculation(albedo_base, input_vcolor)
 
     def mix_ac_sb_texture_loss(self, g_vcolor_ac_sb, input_vcolor, **kwargs):
         return self._texture_loss_calculation(g_vcolor_ac_sb, input_vcolor)

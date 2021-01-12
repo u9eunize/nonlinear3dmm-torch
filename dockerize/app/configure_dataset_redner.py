@@ -105,7 +105,11 @@ class NonlinearDataset(Dataset):
 		exp = exp.view(-1)
 		shape = vertex.view(-1) - CFG.mean_shape_cpu - exp
 
+		# remove light effect and subtract mean tex
 		vcolor = vcolor.view([-1, 3])
+		vcolor = remove_light(vertex_batch=vertex.unsqueeze(0), color_batch=vcolor.unsqueeze(0), light_batch=light.unsqueeze(0), angle_batch=angle.unsqueeze(0), device="cpu")
+		vcolor = vcolor.squeeze(0)
+		vcolor -= CFG.mean_tex_cpu
 
 		# set random albedo indices
 		indices1 = np.random.randint(low=0, high=CFG.const_alb_mask.shape[0], size=[CFG.const_pixels_num])
@@ -224,7 +228,7 @@ def main():
 		start = time()
 		images, masks, _ = renderer.render(
 							   vertex_batch=shape.to(CFG.device),
-		                       color_batch=samples['vcolor'].to(CFG.device),
+		                       color_batch=samples['vcolor'].to(CFG.device) + CFG.mean_tex,
 							   trans_batch=trans.to(CFG.device),
 							   angle_batch=angle.to(CFG.device),
 		                       light_batch=samples['light'].to(CFG.device),
