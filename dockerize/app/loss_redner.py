@@ -311,8 +311,9 @@ class Loss:
         g_loss_vcolor = norm_loss(vcolor, input_vcolor, loss_type=CFG.texture_loss_type)
         return g_loss_vcolor
 
-    def base_texture_loss(self, albedo_base, input_vcolor, **kwargs):
-        return self._texture_loss_calculation(albedo_base, input_vcolor)
+    def base_texture_loss(self, albedo_1d_base, input_vcolor, **kwargs):
+        batch_size = albedo_1d_base.shape[0]
+        return self._texture_loss_calculation(albedo_1d_base.view((batch_size, -1, 3)), input_vcolor)
 
     def mix_ac_sb_texture_loss(self, g_vcolor_ac_sb, input_vcolor, **kwargs):
         return self._texture_loss_calculation(g_vcolor_ac_sb, input_vcolor)

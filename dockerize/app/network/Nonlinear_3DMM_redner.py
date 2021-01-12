@@ -52,6 +52,10 @@ class Nonlinear3DMM_redner(nn.Module):
         albedo_dec = self.albedo_dec(lv_tex)
         albedo_base = self.albedo_gen_base(albedo_dec)
         albedo_comb = self.albedo_gen_comb(albedo_dec)
+
+        albedo_1d_base = self.make_1d(albedo_base, vt2pixel_u, vt2pixel_v)
+        albedo_1d_comb = self.make_1d(albedo_comb, vt2pixel_u, vt2pixel_v)
+
         albedo_res = albedo_comb - albedo_base
 
         # shape
@@ -84,6 +88,8 @@ class Nonlinear3DMM_redner(nn.Module):
             
             albedo_base=albedo_base,
             albedo_comb=albedo_comb,
+            albedo_1d_base=albedo_1d_base,
+            albedo_1d_comb=albedo_1d_comb,
             albedo_res=albedo_res,
             
             shape_2d_base=shape_2d_base,

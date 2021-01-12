@@ -393,7 +393,7 @@ def render_all(lv_trans, lv_angle, lv_il, vcolor, exp_1d, shape_1d, input_mask, 
         "g_mask": masks,
         "g_img": images * masks,
         # "g_img_bg": (images * mask_combined) + input_background * (1 - mask_combined),
-        "g_img_bg": (images * masks) + input_background * (1 - masks),
+        "g_img_bg": (images * masks) + input_background * (1 - masks * 1),
     }
 
 
