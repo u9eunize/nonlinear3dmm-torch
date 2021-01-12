@@ -250,7 +250,7 @@ def main():
 		image_name = samples['image_name'][0]
 		image_label = image_label_.cpu().detach().numpy()
 
-		mask = samples['mask'][0].permute(1, 2, 0).cpu().detach().numpy()
+		# mask = samples['mask'][0].permute(1, 2, 0).cpu().detach().numpy()
 
 		masked = image * mask + image_label * (1 - mask)
 
