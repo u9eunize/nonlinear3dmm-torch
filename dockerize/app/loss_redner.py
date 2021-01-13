@@ -375,9 +375,14 @@ class Loss:
     def const_albedo_loss(self, albedo_base, input_albedo_indexes, **kwargs):
         albedo_1 = albedo_base[:, :, input_albedo_indexes[0], input_albedo_indexes[1]]
         albedo_2 = albedo_base[:, :, input_albedo_indexes[2], input_albedo_indexes[3]]
-        diff = torch.max(torch.abs(albedo_1 - albedo_2), torch.ones_like(albedo_1) * 0.05)
-        g_loss_albedo_const = norm_loss(diff, torch.zeros_like(diff),
-                                        loss_type=CFG.const_albedo_loss_type)
+
+        # diff = torch.max(torch.abs(albedo_1 - albedo_2), torch.ones_like(albedo_1) * 0.05)
+        # g_loss_albedo_const = norm_loss(diff, torch.zeros_like(diff), loss_type=CFG.const_albedo_loss_type)
+
+        g_loss_albedo_const_1 = norm_loss(albedo_1, torch.zeros_like(albedo_1), loss_type=CFG.const_albedo_loss_type)
+        g_loss_albedo_const_2 = norm_loss(albedo_2, torch.zeros_like(albedo_2), loss_type=CFG.const_albedo_loss_type)
+
+        g_loss_albedo_const = g_loss_albedo_const_1 + g_loss_albedo_const_2
 
         return g_loss_albedo_const
     #
