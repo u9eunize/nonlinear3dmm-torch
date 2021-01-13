@@ -80,7 +80,7 @@ class NLLogger:
         self._write(interval, f"{name}", (NLLogger.add_images, result))
 
     def write_mesh(self, name, data, interval=CFG.log_image_interval):
-        vertices = data["vertices"] / 10
+        vertices = data["vertices"]
         vertices = vertices + CFG.mean_shape
         vertices = vertices.view((CFG.batch_size, -1, 3))
         data["vertices"] = vertices[:1, :, :].clone().cpu()
@@ -115,7 +115,8 @@ class NLLogger:
         img_list = []
         for key in keywords:
             img = self.match_size(img_sz, loss_params[key])
-            img = img.clamp(0, 1) if "shade" not in key else img.clamp(-1, 1)
+            # img = img.clamp(0, 1) if "shade" not in key else img.clamp(-1, 1)
+            img = (img + 1) / 2
             img_list.append(img.cpu())
         self.write_image(name, img_list, interval=interval)
 
