@@ -56,6 +56,9 @@ class Nonlinear3DMM_redner(nn.Module):
         albedo_1d_base = self.make_1d(albedo_base, vt2pixel_u, vt2pixel_v)
         albedo_1d_comb = self.make_1d(albedo_comb, vt2pixel_u, vt2pixel_v)
 
+        albedo_1d_base = albedo_1d_base.view([batch_size, -1, 3])[CFG.blender_to_deep].view([batch_size, -1])
+        albedo_1d_comb = albedo_1d_comb.view([batch_size, -1, 3])[CFG.blender_to_deep].view([batch_size, -1])
+
         albedo_res = albedo_comb - albedo_base
 
         # shape
@@ -65,6 +68,9 @@ class Nonlinear3DMM_redner(nn.Module):
 
         shape_1d_base = self.make_1d(shape_2d_base, vt2pixel_u, vt2pixel_v)
         shape_1d_comb = self.make_1d(shape_2d_comb, vt2pixel_u, vt2pixel_v)
+
+        shape_1d_base = shape_1d_base.view([batch_size, -1, 3])[CFG.blender_to_deep].view([batch_size, -1])
+        shape_1d_comb = shape_1d_comb.view([batch_size, -1, 3])[CFG.blender_to_deep].view([batch_size, -1])
 
         shape_2d_res = shape_2d_comb - shape_2d_base
         shape_1d_res = shape_1d_comb - shape_1d_base
