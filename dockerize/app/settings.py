@@ -252,7 +252,8 @@ def init_3dmm_settings():
         point_buf=torch.tensor(point_buf, dtype=torch.int32).to(CFG.device),
         const_alb_mask=torch.tensor(const_alb_mask, dtype=torch.int32),
 
-        blender_to_deep=torch.tensor(blender_to_deep),
+        blender_to_deep_cpu=torch.tensor(blender_to_deep),
+        blender_to_deep=torch.tensor(blender_to_deep).to(CFG.device),
         
 
         # mean_m=torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=torch.float32).to(CFG.device),

@@ -96,7 +96,7 @@ class NonlinearDataset(Dataset):
 		# tex = tex.view(-1) / 255.0
 		
 		# read shape, color numpy file
-		vertex_with_color = torch.tensor(np.load(self.vertex_paths[idx]), dtype=torch.float32)[CFG.blender_to_deep]
+		vertex_with_color = torch.tensor(np.load(self.vertex_paths[idx]), dtype=torch.float32)[CFG.blender_to_deep_cpu]
 		vertex, vcolor = torch.split(vertex_with_color, (3, 3), dim=-1)
 		# vertex, color = get_blender_vc(vertex, vcolor)
 		vertex = vertex - torch.unsqueeze(trans, 0)
