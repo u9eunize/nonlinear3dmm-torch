@@ -24,7 +24,7 @@ class Nonlinear3DMM_redner(nn.Module):
         
         ###################################### encoder
         self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2,
-                                  self.gfc_dim // 5, self.gfc_dim // 2, self.trans_dim, self.rot_dim, self.il_dim)
+                                  self.gfc_dim // 2, self.gfc_dim // 2, self.trans_dim, self.rot_dim, self.il_dim)
 
         self.in_dim = self.nl_encoder.in_dim
 
