@@ -58,7 +58,7 @@ class Nonlinear3DMMHelper:
         lv_angle_all    = torch.cat([input_angle, lv_angle, lv_angle, lv_angle, lv_angle], dim=0)
         lv_il_all       = torch.cat([input_light, lv_il, lv_il, lv_il, lv_il], dim=0)
         albedo_all      = torch.cat([input_vcolor, albedo_1d_base, albedo_1d_base, albedo_1d_comb, albedo_1d_comb], dim=0)
-        exp_1d          = torch.zeros_like(exp_1d, device=CFG.device)
+        # exp_1d          = torch.zeros_like(exp_1d, device=CFG.device)
         exp_all         = torch.cat([input_exp, exp_1d, exp_1d, exp_1d, exp_1d], dim=0)
         shape_1d_all    = torch.cat([input_shape, shape_1d_base, shape_1d_comb, shape_1d_base, shape_1d_comb], dim=0)
         input_mask_all  = torch.cat([input_mask, input_mask, input_mask, input_mask, input_mask], dim=0)

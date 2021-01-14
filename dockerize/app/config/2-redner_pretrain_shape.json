@@ -1,7 +1,7 @@
 {
   "name": "2-pretrain-shape",
 
-  "checkpoint_name": "20210105/152716_1-pretrain-albedo/ckpt_00/model_ckpt_00_015180.pt",
+  "checkpoint_name": "20210114/173624_1-pretrain-albedo/ckpt_00/model_ckpt_00_015180.pt",
   "checkpoint_root_path":  "/dataset/checkpoint",
   "checkpoint_regex": null,
   "checkpoint_epoch":  null,
@@ -42,8 +42,8 @@
   "start_loss_decay_step":  0,
 
   "m_loss": null,
-  "shape_loss":  5000,
-  "expression_loss": 2000,
+  "shape_loss":  20000,
+  "expression_loss": 20000,
 
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
@@ -52,7 +52,7 @@
   "comb_landmark_loss": null,
   "gt_landmark_loss": null,
 
-  "base_texture_loss": 1000,
+  "base_texture_loss": 5000,
   "mix_ac_sb_texture_loss":  null,
   "mix_ab_sc_texture_loss": null,
   "comb_texture_loss":  null,
@@ -70,18 +70,18 @@
 
   "batchwise_white_shading_loss": null,
   "symmetry_loss":  100,
-  "const_albedo_loss": 100,
-  "const_local_albedo_loss": 0.001,
+  "const_albedo_loss": null,
+  "const_local_albedo_loss": null,
   "shade_mag_loss":  null,
   "base_smoothness_loss": 5e5,
   "comb_smoothness_loss":  null,
-  "const_pixels_num": 20,
+  "const_pixels_num": 60,
 
   "shape_residual_loss": null,
   "albedo_residual_loss":  null,
 
   "exp_smoothness_loss": 5e2,
-  "light_loss": 10000,
+  "light_loss": 100000,
   "trans_loss": 10000,
   "angle_loss": 10000,
 

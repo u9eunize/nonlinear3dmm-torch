@@ -237,9 +237,9 @@ class NLLogger:
         self.write_mesh("base_shape_mesh", {
             "vertices": all_dict["shape_1d_base"],
         }, interval=interval)
-        # self.write_mesh("base_shape_exp_mesh", {
-        #     "vertices": all_dict["shape_1d_base"] + all_dict["exp_1d"],
-        # }, interval=interval)
+        self.write_mesh("base_shape_exp_mesh", {
+            "vertices": all_dict["shape_1d_base"] + all_dict["exp_1d"],
+        }, interval=interval)
         # self.write_mesh("comb_shape_exp_mesh", {
         #     "vertices": all_dict["shape_1d_comb"] + all_dict["exp_1d"],
         # }, interval=interval)

@@ -80,7 +80,7 @@
   "shape_residual_loss": null,
   "albedo_residual_loss":  null,
 
-  "exp_smoothness_loss": 5e2,
+  "exp_smoothness_loss": null,
   "light_loss": 100000,
   "trans_loss": 10000,
   "angle_loss": 10000,
