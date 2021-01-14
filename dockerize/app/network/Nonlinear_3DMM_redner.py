@@ -84,6 +84,8 @@ class Nonlinear3DMM_redner(nn.Module):
         # exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
         exp_1d = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
 
+        exp_1d = exp_1d.view([batch_size, -1, 3])[CFG.blender_to_deep].view([batch_size, -1])
+
         # exp_2d_res = exp_2d_base - exp_2d_comb
         # exp_1d_res = exp_1d_comb - exp_1d_base
 
