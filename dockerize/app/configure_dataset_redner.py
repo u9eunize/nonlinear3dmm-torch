@@ -90,7 +90,7 @@ class NonlinearDataset(Dataset):
 		# shape = shape.view(-1)
 
 		exp = torch.einsum('ij,aj->ai', CFG.exBase_cpu, torch.unsqueeze(exp, 0))
-		exp = exp.view(-1)
+		exp = exp.view([-1, 3])[CFG.blender_to_deep_cpu].view(-1)
 
 		# tex = torch.einsum('ij,aj->ai', CFG.texBase_cpu, torch.unsqueeze(tex, 0)) + CFG.mean_tex_cpu
 		# tex = tex.view(-1) / 255.0

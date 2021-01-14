@@ -188,23 +188,14 @@ def parse():
 
 
 def init_3dmm_settings():
-
-    # mu_shape, w_shape = utils.load_Basel_basic('shape')
-    # mu_exp, w_exp = utils.load_Basel_basic('exp')
-    # tri = torch.from_numpy(utils.load_3DMM_tri()).to(CFG.device)
-    # tri_trans = tri.transpose(0, 1)
-    # face = torch.zeros_like(tri_trans)
-    # face[:, 0:1] = tri_trans[:, 0:1]
-    # face[:, 1:2] = tri_trans[:, 2:3]
-    # face[:, 2:3] = tri_trans[:, 1:2]
-    # face = face.unsqueeze(0).repeat(CFG.batch_size, 1, 1)
+    deep_to_blender = np.load(join(CFG.definition_path, 'deep_to_blender.npy'))
+    blender_to_deep = np.load(join(CFG.definition_path, 'blender_to_deep.npy'))
     
-    mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy'))
-    # std_shape = np.load(join(CFG.dataset_path, 'std_shape.npy'))
+    mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy')).reshape([-1, 3])[blender_to_deep].reshape(-1)
     shapeBase = np.load(join(CFG.definition_path, 'shapeBase.npy'))
     exBase = np.load(join(CFG.definition_path, 'exBase.npy'))
     mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])
-    texBase = np.load(join(CFG.definition_path, 'texBase.npy'))
+    texBase = np.load(join(CFG.definition_path, 'texBase.npy'))[blender_to_deep]
     
 
     h, w = CFG.texture_size
@@ -214,8 +205,7 @@ def init_3dmm_settings():
     
     landmark = np.load(join(CFG.definition_path, 'landmark.npy'))
     
-    deep_to_blender = np.load(join(CFG.definition_path, 'deep_to_blender.npy'))
-    blender_to_deep = np.load(join(CFG.definition_path, 'blender_to_deep.npy'))
+
 
     face = np.load(join(CFG.definition_path, 'face.npy')) - 1
     face = deep_to_blender[face]
