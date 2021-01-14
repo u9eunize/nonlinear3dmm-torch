@@ -86,14 +86,8 @@ class NonlinearDataset(Dataset):
 		params = self.params[idx]
 		shape, exp, tex, angle, light, trans = torch.split(params, (80, 64, 80, 3, 27, 3), dim=-1)
 
-		# shape = torch.einsum('ij,aj->ai', CFG.shapeBase_cpu, torch.unsqueeze(shape, 0))
-		# shape = shape.view(-1)
-
 		exp = torch.einsum('ij,aj->ai', CFG.exBase_cpu, torch.unsqueeze(exp, 0))
 		exp = exp.view([-1, 3])[CFG.blender_to_deep_cpu].view(-1)
-
-		# tex = torch.einsum('ij,aj->ai', CFG.texBase_cpu, torch.unsqueeze(tex, 0)) + CFG.mean_tex_cpu
-		# tex = tex.view(-1) / 255.0
 		
 		# read shape, color numpy file
 		vertex_with_color = torch.tensor(np.load(self.vertex_paths[idx]), dtype=torch.float32)[CFG.blender_to_deep_cpu]
@@ -220,16 +214,14 @@ def main():
 
 	for idx, samples in enumerate(dataloader):
 		shape = (samples['shape'] + samples['exp'] + CFG.mean_shape_cpu).view([batch_size, -1, 3])
-
-		angle = samples['angle']
-		trans = samples['trans']
+		# shape = (torch.zeros_like(samples['shape'] + samples['exp']) + CFG.mean_shape_cpu).view([batch_size, -1, 3])
 
 		start = time()
 		images, masks, _ = renderer.render(
 							   vertex_batch=shape.to(CFG.device),
 		                       color_batch=samples['vcolor'].to(CFG.device) + CFG.mean_tex,
-							   trans_batch=trans.to(CFG.device),
-							   angle_batch=angle.to(CFG.device),
+							   trans_batch=samples['trans'].to(CFG.device),
+							   angle_batch=samples['angle'].to(CFG.device),
 		                       light_batch=samples['light'].to(CFG.device),
 		                       print_timing=False)
 		print(f'***** rendering time : {time() - start}')

@@ -199,7 +199,7 @@ def init_3dmm_settings():
     
 
     h, w = CFG.texture_size
-    vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.definition_path, 'BFM_uvmap.npy')), dtype=torch.float32), (1, 1), dim=-1)
+    vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.definition_path, 'BFM_uvmap.npy')), dtype=torch.float32)[blender_to_deep], (1, 1), dim=-1)
     vt2pixel_v = torch.ones_like(vt2pixel_v) - vt2pixel_v
     vt2pixel_u, vt2pixel_v = vt2pixel_u * h, vt2pixel_v * w
     
@@ -211,6 +211,7 @@ def init_3dmm_settings():
     face = deep_to_blender[face]
     
     point_buf = np.load(join(CFG.definition_path, 'point_buf.npy')) - 1
+    point_buf = point_buf[blender_to_deep]
 
     const_alb_mask = 255 - np.load(join(CFG.definition_path, 'const_alb_mask.npy'))
 
@@ -241,6 +242,9 @@ def init_3dmm_settings():
         point_buf_cpu=torch.tensor(point_buf, dtype=torch.int32),
         point_buf=torch.tensor(point_buf, dtype=torch.int32).to(CFG.device),
         const_alb_mask=torch.tensor(const_alb_mask, dtype=torch.int32),
+
+        deep_to_blender_cpu=torch.tensor(deep_to_blender),
+        deep_to_blender=torch.tensor(deep_to_blender).to(CFG.device),
 
         blender_to_deep_cpu=torch.tensor(blender_to_deep),
         blender_to_deep=torch.tensor(blender_to_deep).to(CFG.device),
