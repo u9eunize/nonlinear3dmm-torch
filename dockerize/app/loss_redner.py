@@ -348,9 +348,9 @@ class Loss:
     def exp_smoothness_loss(self, exp_2d, **kwargs):
         return self._smoothness_loss_calculation(exp_2d)
 
-    def symmetry_loss(self, albedo_base, **kwargs):
-        albedo_flip = torch.flip(albedo_base, dims=[3])
-        flip_diff = torch.max(torch.abs(albedo_base - albedo_flip), torch.ones_like(albedo_base) * 0.05)
+    def symmetry_loss(self, albedo_2d_base, **kwargs):
+        albedo_flip = torch.flip(albedo_2d_base, dims=[3])
+        flip_diff = torch.max(torch.abs(albedo_2d_base - albedo_flip), torch.ones_like(albedo_2d_base) * 0.05)
         g_loss_symmetry = norm_loss(flip_diff, torch.zeros_like(flip_diff),
                                     loss_type=CFG.symmetry_loss_type)
         return g_loss_symmetry
@@ -372,9 +372,9 @@ class Loss:
         # g_loss_symmetry_shape = g_loss_symmetry_shape_x + g_loss_symmetry_shape_z
         return g_loss_symmetry_shape_x
 
-    def const_albedo_loss(self, albedo_base, input_albedo_indexes, **kwargs):
-        albedo_1 = albedo_base[:, :, input_albedo_indexes[0], input_albedo_indexes[1]]
-        albedo_2 = albedo_base[:, :, input_albedo_indexes[2], input_albedo_indexes[3]]
+    def const_albedo_loss(self, albedo_2d_base, input_albedo_indexes, **kwargs):
+        albedo_1 = albedo_2d_base[:, :, input_albedo_indexes[0], input_albedo_indexes[1]]
+        albedo_2 = albedo_2d_base[:, :, input_albedo_indexes[2], input_albedo_indexes[3]]
 
         # diff = torch.max(torch.abs(albedo_1 - albedo_2), torch.ones_like(albedo_1) * 0.05)
         # g_loss_albedo_const = norm_loss(diff, torch.zeros_like(diff), loss_type=CFG.const_albedo_loss_type)
@@ -386,12 +386,12 @@ class Loss:
 
         return g_loss_albedo_const
     #
-    def const_local_albedo_loss(self, albedo_base, **kwargs):
-        u_albedo_norm = norm_loss(albedo_base[:, :, :-1, :], albedo_base[:, :, 1:, :],
+    def const_local_albedo_loss(self, albedo_2d_base, **kwargs):
+        u_albedo_norm = norm_loss(albedo_2d_base[:, :, :-1, :], albedo_2d_base[:, :, 1:, :],
                                   loss_type=CFG.const_local_albedo_loss_type, p=0.8, reduce_mean=False)
         loss_local_albedo_u = torch.mean(u_albedo_norm)
 
-        v_albedo_norm = norm_loss(albedo_base[:, :, :, :-1], albedo_base[:, :, :, 1:],
+        v_albedo_norm = norm_loss(albedo_2d_base[:, :, :, :-1], albedo_2d_base[:, :, :, 1:],
                                   loss_type=CFG.const_local_albedo_loss_type, p=0.8, reduce_mean=False)
         loss_local_albedo_v = torch.mean(v_albedo_norm)
         loss_local_albedo = (loss_local_albedo_u + loss_local_albedo_v)
@@ -405,8 +405,8 @@ class Loss:
     def shape_residual_loss(self, shape_1d_res, **kwargs):
         return norm_loss(shape_1d_res, torch.zeros_like(shape_1d_res), loss_type=CFG.residual_loss_type)
 
-    def albedo_residual_loss(self, albedo_res, **kwargs):
-        return norm_loss(albedo_res, torch.zeros_like(albedo_res), loss_type=CFG.residual_loss_type)
+    def albedo_residual_loss(self, albedo_1d_res, **kwargs):
+        return norm_loss(albedo_1d_res, torch.zeros_like(albedo_1d_res), loss_type=CFG.residual_loss_type)
 
     def exp_residual_loss(self, exp_1d_res, **kwargs):
         return norm_loss(exp_1d_res, torch.zeros_like(exp_1d_res), loss_type=CFG.residual_loss_type)

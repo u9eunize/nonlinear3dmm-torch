@@ -54,19 +54,10 @@ class Nonlinear3DMMHelper:
         
         batch_size = lv_trans.shape[0]
 
-        # vt2pixel_u = CFG.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
-        # vt2pixel_v = CFG.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
-
-        # vcolor_base = make_1d(albedo_base, vt2pixel_u, vt2pixel_v)
-        vcolor_base = albedo_1d_base.view([batch_size, -1, 3])
-
-        # vcolor_comb = make_1d(albedo_comb, vt2pixel_u, vt2pixel_v)
-        vcolor_comb = albedo_1d_comb.view([batch_size, -1, 3])
-        
         lv_trans_all    = torch.cat([input_trans, lv_trans, lv_trans, lv_trans, lv_trans], dim=0)
         lv_angle_all    = torch.cat([input_angle, lv_angle, lv_angle, lv_angle, lv_angle], dim=0)
         lv_il_all       = torch.cat([input_light, lv_il, lv_il, lv_il, lv_il], dim=0)
-        albedo_all      = torch.cat([input_vcolor, vcolor_base, vcolor_base, vcolor_comb, vcolor_comb], dim=0)
+        albedo_all      = torch.cat([input_vcolor, albedo_1d_base, albedo_1d_base, albedo_1d_comb, albedo_1d_comb], dim=0)
         exp_1d          = torch.zeros_like(exp_1d, device=CFG.device)
         exp_all         = torch.cat([input_exp, exp_1d, exp_1d, exp_1d, exp_1d], dim=0)
         shape_1d_all    = torch.cat([input_shape, shape_1d_base, shape_1d_comb, shape_1d_base, shape_1d_comb], dim=0)

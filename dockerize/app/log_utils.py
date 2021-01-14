@@ -197,8 +197,8 @@ class NLLogger:
             # "g_img_exp_gt",
         ], interval=interval)
         self._write_loss_images("g_albedo", all_dict, [
-            "albedo_base",
-            "albedo_comb",
+            "albedo_2d_base",
+            "albedo_2d_comb",
         ])
         # self._write_loss_images("g_image_exp", all_dict, [
         #     "base_exp_raw",

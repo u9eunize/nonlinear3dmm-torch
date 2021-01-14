@@ -87,7 +87,7 @@ class NonlinearDataset(Dataset):
 		shape, exp, tex, angle, light, trans = torch.split(params, (80, 64, 80, 3, 27, 3), dim=-1)
 
 		exp = torch.einsum('ij,aj->ai', CFG.exBase_cpu, torch.unsqueeze(exp, 0))
-		exp = exp.view([-1, 3])[CFG.blender_to_deep_cpu].view(-1)
+		exp = exp.view([-1, 3])[CFG.blender_to_deep_cpu]
 		
 		# read shape, color numpy file
 		vertex_with_color = torch.tensor(np.load(self.vertex_paths[idx]), dtype=torch.float32)[CFG.blender_to_deep_cpu]
@@ -95,7 +95,7 @@ class NonlinearDataset(Dataset):
 		vertex = vertex - torch.unsqueeze(trans, 0)
 		vertex = torch.bmm(torch.unsqueeze(vertex, 0), Compute_rotation_matrix(torch.unsqueeze(-angle, 0), device='cpu'))
 		vertex = torch.squeeze(vertex, 0)
-		shape = vertex.view(-1) - CFG.mean_shape_cpu - exp
+		shape = vertex - CFG.mean_shape_cpu - exp
 
 		# remove light effect and subtract mean tex
 		vcolor = vcolor.view([-1, 3])
@@ -211,7 +211,7 @@ def main():
 	dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
 	for idx, samples in enumerate(dataloader):
-		shape = (samples['shape'] + samples['exp'] + CFG.mean_shape_cpu).view([batch_size, -1, 3])
+		shape = samples['shape'] + samples['exp'] + CFG.mean_shape_cpu
 		# shape = (torch.zeros_like(samples['shape'] + samples['exp']) + CFG.mean_shape_cpu).view([batch_size, -1, 3])
 
 		start = time()

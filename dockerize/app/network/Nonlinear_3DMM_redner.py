@@ -37,8 +37,6 @@ class Nonlinear3DMM_redner(nn.Module):
         self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
         self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
-        # self.exp_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
-        # self.exp_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
         self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
     def forward(self, input_images):
@@ -50,16 +48,14 @@ class Nonlinear3DMM_redner(nn.Module):
 
         # albedo
         albedo_dec = self.albedo_dec(lv_tex)
-        albedo_base = self.albedo_gen_base(albedo_dec)
-        albedo_comb = self.albedo_gen_comb(albedo_dec)
+        albedo_2d_base = self.albedo_gen_base(albedo_dec)
+        albedo_2d_comb = self.albedo_gen_comb(albedo_dec)
 
-        albedo_1d_base = self.make_1d(albedo_base, vt2pixel_u, vt2pixel_v)
-        albedo_1d_comb = self.make_1d(albedo_comb, vt2pixel_u, vt2pixel_v)
+        albedo_1d_base = self.make_1d(albedo_2d_base, vt2pixel_u, vt2pixel_v)
+        albedo_1d_comb = self.make_1d(albedo_2d_comb, vt2pixel_u, vt2pixel_v)
 
-        # albedo_1d_base = albedo_1d_base.view([batch_size, -1, 3])[:, CFG.blender_to_deep].view([batch_size, -1])
-        # albedo_1d_comb = albedo_1d_comb.view([batch_size, -1, 3])[:, CFG.blender_to_deep].view([batch_size, -1])
-
-        albedo_res = albedo_comb - albedo_base
+        albedo_2d_res = albedo_2d_comb - albedo_2d_base
+        albedo_1d_res = albedo_1d_comb - albedo_1d_base
 
         # shape
         shape_dec = self.shape_dec(lv_shape)
@@ -69,36 +65,26 @@ class Nonlinear3DMM_redner(nn.Module):
         shape_1d_base = self.make_1d(shape_2d_base, vt2pixel_u, vt2pixel_v)
         shape_1d_comb = self.make_1d(shape_2d_comb, vt2pixel_u, vt2pixel_v)
 
-        # shape_1d_base = shape_1d_base.view([batch_size, -1, 3])[:, CFG.blender_to_deep].view([batch_size, -1])
-        # shape_1d_comb = shape_1d_comb.view([batch_size, -1, 3])[:, CFG.blender_to_deep].view([batch_size, -1])
-
         shape_2d_res = shape_2d_comb - shape_2d_base
         shape_1d_res = shape_1d_comb - shape_1d_base
 
+        # expression
         exp_dec = self.exp_dec(lv_exp)
-        # exp_2d_base = self.exp_gen_base(exp_dec)
-        # exp_2d_comb = self.exp_gen_comb(exp_dec)
         exp_2d = self.exp_gen(exp_dec)
 
-        # exp_1d_base = self.make_1d(exp_2d_base, vt2pixel_u, vt2pixel_v)
-        # exp_1d_comb = self.make_1d(exp_2d_comb, vt2pixel_u, vt2pixel_v)
         exp_1d = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
-
-        # exp_1d = exp_1d.view([batch_size, -1, 3])[:, CFG.blender_to_deep].view([batch_size, -1])
-
-        # exp_2d_res = exp_2d_base - exp_2d_comb
-        # exp_1d_res = exp_1d_comb - exp_1d_base
 
         return dict(
             lv_trans=lv_trans,
             lv_angle=lv_angle,
             lv_il=lv_il,
             
-            albedo_base=albedo_base,
-            albedo_comb=albedo_comb,
+            albedo_2d_base=albedo_2d_base,
+            albedo_2d_comb=albedo_2d_comb,
             albedo_1d_base=albedo_1d_base,
             albedo_1d_comb=albedo_1d_comb,
-            albedo_res=albedo_res,
+            albedo_2d_res=albedo_2d_res,
+            albedo_1d_res=albedo_1d_res,
             
             shape_2d_base=shape_2d_base,
             shape_2d_comb=shape_2d_comb,
@@ -106,13 +92,7 @@ class Nonlinear3DMM_redner(nn.Module):
             shape_1d_comb=shape_1d_comb,
             shape_2d_res=shape_2d_res,
             shape_1d_res=shape_1d_res,
-    
-            # exp_2d_base=exp_2d_base,
-            # exp_2d_comb=exp_2d_comb,
-            # exp_1d_base=exp_1d_base,
-            # exp_1d_comb=exp_1d_comb,
-            # exp_2d_res=exp_2d_res,
-            # exp_1d_res=exp_1d_res,
+
             exp_2d=exp_2d,
             exp_1d=exp_1d,
         )
@@ -120,7 +100,7 @@ class Nonlinear3DMM_redner(nn.Module):
     def make_1d(self, decoder_2d_result, vt2pixel_u, vt2pixel_v):
         batch_size = decoder_2d_result.shape[0]
         decoder_1d_result = bilinear_sampler_torch(decoder_2d_result, vt2pixel_u, vt2pixel_v)
-        decoder_1d_result = decoder_1d_result.view(batch_size, -1)
+        decoder_1d_result = decoder_1d_result.view([batch_size, -1, 3])
 
         return decoder_1d_result
 
