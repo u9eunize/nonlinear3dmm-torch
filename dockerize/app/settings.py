@@ -194,8 +194,8 @@ def init_3dmm_settings():
     mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy')).reshape([-1, 3])[blender_to_deep].reshape(-1)
     shapeBase = np.load(join(CFG.definition_path, 'shapeBase.npy'))
     exBase = np.load(join(CFG.definition_path, 'exBase.npy'))
-    mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])
-    texBase = np.load(join(CFG.definition_path, 'texBase.npy'))[blender_to_deep]
+    mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])[blender_to_deep]
+    texBase = np.load(join(CFG.definition_path, 'texBase.npy'))
     
 
     h, w = CFG.texture_size

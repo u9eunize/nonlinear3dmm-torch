@@ -49,19 +49,19 @@ class Nonlinear3DMMHelper:
 
 
     def rendering_for_train( self, input_trans, input_angle, input_light, input_exp, input_shape, input_vcolor, input_image, input_mask,
-                             lv_trans, lv_angle, lv_il, exp_1d, albedo_base, albedo_comb,
+                             lv_trans, lv_angle, lv_il, exp_1d, albedo_1d_base, albedo_1d_comb,
                              shape_1d_base, shape_1d_comb, **kwargs ):
         
         batch_size = lv_trans.shape[0]
 
-        vt2pixel_u = CFG.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
-        vt2pixel_v = CFG.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
+        # vt2pixel_u = CFG.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
+        # vt2pixel_v = CFG.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
 
-        vcolor_base = make_1d(albedo_base, vt2pixel_u, vt2pixel_v)
-        vcolor_base = vcolor_base.view([batch_size, -1, 3])
+        # vcolor_base = make_1d(albedo_base, vt2pixel_u, vt2pixel_v)
+        vcolor_base = albedo_1d_base.view([batch_size, -1, 3])
 
-        vcolor_comb = make_1d(albedo_comb, vt2pixel_u, vt2pixel_v)
-        vcolor_comb = vcolor_comb.view([batch_size, -1, 3])
+        # vcolor_comb = make_1d(albedo_comb, vt2pixel_u, vt2pixel_v)
+        vcolor_comb = albedo_1d_comb.view([batch_size, -1, 3])
         
         lv_trans_all    = torch.cat([input_trans, lv_trans, lv_trans, lv_trans, lv_trans], dim=0)
         lv_angle_all    = torch.cat([input_angle, lv_angle, lv_angle, lv_angle, lv_angle], dim=0)
