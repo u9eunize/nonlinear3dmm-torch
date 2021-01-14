@@ -92,11 +92,9 @@ class NonlinearDataset(Dataset):
 		# read shape, color numpy file
 		vertex_with_color = torch.tensor(np.load(self.vertex_paths[idx]), dtype=torch.float32)[CFG.blender_to_deep_cpu]
 		vertex, vcolor = torch.split(vertex_with_color, (3, 3), dim=-1)
-		# vertex, color = get_blender_vc(vertex, vcolor)
 		vertex = vertex - torch.unsqueeze(trans, 0)
 		vertex = torch.bmm(torch.unsqueeze(vertex, 0), Compute_rotation_matrix(torch.unsqueeze(-angle, 0), device='cpu'))
 		vertex = torch.squeeze(vertex, 0)
-		exp = exp.view(-1)
 		shape = vertex.view(-1) - CFG.mean_shape_cpu - exp
 
 		# remove light effect and subtract mean tex
