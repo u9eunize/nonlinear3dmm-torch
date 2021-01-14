@@ -215,11 +215,12 @@ def init_3dmm_settings():
     landmark = np.load(join(CFG.definition_path, 'landmark.npy'))
     
     deep_to_blender = np.load(join(CFG.definition_path, 'deep_to_blender.npy'))
+    blender_to_deep = np.load(join(CFG.definition_path, 'blender_to_deep.npy'))
 
-    face = np.load(join(CFG.definition_path, 'face.npy'))
-    # face = deep_to_blender[face-1] + 1
+    face = np.load(join(CFG.definition_path, 'face.npy')) - 1
+    face = deep_to_blender[face]
     
-    point_buf = np.load(join(CFG.definition_path, 'point_buf.npy'))
+    point_buf = np.load(join(CFG.definition_path, 'point_buf.npy')) - 1
 
     const_alb_mask = 255 - np.load(join(CFG.definition_path, 'const_alb_mask.npy'))
 
@@ -250,6 +251,8 @@ def init_3dmm_settings():
         point_buf_cpu=torch.tensor(point_buf, dtype=torch.int32),
         point_buf=torch.tensor(point_buf, dtype=torch.int32).to(CFG.device),
         const_alb_mask=torch.tensor(const_alb_mask, dtype=torch.int32),
+
+        blender_to_deep=torch.tensor(blender_to_deep),
         
 
         # mean_m=torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=torch.float32).to(CFG.device),

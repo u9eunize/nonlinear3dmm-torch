@@ -85,7 +85,7 @@ class NLLogger:
         vertices = vertices.view((CFG.batch_size, -1, 3))
         data["vertices"] = vertices[:1, :, :].clone().cpu()
         # data["faces"] = CFG.face[:1, :CFG.tri_num, :].clone().cpu()
-        data["faces"] = CFG.face.unsqueeze(0).clone().cpu() - 1
+        data["faces"] = CFG.face.unsqueeze(0).clone().cpu()
         self._write(interval, f"{name}", (NLLogger.add_mesh, data))
 
     def save_to_files(self, path, epoch):

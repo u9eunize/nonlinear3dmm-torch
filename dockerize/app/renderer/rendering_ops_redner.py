@@ -150,7 +150,7 @@ class Batch_Renderer():
         scene_args = []
         for vertex, color in zip(vertices, colors):
             # define shape parameter
-            shape_face = pyredner.Shape(vertices=vertex, indices=CFG.face - 1, colors=color, material_id=0)
+            shape_face = pyredner.Shape(vertices=vertex, indices=CFG.face, colors=color, material_id=0)
             shape_face.normals = pyredner.compute_vertex_normal(vertices=shape_face.vertices, indices=shape_face.indices)
             
             # define scene parameter
@@ -235,7 +235,7 @@ class Batch_Renderer_pytorch3d():
         norm_r = torch.bmm(face_norm, rotation)
         colors = Illumination_block(color_batch, norm_r, light_batch)
 
-        meshes = Meshes(verts=[vertex for vertex in vertices], faces=[CFG.face - 1 for _ in range(batch_size)])
+        meshes = Meshes(verts=[vertex for vertex in vertices], faces=[CFG.face for _ in range(batch_size)])
         meshes.textures = TexturesVertex(verts_features=colors)
 
         outputs, fragments = self.renderer(meshes)
@@ -307,11 +307,7 @@ def Compute_norm ( face_shape, device=CFG.device ):
     else:
         face_id = CFG.face
         point_id = CFG.point_buf
-    
-    # face_id and point_id index starts from 1
-    face_id = face_id - 1
-    point_id = point_id - 1
-    
+
     # compute normal for each face
     v1 = shape[:, face_id[:, 0].long()]
     v2 = shape[:, face_id[:, 1].long()]
