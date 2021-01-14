@@ -181,15 +181,12 @@ class NLLogger:
         # all_dict.update(NLLogger.rendering_for_log(**loss_params))
         # self.write_image("shade", loss_params["shade"], interval=interval)
         self._write_loss_images("g_images", all_dict, [
-            # "input_image",
-            # "g_img_bg_gt",
-            # "g_img_bg_base",
+            "input_image",
+            "g_img_bg_gt",
+            "g_img_bg_base",
             # "g_img_bg_ac_sb",
             # "g_img_bg_ab_sc",
             # "g_img_bg_comb",
-
-            "input_image",
-            "g_img_bg_base",
 
             # "input_images",
             # "g_img_base",

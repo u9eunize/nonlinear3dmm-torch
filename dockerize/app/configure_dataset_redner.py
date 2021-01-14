@@ -213,7 +213,7 @@ class NonlinearDataset(Dataset):
 		
 
 def main():
-	batch_size = 12
+	batch_size = 4
 	init_3dmm_settings()
 	dataset = NonlinearDataset(phase='train', frac=0.1)
 	dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
@@ -234,25 +234,21 @@ def main():
 		                       light_batch=samples['light'].to(CFG.device),
 		                       print_timing=False)
 		print(f'***** rendering time : {time() - start}')
-		image_ = torch.zeros_like(images[0])
-		image_[:, :, 0] = images[0, :, :, 2]
-		image_[:, :, 1] = images[0, :, :, 1]
-		image_[:, :, 2] = images[0, :, :, 0]
+		r, g, b = torch.split(images, (1, 1, 1), dim=3)
+		images = torch.cat([b, g, r], dim=3)
+		images = torch.cat([image for image in images], dim=1)
 
-		image_label = samples['image'][0].permute(1, 2, 0)
-		image_label_ = torch.zeros_like(image_label)
-		image_label_[:, :, 0] = image_label[:, :, 2]
-		image_label_[:, :, 1] = image_label[:, :, 1]
-		image_label_[:, :, 2] = image_label[:, :, 0]
+		image_labels = samples['image'].permute(0, 2, 3, 1).to(CFG.device)
+		r, g, b = torch.split(image_labels, (1, 1, 1), dim=3)
+		image_labels = torch.cat([b, g, r], dim=3)
+		image_labels = torch.cat([image for image in image_labels], dim=1)
 
-		image = image_.cpu().detach().numpy()
-		mask = masks[0].cpu().detach().numpy()
-		image_name = samples['image_name'][0]
-		image_label = image_label_.cpu().detach().numpy()
+		masks = torch.cat([mask for mask in masks], dim=1)
+		maskeds = images * masks + image_labels * (1 - masks)
 
-		# mask = samples['mask'][0].permute(1, 2, 0).cpu().detach().numpy()
-
-		masked = image * mask + image_label * (1 - mask)
+		images = images.cpu().detach().numpy()
+		image_labels = image_labels.cpu().detach().numpy()
+		maskeds = maskeds.cpu().detach().numpy()
 
 		continue
 

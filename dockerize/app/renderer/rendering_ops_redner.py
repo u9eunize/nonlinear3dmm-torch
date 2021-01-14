@@ -13,6 +13,15 @@ from time import time
 from joblib import Parallel, delayed
 import multiprocessing
 
+from pytorch3d.renderer import (
+    look_at_view_transform, OrthographicCameras, PerspectiveCameras,
+    RasterizationSettings, BlendParams,
+    MeshRenderer, MeshRasterizer, HardPhongShader,
+    Materials, DirectionalLights, TexturesVertex
+)
+from pytorch3d.renderer.mesh.renderer import MeshRendererWithFragments
+from pytorch3d.structures import Meshes
+
 
 class BatchRenderFunction(torch.autograd.Function):
     @staticmethod
@@ -158,8 +167,85 @@ class Batch_Renderer():
         return images, masks, colors
 
 
+class Batch_Renderer_pytorch3d():
+    def __init__(self, resolution=(224, 224)):
+        materials = Materials(device=CFG.device)
+        lights = DirectionalLights(ambient_color=((1.0, 1.0, 1.0),), device=CFG.device)
 
-renderer = Batch_Renderer()
+        R, T = look_at_view_transform(eye=torch.tensor([[0.0, 0.0, 10.0]]), device=CFG.device)
+        cameras = PerspectiveCameras(focal_length=9, device=CFG.device, R=R, T=T)
+
+        raster_settings = RasterizationSettings(image_size=224)
+        rasterizer = MeshRasterizer(cameras=cameras, raster_settings=raster_settings)
+
+        # blend_params = BlendParams(1e-4, 1e-4, background_color=torch.zeros(3, dtype=torch.float32, device=CFG.device))
+        shader = HardPhongShader(device=CFG.device, cameras=cameras, lights=lights, materials=materials)#blend_params=blend_params)
+
+        self.renderer = MeshRendererWithFragments(rasterizer=rasterizer, shader=shader)
+
+    def render(self,
+               vertex_batch: Optional[torch.Tensor],
+               color_batch: Optional[torch.Tensor],
+               trans_batch: Optional[torch.Tensor],
+               angle_batch: Optional[torch.Tensor],
+               light_batch: Optional[torch.Tensor],
+               print_timing: Any = False,
+               uv_indices: Optional[torch.Tensor] = None,
+               texture: Optional[torch.Tensor] = None):
+        """
+            render batch 3D objects using path tracing mode(physically based mode)
+
+            Args
+            ====
+            vertex: Optional[torch.Tensor]
+                3D position of vertices
+                float32 tensor with size [batch_size, num_vertices, 3]
+            color: Optional[torch.Tensor]
+                per-vertex color
+                float32 tensor with size [batch_size, num_vertices, 3]
+            trans: Optional[torch.Tensor]
+                3D translation coordinates of vertices
+                float32 tensor with size [batch_size, 3]
+            angle: Optional[torch.Tensor]
+                3D rotation angles of vertices
+                float32 tensor with size [batch_size, 3]
+            light: Optional[torch.Tensor]
+                light parameters defined in phong shading.
+                float32 tensor with size 27, [batch_size, 27]
+            resolution: Tuple[int, int]
+                resolution parameter
+                int32 tuple with size 2, [h, w]
+
+            Returns
+            =======
+            torch.Tensor
+                a camera that can see all the objects.
+                float32 tensor with size [batch_size, h, w, 3]
+        """
+        pyredner.set_print_timing(print_timing)
+
+        batch_size = vertex_batch.shape[0]
+
+        # compute vertex transformation
+        rotation = Compute_rotation_matrix(angle_batch)
+        vertices = torch.bmm(vertex_batch, rotation) + torch.unsqueeze(trans_batch, 1)
+
+        # compute face color
+        face_norm = Compute_norm(vertex_batch)
+        norm_r = torch.bmm(face_norm, rotation)
+        colors = Illumination_block(color_batch, norm_r, light_batch)
+
+        meshes = Meshes(verts=[vertex for vertex in vertices], faces=[CFG.face - 1 for _ in range(batch_size)])
+        meshes.textures = TexturesVertex(verts_features=colors)
+
+        outputs, fragments = self.renderer(meshes)
+        images, _ = torch.split(outputs, (3, 1), dim=3)
+        masks = (fragments.zbuf > 0) * 1
+
+        return images, masks, colors
+
+
+renderer = Batch_Renderer_pytorch3d()
 
 
 
