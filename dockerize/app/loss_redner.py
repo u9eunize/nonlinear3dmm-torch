@@ -128,14 +128,7 @@ class Loss:
         g_loss_exp_regularization = norm_loss(exp_1d, torch.zeros_like(exp_1d, device=CFG.device), loss_type=CFG.exp_regularization_loss_type)
         return g_loss_exp_regularization
 
-    def shape_loss(self, shape_1d_base, input_shape, input_exp, **kwargs):
-        # shape_1d_base = shape_1d_base.view([-1, 3])
-        # input_shape = input_shape.view([-1, 3])
-        # g_loss_shape_x = norm_loss(shape_1d_base[:, 0], (input_shape[:, 0] + 0) * 10, loss_type=CFG.shape_loss_type)
-        # g_loss_shape_y = norm_loss(shape_1d_base[:, 1], (input_shape[:, 1] + 0) * 10, loss_type=CFG.shape_loss_type)
-        # g_loss_shape_z = norm_loss(shape_1d_base[:, 2], (input_shape[:, 2] + 0.75) * 10, loss_type=CFG.shape_loss_type)
-        # g_loss_shape = g_loss_shape_x + g_loss_shape_y + g_loss_shape_z
-
+    def shape_loss(self, shape_1d_base, input_shape, **kwargs):
         g_loss_shape = norm_loss(shape_1d_base, input_shape, loss_type=CFG.shape_loss_type)
         return g_loss_shape
 
@@ -144,10 +137,6 @@ class Loss:
         g_loss_shape_regularization_y = norm_loss(shape_2d_base[:, 1, :, :], torch.zeros_like(shape_2d_base[:, 1, :, :], device=CFG.device), loss_type=CFG.shape_regularization_loss_type)
         g_loss_shape_regularization = g_loss_shape_regularization_x + g_loss_shape_regularization_y
         return g_loss_shape_regularization
-
-    # def m_loss(self, lv_m, input_m_labels, **kwargs):
-    #     g_loss_m = norm_loss(lv_m, input_m_labels, loss_type=CFG.m_loss_type)
-    #     return g_loss_m
 
     def trans_loss(self, lv_trans, input_trans, **kwargs):
         g_loss_trans = norm_loss(lv_trans, input_trans, loss_type=CFG.m_loss_type)
@@ -312,8 +301,7 @@ class Loss:
         return g_loss_vcolor
 
     def base_texture_loss(self, albedo_1d_base, input_vcolor, **kwargs):
-        batch_size = albedo_1d_base.shape[0]
-        return self._texture_loss_calculation(albedo_1d_base.view((batch_size, -1, 3)), input_vcolor)
+        return self._texture_loss_calculation(albedo_1d_base, input_vcolor)
 
     def mix_ac_sb_texture_loss(self, g_vcolor_ac_sb, input_vcolor, **kwargs):
         return self._texture_loss_calculation(g_vcolor_ac_sb, input_vcolor)
@@ -338,12 +326,6 @@ class Loss:
 
     def comb_smoothness_loss(self, shape_2d_comb, **kwargs):
         return self._smoothness_loss_calculation(shape_2d_comb)
-
-    # def base_exp_smoothness_loss(self, exp_2d_base, **kwargs):
-    #     return self._smoothness_loss_calculation(exp_2d_base)
-    #
-    # def comb_exp_smoothness_loss(self, exp_2d_comb, **kwargs):
-    #     return self._smoothness_loss_calculation(exp_2d_comb)
 
     def exp_smoothness_loss(self, exp_2d, **kwargs):
         return self._smoothness_loss_calculation(exp_2d)
@@ -385,7 +367,7 @@ class Loss:
         g_loss_albedo_const = g_loss_albedo_const_1 + g_loss_albedo_const_2
 
         return g_loss_albedo_const
-    #
+
     def const_local_albedo_loss(self, albedo_2d_base, **kwargs):
         u_albedo_norm = norm_loss(albedo_2d_base[:, :, :-1, :], albedo_2d_base[:, :, 1:, :],
                                   loss_type=CFG.const_local_albedo_loss_type, p=0.8, reduce_mean=False)
@@ -397,10 +379,6 @@ class Loss:
         loss_local_albedo = (loss_local_albedo_u + loss_local_albedo_v)
 
         return loss_local_albedo
-    #
-    # def shade_mag_loss(self, shade_base, tex_base, **kwargs):
-    #     return norm_loss(shade_base, torch.ones_like(shade_base),
-    #                      mask=torch.gt(tex_base, 1).float(), loss_type=CFG.shade_mag_loss_type)
 
     def shape_residual_loss(self, shape_1d_res, **kwargs):
         return norm_loss(shape_1d_res, torch.zeros_like(shape_1d_res), loss_type=CFG.residual_loss_type)
@@ -412,5 +390,3 @@ class Loss:
         return norm_loss(exp_1d_res, torch.zeros_like(exp_1d_res), loss_type=CFG.residual_loss_type)
 
 
-    # def residual_symmetry_loss(self, rotated_normal_2d, **kwargs):
-    #     pass

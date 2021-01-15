@@ -453,13 +453,11 @@ def make_1d ( decoder_2d_result, vt2pixel_u, vt2pixel_v ):
 
 
 def render_all(lv_trans, lv_angle, lv_il, vcolor, exp_1d, shape_1d, input_mask, input_background):
-    batch_size = lv_il.shape[0]
     shape_full = CFG.mean_shape + shape_1d + exp_1d
-    vertex = shape_full.view([batch_size, -1, 3])
     vcolor_full = CFG.mean_tex + vcolor
 
     images, masks, vcolors = renderer.render(
-        vertex_batch=vertex,
+        vertex_batch=shape_full,
         color_batch=vcolor_full,
         trans_batch=lv_trans,
         angle_batch=lv_angle,
