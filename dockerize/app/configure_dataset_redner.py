@@ -205,7 +205,7 @@ class NonlinearDataset(Dataset):
 		
 
 def main():
-	batch_size = 4
+	batch_size = 8
 	init_3dmm_settings()
 	dataset = NonlinearDataset(phase='train', frac=0.1)
 	dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
@@ -233,7 +233,7 @@ def main():
 		image_labels = torch.cat([image for image in image_labels], dim=1)
 
 		masks = torch.cat([mask for mask in masks], dim=1)
-		maskeds = images * masks + image_labels * (1 - masks)
+		maskeds = images * masks + image_labels * (1 - masks * 1)
 
 		images = images.cpu().detach().numpy()
 		image_labels = image_labels.cpu().detach().numpy()

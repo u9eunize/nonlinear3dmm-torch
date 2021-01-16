@@ -173,7 +173,7 @@ class Batch_Renderer_pytorch3d():
         lights = DirectionalLights(ambient_color=((1.0, 1.0, 1.0),), device=CFG.device)
 
         R, T = look_at_view_transform(eye=torch.tensor([[0.0, 0.0, 10.0]]), device=CFG.device)
-        cameras = PerspectiveCameras(focal_length=9, device=CFG.device, R=R, T=T)
+        cameras = PerspectiveCameras(focal_length=9.25, device=CFG.device, R=R, T=T)
 
         raster_settings = RasterizationSettings(image_size=224)
         rasterizer = MeshRasterizer(cameras=cameras, raster_settings=raster_settings)
@@ -245,6 +245,7 @@ class Batch_Renderer_pytorch3d():
         return images, masks, colors
 
 
+# renderer = Batch_Renderer()
 renderer = Batch_Renderer_pytorch3d()
 
 
