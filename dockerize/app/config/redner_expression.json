@@ -70,7 +70,7 @@
 
   "batchwise_white_shading_loss": null,
   "symmetry_loss":  100,
-  "const_albedo_loss": 10,
+  "const_albedo_loss": 1000,
   "const_local_albedo_loss": null,
   "shade_mag_loss":  null,
   "base_smoothness_loss": 5e5,
