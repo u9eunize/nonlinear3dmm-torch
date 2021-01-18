@@ -54,10 +54,10 @@ class NonlinearDataset(Dataset):
 				join(self.dataset_dir, 'mask', basename(image_path))
 				for image_path in self.image_paths
 		]
-		self.vertex_paths = [
-				join(self.dataset_dir, 'vertex', basename(image_path).replace('.jpg', '.npy'))
-				for image_path in self.image_paths
-		]
+		# self.vertex_paths = [
+		# 		join(self.dataset_dir, 'vertex', basename(image_path).replace('.jpg', '.npy'))
+		# 		for image_path in self.image_paths
+		# ]
 		self.params = torch.tensor(np.load(join(self.dataset_dir, 'parameter.npy')), dtype=torch.float32)
 
 		print("Checking dataset validation")
