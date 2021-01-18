@@ -84,24 +84,23 @@ class NonlinearDataset(Dataset):
 		
 		# load camera parameters
 		params = self.params[idx]
-		shape, exp, tex, angle, light, trans = torch.split(params, (80, 64, 80, 3, 27, 3), dim=-1)
+		shape_para, exp_para, tex_para, angle, light, trans = torch.split(params, (80, 64, 80, 3, 27, 3), dim=-1)
 
-		exp = torch.einsum('ij,aj->ai', CFG.exBase_cpu, torch.unsqueeze(exp, 0))
+		shape = torch.mm(torch.unsqueeze(shape_para, 0), CFG.shapeBase_cpu.transpose(0, 1))
+		shape = shape.view([-1, 3])[CFG.blender_to_deep_cpu]
+		shape -= torch.mean(CFG.mean_shape_cpu, dim=0)  # ?
+
+		exp = torch.mm(torch.unsqueeze(exp_para, 0), CFG.exBase_cpu.transpose(0, 1))
 		exp = exp.view([-1, 3])[CFG.blender_to_deep_cpu]
-		
-		# read shape, color numpy file
-		vertex_with_color = torch.tensor(np.load(self.vertex_paths[idx]), dtype=torch.float32)[CFG.blender_to_deep_cpu]
-		vertex, vcolor = torch.split(vertex_with_color, (3, 3), dim=-1)
-		vertex = vertex - torch.unsqueeze(trans, 0)
-		vertex = torch.bmm(torch.unsqueeze(vertex, 0), Compute_rotation_matrix(torch.unsqueeze(-angle, 0), device='cpu'))
-		vertex = torch.squeeze(vertex, 0)
-		shape = vertex - CFG.mean_shape_cpu - exp
 
-		# remove light effect and subtract mean tex
-		vcolor = vcolor.view([-1, 3])
-		vcolor = remove_light(vertex_batch=vertex.unsqueeze(0), color_batch=vcolor.unsqueeze(0), light_batch=light.unsqueeze(0), angle_batch=angle.unsqueeze(0), device="cpu")
-		vcolor = vcolor.squeeze(0)
-		vcolor -= CFG.mean_tex_cpu
+		tex = torch.mm(torch.unsqueeze(tex_para, 0), CFG.texBase_cpu.transpose(0, 1))
+		vcolor = tex.view([-1, 3])[CFG.blender_to_deep_cpu] / 255.0
+
+
+		# shape_ = shape + torch.mean(CFG.mean_shape_cpu, dim=0)
+		# shape_ = shape_[CFG.deep_to_blender_cpu].view((1, -1))
+		# shape_ = torch.mm(shape_, CFG.shapeBase_cpu)
+
 
 		# set random albedo indices
 		indices1 = np.random.randint(low=0, high=CFG.const_alb_mask.shape[0], size=[CFG.const_pixels_num])
@@ -212,12 +211,13 @@ def main():
 
 	for idx, samples in enumerate(dataloader):
 		shape = samples['shape'] + samples['exp'] + CFG.mean_shape_cpu
+		color = samples['vcolor'] + CFG.mean_tex_cpu
 		# shape = (torch.zeros_like(samples['shape'] + samples['exp']) + CFG.mean_shape_cpu).view([batch_size, -1, 3])
 
 		start = time()
 		images, masks, _ = renderer.render(
 							   vertex_batch=shape.to(CFG.device),
-		                       color_batch=samples['vcolor'].to(CFG.device) + CFG.mean_tex,
+		                       color_batch=color.to(CFG.device),
 							   trans_batch=samples['trans'].to(CFG.device),
 							   angle_batch=samples['angle'].to(CFG.device),
 		                       light_batch=samples['light'].to(CFG.device),
