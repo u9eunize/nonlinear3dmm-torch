@@ -81,9 +81,9 @@
   "albedo_residual_loss":  null,
 
   "exp_smoothness_loss": 5e5,
-  "light_loss": 10000,
-  "trans_loss": 10000,
-  "angle_loss": 10000,
+  "light_loss": 1000,
+  "trans_loss": 1000,
+  "angle_loss": 1000,
 
   "exp_smoothness_loss_type": "l2",
   "light_loss_type": "l1",
