@@ -191,10 +191,10 @@ def init_3dmm_settings():
     deep_to_blender = np.load(join(CFG.definition_path, 'deep_to_blender.npy'))
     blender_to_deep = np.load(join(CFG.definition_path, 'blender_to_deep.npy'))
     
-    mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy')).reshape([-1, 3])[blender_to_deep]
+    mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy')).reshape([-1, 3])
     shapeBase = np.load(join(CFG.definition_path, 'shapeBase.npy'))
     exBase = np.load(join(CFG.definition_path, 'exBase.npy'))
-    mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])[blender_to_deep]
+    mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])
     texBase = np.load(join(CFG.definition_path, 'texBase.npy'))
     
 
@@ -208,10 +208,10 @@ def init_3dmm_settings():
 
 
     face = np.load(join(CFG.definition_path, 'face.npy')) - 1
-    face = deep_to_blender[face]
+    # face = deep_to_blender[face]
     
     point_buf = np.load(join(CFG.definition_path, 'point_buf.npy')) - 1
-    point_buf = point_buf[blender_to_deep]
+    # point_buf = point_buf[blender_to_deep]
 
     const_alb_mask = 255 - np.load(join(CFG.definition_path, 'const_alb_mask.npy'))
 

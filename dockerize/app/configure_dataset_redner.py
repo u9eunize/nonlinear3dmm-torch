@@ -87,14 +87,14 @@ class NonlinearDataset(Dataset):
 		shape_para, exp_para, tex_para, angle, light, trans = torch.split(params, (80, 64, 80, 3, 27, 3), dim=-1)
 
 		shape = torch.mm(torch.unsqueeze(shape_para, 0), CFG.shapeBase_cpu.transpose(0, 1))
-		shape = shape.view([-1, 3])[CFG.blender_to_deep_cpu]
+		shape = shape.view([-1, 3])
 		shape -= torch.mean(CFG.mean_shape_cpu, dim=0)  # ?
 
 		exp = torch.mm(torch.unsqueeze(exp_para, 0), CFG.exBase_cpu.transpose(0, 1))
-		exp = exp.view([-1, 3])[CFG.blender_to_deep_cpu]
+		exp = exp.view([-1, 3])
 
 		tex = torch.mm(torch.unsqueeze(tex_para, 0), CFG.texBase_cpu.transpose(0, 1))
-		vcolor = tex.view([-1, 3])[CFG.blender_to_deep_cpu] / 255.0
+		vcolor = tex.view([-1, 3]) / 255.0
 
 
 		# shape_ = shape + torch.mean(CFG.mean_shape_cpu, dim=0)
