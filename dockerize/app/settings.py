@@ -12,7 +12,7 @@ def parse():
     parser = argparse.ArgumentParser()
 
     #parser.add_argument("--train", type=strToBool, default=True, help="Train(True) or Demo(False)")
-    parser.add_argument("--valid", type=bool, default=False, help="do validation(true) or false (bug: don't set true)")
+    parser.add_argument("--valid", type=bool, default=False, help="do validation(true) or false (bug: don'proxy.json set true)")
     parser.add_argument("--seed", type=int, default=None, help="fixed seed for random generator")
     parser.add_argument("--using_expression", type=bool, default=False, help="")
     parser.add_argument("--using_albedo_as_tex", type=bool, default=False, help="")

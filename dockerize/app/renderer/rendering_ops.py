@@ -260,7 +260,7 @@ def warp_texture_torch (texture, m, mshape, output_size=96, is_reduce=False):
             m:          [batch, 8]
             mshape:     [batch , VERTEXU_NUM * 3]
         Returns
-            image: [batch, x, t, c]
+            image: [batch, x, proxy.json, c]
     '''
 
     # texture = texture.permute((0, 2, 3, 1)) # [batch, 192, 224, 3]
