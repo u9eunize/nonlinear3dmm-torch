@@ -1,7 +1,7 @@
 {
   "name": "pretrain",
 
-  "checkpoint_name": "",
+  "checkpoint_name": "20210115/095116_pretrain/ckpt_02/model_ckpt_02_045540.pt",
   "checkpoint_root_path":  "/dataset/checkpoint",
   "checkpoint_regex": null,
   "checkpoint_epoch":  null,
@@ -13,8 +13,8 @@
   "prediction_dst_path": "/dataset/pred/dst",
 
   "epoch":  50,
-  "batch_size": 12,
-  "lr":  0.001,
+  "batch_size": 3,
+  "lr":  0.0001,
   "betas": [0.5, 0.999],
   "save_ratio":  0.05,
 
@@ -53,19 +53,19 @@
   "gt_landmark_loss": null,
 
   "base_texture_loss": 500,
-  "mix_ac_sb_texture_loss":  null,
-  "mix_ab_sc_texture_loss": null,
+  "mix_ac_sb_texture_loss":  200,
+  "mix_ab_sc_texture_loss": 200,
   "comb_texture_loss":  null,
 
-  "base_pix_recon_loss": null,
-  "mix_ab_sc_pix_recon_loss":  null,
-  "mix_ac_sb_pix_recon_loss": null,
+  "base_pix_recon_loss": 500,
+  "mix_ab_sc_pix_recon_loss":  1000,
+  "mix_ac_sb_pix_recon_loss": 1000,
   "comb_pix_recon_loss":  null,
 
   "perceptual_layer": ["conv2d_1a", "conv2d_2a", "maxpool_3a", "conv2d_4a"],
-  "base_perceptual_recon_loss": null,
-  "mix_ab_sc_perceptual_recon_loss": null,
-  "mix_ac_sb_perceptual_recon_loss": null,
+  "base_perceptual_recon_loss": 500,
+  "mix_ab_sc_perceptual_recon_loss": 1000,
+  "mix_ac_sb_perceptual_recon_loss": 1000,
   "comb_perceptual_recon_loss":  null,
 
   "batchwise_white_shading_loss": null,
@@ -81,9 +81,9 @@
   "albedo_residual_loss":  null,
 
   "exp_smoothness_loss": 5e5,
-  "light_loss": 1000,
-  "trans_loss": 1000,
-  "angle_loss": 1000,
+  "light_loss": 10000,
+  "trans_loss": 10000,
+  "angle_loss": 10000,
 
   "exp_smoothness_loss_type": "l2",
   "light_loss_type": "l1",
