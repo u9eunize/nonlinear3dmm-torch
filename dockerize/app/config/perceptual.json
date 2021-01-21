@@ -63,7 +63,7 @@
   "comb_pix_recon_loss":  null,
 
   "perceptual_layer": ["conv2d_1a", "conv2d_2a", "maxpool_3a", "conv2d_4a"],
-  "base_perceptual_recon_loss": null,
+  "base_perceptual_recon_loss": 1000,
   "mix_ab_sc_perceptual_recon_loss": null,
   "mix_ac_sb_perceptual_recon_loss": null,
   "comb_perceptual_recon_loss":  null,
