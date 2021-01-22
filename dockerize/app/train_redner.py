@@ -267,6 +267,10 @@ class Nonlinear3DMMHelper:
             "input_shape": samples["shape"].to(CFG.device),
             "input_vcolor" : samples["vcolor"].to(CFG.device),
 
+            "input_shape_para": samples["shape_para"].to(CFG.device),
+            "input_exp_para": samples["exp_para"].to(CFG.device),
+            "input_tex_para": samples["tex_para"].to(CFG.device),
+
             "input_albedo_indexes": list(map(lambda a: a.to(CFG.device), samples["albedo_indices"])),
         }
 

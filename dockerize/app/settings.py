@@ -193,9 +193,14 @@ def init_3dmm_settings():
     
     mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy')).reshape([-1, 3])[blender_to_deep]
     shapeBase = np.load(join(CFG.definition_path, 'shapeBase.npy'))
+    shapeBase_inverse = np.matmul(np.linalg.inv(np.matmul(shapeBase.transpose(), shapeBase)), shapeBase.transpose()).transpose()
+
     exBase = np.load(join(CFG.definition_path, 'exBase.npy'))
+    exBase_inverse = np.matmul(np.linalg.inv(np.matmul(exBase.transpose(), exBase)), exBase.transpose()).transpose()
+
     mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])[blender_to_deep]
     texBase = np.load(join(CFG.definition_path, 'texBase.npy'))
+    texBase_inverse = np.matmul(np.linalg.inv(np.matmul(texBase.transpose(), texBase)), texBase.transpose()).transpose()
     
 
     h, w = CFG.texture_size
@@ -221,13 +226,18 @@ def init_3dmm_settings():
     global_3dmm_setting = dict(
         mean_shape=torch.tensor(mean_shape, dtype=torch.float32).to(CFG.device),
         mean_shape_cpu=torch.tensor(mean_shape, dtype=torch.float32),
-        # std_shape=torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=torch.float32).to(CFG.device),
         shapeBase=torch.tensor(shapeBase, dtype=torch.float32).to(CFG.device),
         shapeBase_cpu=torch.tensor(shapeBase, dtype=torch.float32),
+        shapeBase_inverse=torch.tensor(shapeBase_inverse, dtype=torch.float32).to(CFG.device),
+        shapeBase_inverse_cpu=torch.tensor(shapeBase_inverse, dtype=torch.float32),
         exBase=torch.tensor(exBase, dtype=torch.float32).to(CFG.device),
         exBase_cpu=torch.tensor(exBase, dtype=torch.float32),
+        exBase_inverse=torch.tensor(exBase_inverse, dtype=torch.float32).to(CFG.device),
+        exBase_inverse_cpu=torch.tensor(exBase_inverse, dtype=torch.float32),
         mean_tex=torch.tensor(mean_tex, dtype=torch.float32).to(CFG.device),
         mean_tex_cpu=torch.tensor(mean_tex, dtype=torch.float32),
+        texBase_inverse=torch.tensor(texBase_inverse, dtype=torch.float32).to(CFG.device),
+        texBase_inverse_cpu=torch.tensor(texBase_inverse, dtype=torch.float32),
         texBase=torch.tensor(texBase, dtype=torch.float32).to(CFG.device),
         texBase_cpu=torch.tensor(texBase, dtype=torch.float32),
 

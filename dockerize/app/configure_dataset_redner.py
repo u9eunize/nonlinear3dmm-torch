@@ -89,18 +89,15 @@ class NonlinearDataset(Dataset):
 		shape = torch.mm(torch.unsqueeze(shape_para, 0), CFG.shapeBase_cpu.transpose(0, 1))
 		shape = shape.view([-1, 3])[CFG.blender_to_deep_cpu]
 		shape -= torch.mean(CFG.mean_shape_cpu, dim=0)  # ?
+		_shape_para = torch.mm((shape + torch.mean(CFG.mean_shape_cpu, dim=0))[CFG.deep_to_blender_cpu].view((1, -1)), CFG.shapeBase_inverse_cpu)
 
 		exp = torch.mm(torch.unsqueeze(exp_para, 0), CFG.exBase_cpu.transpose(0, 1))
 		exp = exp.view([-1, 3])[CFG.blender_to_deep_cpu]
+		_exp_para = torch.mm(exp[CFG.deep_to_blender_cpu].view((1, -1)), CFG.exBase_inverse_cpu)
 
 		tex = torch.mm(torch.unsqueeze(tex_para, 0), CFG.texBase_cpu.transpose(0, 1))
 		vcolor = tex.view([-1, 3])[CFG.blender_to_deep_cpu] / 255.0
-
-
-		# shape_ = shape + torch.mean(CFG.mean_shape_cpu, dim=0)
-		# shape_ = shape_[CFG.deep_to_blender_cpu].view((1, -1))
-		# shape_ = torch.mm(shape_, CFG.shapeBase_cpu)
-
+		_tex_para = torch.mm(vcolor[CFG.deep_to_blender_cpu].view((1, -1)) * 255.0, CFG.texBase_inverse_cpu)
 
 		# set random albedo indices
 		indices1 = np.random.randint(low=0, high=CFG.const_alb_mask.shape[0], size=[CFG.const_pixels_num])
@@ -123,6 +120,10 @@ class NonlinearDataset(Dataset):
 				
 				'shape'         : shape,
 				'vcolor'        : vcolor,
+
+				'shape_para'	: shape_para.unsqueeze(0),
+				'exp_para'		: exp_para.unsqueeze(0),
+				'tex_para'		: tex_para.unsqueeze(0),
 
 				'albedo_indices': [
 					albedo_indices_x1,

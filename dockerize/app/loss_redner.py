@@ -120,16 +120,24 @@ class Loss:
         self.cache = dict()
         pass
 
-    def expression_loss(self, exp_1d, input_exp, **kwargs):
+    def expression_loss(self, exp_1d, input_exp, input_exp_para, **kwargs):
         g_loss_exp = norm_loss(exp_1d, input_exp, loss_type=CFG.expression_loss_type)
+
+        batch_size = exp_1d.shape[0]
+        exp_para = torch.bmm(exp_1d[:, CFG.deep_to_blender].view((batch_size, 1, -1)), CFG.exBase_inverse.repeat(batch_size, 1, 1))
+        g_loss_exp = norm_loss(exp_para, input_exp_para, loss_type=CFG.expression_loss_type)
         return g_loss_exp
 
     def exp_regularization_loss(self, exp_1d, **kwargs):
         g_loss_exp_regularization = norm_loss(exp_1d, torch.zeros_like(exp_1d, device=CFG.device), loss_type=CFG.exp_regularization_loss_type)
         return g_loss_exp_regularization
 
-    def shape_loss(self, shape_1d_base, input_shape, **kwargs):
+    def shape_loss(self, shape_1d_base, input_shape, input_shape_para, **kwargs):
         g_loss_shape = norm_loss(shape_1d_base, input_shape, loss_type=CFG.shape_loss_type)
+
+        batch_size = shape_1d_base.shape[0]
+        shape_para = torch.bmm((shape_1d_base + torch.mean(CFG.mean_shape, dim=0))[:, CFG.deep_to_blender].view((batch_size, 1, -1)), CFG.shapeBase_inverse.repeat(batch_size, 1, 1))
+        g_loss_shape = norm_loss(shape_para, input_shape_para, loss_type=CFG.shape_loss_type)
         return g_loss_shape
 
     def shape_regularization_loss(self, shape_2d_base, **kwargs):
@@ -296,21 +304,25 @@ class Loss:
     #     g_loss_texture = g_loss_texture / tex_ratio
     #     return g_loss_texture
 
-    def _texture_loss_calculation(self, vcolor, input_vcolor):
+    def _texture_loss_calculation(self, vcolor, input_vcolor, input_tex_para):
         g_loss_vcolor = norm_loss(vcolor, input_vcolor, loss_type=CFG.texture_loss_type)
+
+        batch_size = vcolor.shape[0]
+        tex_para = torch.bmm(vcolor[:, CFG.deep_to_blender].view((batch_size, 1, -1)) * 255.0, CFG.texBase_inverse.repeat(batch_size, 1, 1))
+        g_loss_vcolor = norm_loss(tex_para, input_tex_para, loss_type=CFG.texture_loss_type)
         return g_loss_vcolor
 
-    def base_texture_loss(self, albedo_1d_base, input_vcolor, **kwargs):
-        return self._texture_loss_calculation(albedo_1d_base, input_vcolor)
+    def base_texture_loss(self, albedo_1d_base, input_vcolor, input_tex_para, **kwargs):
+        return self._texture_loss_calculation(albedo_1d_base, input_vcolor, input_tex_para)
 
-    def mix_ac_sb_texture_loss(self, g_vcolor_ac_sb, input_vcolor, **kwargs):
-        return self._texture_loss_calculation(g_vcolor_ac_sb, input_vcolor)
+    def mix_ac_sb_texture_loss(self, g_vcolor_ac_sb, input_vcolor, input_tex_para, **kwargs):
+        return self._texture_loss_calculation(g_vcolor_ac_sb, input_vcolor, input_tex_para)
 
-    def mix_ab_sc_texture_loss(self, g_vcolor_ab_sc, input_vcolor, **kwargs):
-        return self._texture_loss_calculation(g_vcolor_ab_sc, input_vcolor)
+    def mix_ab_sc_texture_loss(self, g_vcolor_ab_sc, input_vcolor, input_tex_para, **kwargs):
+        return self._texture_loss_calculation(g_vcolor_ab_sc, input_vcolor, input_tex_para)
 
-    def comb_texture_loss(self, g_vcolor_comb, input_vcolor, **kwargs):
-        return self._texture_loss_calculation(g_vcolor_comb, input_vcolor)
+    def comb_texture_loss(self, g_vcolor_comb, input_vcolor, input_tex_para, **kwargs):
+        return self._texture_loss_calculation(g_vcolor_comb, input_vcolor, input_tex_para)
 
     # --------- smoothness ---------
 
