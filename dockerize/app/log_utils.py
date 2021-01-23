@@ -241,7 +241,7 @@ class NLLogger:
             "vertices": all_dict["shape_1d_base"] + all_dict["exp_1d"],
         }, interval=interval)
 
-        batch_suze = all_dict["input_shape"].shape[0]
+        batch_size = all_dict["input_shape"].shape[0]
         self.write_mesh("input_mesh", {
             "vertices": all_dict["input_shape"].view((batch_size, -1, 3)) + all_dict["input_exp"].view((batch_size, -1, 3)),
         }, interval=interval)

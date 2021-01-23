@@ -23,20 +23,20 @@ class Nonlinear3DMM_redner(nn.Module):
         self.img_sz = img_sz
         
         ###################################### encoder
-        self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, 80,
-                                  64, 80, self.trans_dim, self.rot_dim, self.il_dim)
+        self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2,
+                                  self.gfc_dim // 2, self.gfc_dim // 2, self.trans_dim, self.rot_dim, self.il_dim)
 
         self.in_dim = self.nl_encoder.in_dim
 
-        self.albedo_dec = NLDecoderBlock(80, self.gf_dim, self.gf_dim * 10, self.tex_sz)
+        self.albedo_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gf_dim * 10, self.tex_sz)
         self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
         self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
-        self.shape_dec = NLDecoderBlock(80, self.gf_dim, self.gfc_dim, self.tex_sz)
+        self.shape_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
         self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
-        self.exp_dec = NLDecoderBlock(64, self.gf_dim, self.gfc_dim, self.tex_sz)
+        self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
     def forward(self, input_images):
