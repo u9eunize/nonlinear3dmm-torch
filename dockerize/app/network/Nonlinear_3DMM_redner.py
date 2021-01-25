@@ -29,8 +29,8 @@ class Nonlinear3DMM_redner(nn.Module):
         self.in_dim = self.nl_encoder.in_dim
 
         self.albedo_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gf_dim * 10, self.tex_sz)
-        self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
-        self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
+        self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False, is_sigmoid=True)
+        self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False, is_sigmoid=True)
 
         self.shape_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
@@ -48,8 +48,8 @@ class Nonlinear3DMM_redner(nn.Module):
 
         # albedo
         albedo_dec = self.albedo_dec(lv_tex)
-        albedo_2d_base = self.albedo_gen_base(albedo_dec)
-        albedo_2d_comb = self.albedo_gen_comb(albedo_dec)
+        albedo_2d_base = self.albedo_gen_base(albedo_dec) - 0.9
+        albedo_2d_comb = self.albedo_gen_comb(albedo_dec) - 0.9
 
         albedo_1d_base = self.make_1d(albedo_2d_base, vt2pixel_u, vt2pixel_v)
         albedo_1d_comb = self.make_1d(albedo_2d_comb, vt2pixel_u, vt2pixel_v)
