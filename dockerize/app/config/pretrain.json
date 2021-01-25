@@ -13,7 +13,7 @@
   "prediction_dst_path": "/dataset/pred/dst",
 
   "epoch":  50,
-  "batch_size": 10,
+  "batch_size": 12,
   "lr":  0.0001,
   "betas": [0.5, 0.999],
   "save_ratio":  0.05,
@@ -41,7 +41,7 @@
 
   "start_loss_decay_step":  0,
 
-  "dtype": "double",
+  "dtype": "float",
 
   "m_loss": null,
   "shape_loss":  500,
@@ -79,10 +79,10 @@
   "comb_smoothness_loss":  null,
   "const_pixels_num": 60,
 
-  "shape_residual_loss": null,
-  "albedo_residual_loss":  null,
+  "shape_residual_loss": 100,
+  "albedo_residual_loss":  100,
 
-  "exp_smoothness_loss": 5e5,
+  "exp_smoothness_loss": null,
   "light_loss": 10000,
   "trans_loss": 10000,
   "angle_loss": 10000,

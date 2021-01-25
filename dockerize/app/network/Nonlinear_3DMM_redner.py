@@ -24,7 +24,7 @@ class Nonlinear3DMM_redner(nn.Module):
         
         ###################################### encoder
         self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2,
-                                  self.gfc_dim // 2, self.gfc_dim // 2, self.trans_dim, self.rot_dim, self.il_dim)
+                                  self.gfc_dim // 2, 64, self.trans_dim, self.rot_dim, self.il_dim)
 
         self.in_dim = self.nl_encoder.in_dim
 
@@ -36,8 +36,8 @@ class Nonlinear3DMM_redner(nn.Module):
         self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
         self.shape_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
-        self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
-        self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
+        # self.exp_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
+        # self.exp_gen = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, additional_layer=False)
 
     def forward(self, input_images):
         batch_size = input_images.shape[0]
@@ -69,10 +69,11 @@ class Nonlinear3DMM_redner(nn.Module):
         shape_1d_res = shape_1d_comb - shape_1d_base
 
         # expression
-        exp_dec = self.exp_dec(lv_exp)
-        exp_2d = self.exp_gen(exp_dec)
-
-        exp_1d = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
+        # exp_dec = self.exp_dec(lv_exp)
+        # exp_2d = self.exp_gen(exp_dec)
+        # exp_1d = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
+        exp_1d = torch.bmm(torch.unsqueeze(lv_exp, 1), torch.unsqueeze(CFG.exBase.transpose(0, 1), 0).repeat(batch_size, 1, 1))
+        exp_1d = exp_1d.view([batch_size, -1, 3])[:, CFG.blender_to_deep_cpu]
 
         return dict(
             lv_trans=lv_trans,
@@ -93,8 +94,9 @@ class Nonlinear3DMM_redner(nn.Module):
             shape_2d_res=shape_2d_res,
             shape_1d_res=shape_1d_res,
 
-            exp_2d=exp_2d,
+            # exp_2d=exp_2d,
             exp_1d=exp_1d,
+            exp=lv_exp,
         )
 
     def make_1d(self, decoder_2d_result, vt2pixel_u, vt2pixel_v):
