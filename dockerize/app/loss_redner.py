@@ -126,7 +126,7 @@ class Loss:
         batch_size = exp_1d.shape[0]
         exp_para = torch.bmm(exp_1d[:, CFG.deep_to_blender].view((batch_size, 1, -1)), CFG.exBase_inverse.repeat(batch_size, 1, 1))
         g_loss_exp_ = norm_loss(exp_para, input_exp_para, loss_type=CFG.expression_loss_type)
-        return g_loss_exp + g_loss_exp_
+        return g_loss_exp #+ g_loss_exp_
 
     def exp_regularization_loss(self, exp_1d, **kwargs):
         g_loss_exp_regularization = norm_loss(exp_1d, torch.zeros_like(exp_1d, device=CFG.device), loss_type=CFG.exp_regularization_loss_type)
@@ -138,7 +138,7 @@ class Loss:
         batch_size = shape_1d_base.shape[0]
         shape_para = torch.bmm((shape_1d_base + torch.mean(CFG.mean_shape, dim=0))[:, CFG.deep_to_blender].view((batch_size, 1, -1)), CFG.shapeBase_inverse.repeat(batch_size, 1, 1))
         g_loss_shape_ = norm_loss(shape_para, input_shape_para, loss_type=CFG.shape_loss_type)
-        return g_loss_shape + g_loss_shape_
+        return g_loss_shape #+ g_loss_shape_
 
     def shape_regularization_loss(self, shape_2d_base, **kwargs):
         g_loss_shape_regularization_x = norm_loss(shape_2d_base[:, 0, :, :], torch.zeros_like(shape_2d_base[:, 0, :, :], device=CFG.device), loss_type=CFG.shape_regularization_loss_type)
@@ -310,7 +310,7 @@ class Loss:
         batch_size = vcolor.shape[0]
         tex_para = torch.bmm(vcolor[:, CFG.deep_to_blender].view((batch_size, 1, -1)) * 255.0, CFG.texBase_inverse.repeat(batch_size, 1, 1))
         g_loss_vcolor_ = norm_loss(tex_para, input_tex_para, loss_type=CFG.texture_loss_type)
-        return g_loss_vcolor + g_loss_vcolor_
+        return g_loss_vcolor #+ g_loss_vcolor_
 
     def base_texture_loss(self, albedo_1d_base, input_vcolor, input_tex_para, **kwargs):
         return self._texture_loss_calculation(albedo_1d_base, input_vcolor, input_tex_para)

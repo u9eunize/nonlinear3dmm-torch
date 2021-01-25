@@ -42,6 +42,8 @@ class Nonlinear3DMMHelper:
 
         # Load model
         self.net = Nonlinear3DMM_redner().to(CFG.device)
+        if CFG.dtype == torch.double:
+            self.net = self.net.double()
 
         self.random_angle_samples = []
         self.random_trans_samples = []

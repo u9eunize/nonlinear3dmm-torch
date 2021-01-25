@@ -30,6 +30,7 @@ class NonlinearDataset(Dataset):
 		self.transform = transforms.Compose([
 			transforms.Resize((224, 224)),
 			transforms.ToTensor(),
+			transforms.ConvertImageDtype(CFG.dtype)
 		])
 
 		# split dataset into train, validation, test set with ratio 8:1:1
@@ -58,7 +59,7 @@ class NonlinearDataset(Dataset):
 		# 		join(self.dataset_dir, 'vertex', basename(image_path).replace('.jpg', '.npy'))
 		# 		for image_path in self.image_paths
 		# ]
-		self.params = torch.tensor(np.load(join(self.dataset_dir, 'parameter.npy')), dtype=torch.float32)
+		self.params = torch.tensor(np.load(join(self.dataset_dir, 'parameter.npy')), dtype=CFG.dtype)
 
 		print("Checking dataset validation")
 		for img, mask in tqdm(list(zip(self.image_paths, self.mask_paths))):
@@ -239,6 +240,10 @@ def main():
 		images = images.cpu().detach().numpy()
 		image_labels = image_labels.cpu().detach().numpy()
 		maskeds = maskeds.cpu().detach().numpy()
+
+		shape_para = torch.bmm(
+			(samples['shape'].cuda() + torch.mean(CFG.mean_shape, dim=0))[:, CFG.deep_to_blender].view((batch_size, 1, -1)),
+			CFG.shapeBase_inverse.repeat(batch_size, 1, 1))
 
 		continue
 

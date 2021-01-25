@@ -227,13 +227,13 @@ class Batch_Renderer_pytorch3d():
         batch_size = vertex_batch.shape[0]
 
         # compute vertex transformation
-        rotation = Compute_rotation_matrix(angle_batch)
-        vertices = torch.bmm(vertex_batch, rotation) + torch.unsqueeze(trans_batch, 1)
+        rotation = Compute_rotation_matrix(angle_batch.float())
+        vertices = torch.bmm(vertex_batch.float(), rotation) + torch.unsqueeze(trans_batch.float(), 1)
 
         # compute face color
-        face_norm = Compute_norm(vertex_batch)
+        face_norm = Compute_norm(vertex_batch.float())
         norm_r = torch.bmm(face_norm, rotation)
-        colors = Illumination_block(color_batch, norm_r, light_batch)
+        colors = Illumination_block(color_batch.float(), norm_r, light_batch.float())
 
         meshes = Meshes(verts=[vertex for vertex in vertices], faces=[CFG.face for _ in range(batch_size)])
         meshes.textures = TexturesVertex(verts_features=colors)

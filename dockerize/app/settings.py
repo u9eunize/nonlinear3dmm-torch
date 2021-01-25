@@ -177,6 +177,14 @@ def parse():
     random.seed(args.seed)
     torch.manual_seed(args.seed)
 
+
+    if args.dtype == "float":
+        setattr(args, "dtype", torch.float32)
+    elif args.dtype == "double":
+        setattr(args, "dtype", torch.double)
+    else:
+        raise(f"No such dtype : {args.dtype}")
+
     print("--- training settings ---\n\n")
     for k, v in args.__dict__.items():
         print(k, ":", v)
@@ -204,7 +212,7 @@ def init_3dmm_settings():
     
 
     h, w = CFG.texture_size
-    vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.definition_path, 'BFM_uvmap.npy')), dtype=torch.float32), (1, 1), dim=-1)
+    vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.definition_path, 'BFM_uvmap.npy')), dtype=CFG.dtype), (1, 1), dim=-1)
     vt2pixel_v = torch.ones_like(vt2pixel_v) - vt2pixel_v
     vt2pixel_u, vt2pixel_v = vt2pixel_u * h, vt2pixel_v * w
     
@@ -224,22 +232,22 @@ def init_3dmm_settings():
     
 
     global_3dmm_setting = dict(
-        mean_shape=torch.tensor(mean_shape, dtype=torch.float32).to(CFG.device),
-        mean_shape_cpu=torch.tensor(mean_shape, dtype=torch.float32),
-        shapeBase=torch.tensor(shapeBase, dtype=torch.float32).to(CFG.device),
-        shapeBase_cpu=torch.tensor(shapeBase, dtype=torch.float32),
-        shapeBase_inverse=torch.tensor(shapeBase_inverse, dtype=torch.float32).to(CFG.device),
-        shapeBase_inverse_cpu=torch.tensor(shapeBase_inverse, dtype=torch.float32),
-        exBase=torch.tensor(exBase, dtype=torch.float32).to(CFG.device),
-        exBase_cpu=torch.tensor(exBase, dtype=torch.float32),
-        exBase_inverse=torch.tensor(exBase_inverse, dtype=torch.float32).to(CFG.device),
-        exBase_inverse_cpu=torch.tensor(exBase_inverse, dtype=torch.float32),
-        mean_tex=torch.tensor(mean_tex, dtype=torch.float32).to(CFG.device),
-        mean_tex_cpu=torch.tensor(mean_tex, dtype=torch.float32),
-        texBase_inverse=torch.tensor(texBase_inverse, dtype=torch.float32).to(CFG.device),
-        texBase_inverse_cpu=torch.tensor(texBase_inverse, dtype=torch.float32),
-        texBase=torch.tensor(texBase, dtype=torch.float32).to(CFG.device),
-        texBase_cpu=torch.tensor(texBase, dtype=torch.float32),
+        mean_shape=torch.tensor(mean_shape, dtype=CFG.dtype).to(CFG.device),
+        mean_shape_cpu=torch.tensor(mean_shape, dtype=CFG.dtype),
+        shapeBase=torch.tensor(shapeBase, dtype=CFG.dtype).to(CFG.device),
+        shapeBase_cpu=torch.tensor(shapeBase, dtype=CFG.dtype),
+        shapeBase_inverse=torch.tensor(shapeBase_inverse, dtype=CFG.dtype).to(CFG.device),
+        shapeBase_inverse_cpu=torch.tensor(shapeBase_inverse, dtype=CFG.dtype),
+        exBase=torch.tensor(exBase, dtype=CFG.dtype).to(CFG.device),
+        exBase_cpu=torch.tensor(exBase, dtype=CFG.dtype),
+        exBase_inverse=torch.tensor(exBase_inverse, dtype=CFG.dtype).to(CFG.device),
+        exBase_inverse_cpu=torch.tensor(exBase_inverse, dtype=CFG.dtype),
+        mean_tex=torch.tensor(mean_tex, dtype=CFG.dtype).to(CFG.device),
+        mean_tex_cpu=torch.tensor(mean_tex, dtype=CFG.dtype),
+        texBase_inverse=torch.tensor(texBase_inverse, dtype=CFG.dtype).to(CFG.device),
+        texBase_inverse_cpu=torch.tensor(texBase_inverse, dtype=CFG.dtype),
+        texBase=torch.tensor(texBase, dtype=CFG.dtype).to(CFG.device),
+        texBase_cpu=torch.tensor(texBase, dtype=CFG.dtype),
 
         face_cpu=torch.tensor(face, dtype=torch.int32).contiguous(),
         face=torch.tensor(face, dtype=torch.int32).contiguous().to(CFG.device),
