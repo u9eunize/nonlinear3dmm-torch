@@ -1,7 +1,7 @@
 {
   "name": "pretrain",
 
-  "checkpoint_name": "",
+  "checkpoint_name": "/dataset/checkpoint/20210125/225539_pretrain/ckpt_03/model_ckpt_03_055407.pt",
   "checkpoint_root_path":  "/dataset/checkpoint",
   "checkpoint_regex": null,
   "checkpoint_epoch":  null,
@@ -44,8 +44,8 @@
   "dtype": "float",
 
   "m_loss": null,
-  "shape_loss":  5000,
-  "expression_loss": 50,
+  "shape_loss":  10000,
+  "expression_loss": 200,
 
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
