@@ -75,8 +75,8 @@ class NonlinearDataset(Dataset):
 		# load image
 		img_name    = self.image_paths[idx]
 		img         = Image.open(img_name)
-		# r, g, b 	= img.split()
-		# img 		= Image.merge("RGB", (b, g, r))
+		b, g, r 	= img.split()
+		img 		= Image.merge("RGB", (r, g, b))
 		img_tensor  = self.transform(img)
 		
 		# load mask
@@ -101,6 +101,8 @@ class NonlinearDataset(Dataset):
 
 		tex = torch.mm(torch.unsqueeze(tex_para, 0), CFG.texBase_cpu.transpose(0, 1))
 		vcolor = tex.view([-1, 3])[CFG.blender_to_deep_cpu] / 255.0
+		b, g, r = torch.split(vcolor, (1, 1, 1), dim=1)
+		vcolor = torch.cat([r, g, b], dim=1)
 		_tex_para = torch.mm(vcolor[CFG.deep_to_blender_cpu].view((1, -1)) * 255.0, CFG.texBase_inverse_cpu)
 
 		# set random albedo indices
@@ -111,6 +113,9 @@ class NonlinearDataset(Dataset):
 		albedo_indices_y1 = CFG.const_alb_mask[indices1, 1].view([CFG.const_pixels_num, 1]).long()
 		albedo_indices_x2 = CFG.const_alb_mask[indices2, 0].view([CFG.const_pixels_num, 1]).long()
 		albedo_indices_y2 = CFG.const_alb_mask[indices2, 1].view([CFG.const_pixels_num, 1]).long()
+
+		b, g, r = torch.split(light.view([3, -1]), (1, 1, 1), dim=0)
+		light = torch.cat([r, g, b], dim=0).view(-1)
 
 		sample = {
 				'image_name'    : img_name,
@@ -211,8 +216,8 @@ class NonlinearDataset(Dataset):
 def main():
 	batch_size = 8
 	init_3dmm_settings()
-	dataset = NonlinearDataset(phase='train', frac=0.1)
-	dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+	dataset = NonlinearDataset(phase='valid', frac=0.1)
+	dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
 	for idx, samples in enumerate(dataloader):
 		shape = samples['shape'] + samples['exp'] + CFG.mean_shape_cpu
@@ -228,13 +233,8 @@ def main():
 		                       light_batch=samples['light'].to(CFG.device),
 		                       print_timing=False)
 		print(f'***** rendering time : {time() - start}')
-		r, g, b = torch.split(images, (1, 1, 1), dim=3)
-		images = torch.cat([b, g, r], dim=3)
 		images = torch.cat([image for image in images], dim=1)
-
 		image_labels = samples['image'].permute(0, 2, 3, 1).to(CFG.device)
-		r, g, b = torch.split(image_labels, (1, 1, 1), dim=3)
-		image_labels = torch.cat([b, g, r], dim=3)
 		image_labels = torch.cat([image for image in image_labels], dim=1)
 
 		masks = torch.cat([mask for mask in masks], dim=1)
@@ -243,10 +243,6 @@ def main():
 		images = images.cpu().detach().numpy()
 		image_labels = image_labels.cpu().detach().numpy()
 		maskeds = maskeds.cpu().detach().numpy()
-
-		shape_para = torch.bmm(
-			(samples['shape'].cuda() + torch.mean(CFG.mean_shape, dim=0))[:, CFG.deep_to_blender].view((batch_size, 1, -1)),
-			CFG.shapeBase_inverse.repeat(batch_size, 1, 1))
 
 		continue
 

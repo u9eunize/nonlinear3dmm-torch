@@ -207,6 +207,7 @@ def init_3dmm_settings():
     exBase_inverse = np.matmul(np.linalg.inv(np.matmul(exBase.transpose(), exBase)), exBase.transpose()).transpose()
 
     mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])[blender_to_deep]
+    mean_tex = mean_tex[:,::-1].copy()
     texBase = np.load(join(CFG.definition_path, 'texBase.npy'))
     texBase_inverse = np.matmul(np.linalg.inv(np.matmul(texBase.transpose(), texBase)), texBase.transpose()).transpose()
     
