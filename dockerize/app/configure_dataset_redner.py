@@ -75,8 +75,8 @@ class NonlinearDataset(Dataset):
 		# load image
 		img_name    = self.image_paths[idx]
 		img         = Image.open(img_name).convert('RGB')
-		b, g, r 	= img.split()
-		img 		= Image.merge("RGB", (r, g, b))
+		# b, g, r 	= img.split()
+		# img 		= Image.merge("RGB", (r, g, b))
 		img_tensor  = self.transform(img)
 		
 		# load mask
