@@ -1,36 +1,26 @@
-
-from network.Nonlinear_3DMM import Nonlinear3DMM
-from settings import CFG
-from loss import Loss
-from os.path import join, basename
-from glob import glob
-import torch
-import torchvision.transforms.functional as F
-import torchvision
-from PIL import Image
-
-from renderer.rendering_ops import *
-from configure_dataset import NonlinearDataset
-from settings import CFG
-import utils
+from network.Nonlinear_3DMM_redner import Nonlinear3DMM_redner
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
+from configure_dataset_redner import NonlinearDataset
+from settings import *
 import numpy as np
-# d = NonlinearDataset(phase='test', frac=0.1)
-# exp_random          = np.random.normal(0, 0.5, d.std_shape.shape)
-# exp_random_tensor   = torch.tensor(exp_random)  # exp ~ N(0, 0.5)
+from PIL import Image
+from glob import glob
+from renderer.rendering_ops_redner import renderer
+from utils import load
+import face_alignment
+from tqdm import tqdm
+from skimage import io
+from scipy.io import loadmat
 
 
-# return images, losses, obj file, landmark output
-dtype = torch.float32
 
-mu_shape, w_shape = utils.load_Basel_basic('shape')
-mu_exp, w_exp = utils.load_Basel_basic('exp')
 
-mean_shape = torch.tensor(mu_shape + mu_exp, dtype=dtype).to(CFG.device)
-std_shape = torch.tensor(np.tile(np.array([1e4, 1e4, 1e4]), CFG.vertex_num), dtype=dtype).to(CFG.device)
-
-mean_m = torch.tensor(np.load(join(CFG.dataset_path, 'mean_m.npy')), dtype=dtype).to(CFG.device)
-std_m = torch.tensor(np.load(join(CFG.dataset_path, 'std_m.npy')), dtype=dtype).to(CFG.device)
-
+class CustomDataset(Dataset):
+	def __init__(self):
+		self.fnames = glob(join(CFG.prediction_src_path, "*.jpg"))
+		self.fnames += glob(join(CFG.prediction_src_path, "*.jpeg"))
+		self.fnames += glob(join(CFG.prediction_src_path, "*.png"))
 
 def save_to_obj(name, vertex, face):
 	with open(name, 'w') as fd:
@@ -43,189 +33,183 @@ def save_to_obj(name, vertex, face):
 
 	print(name)
 
+def extract_landmark(fa, img_name):
+	img = io.imread(img_name)
+	# b, g, r = np.split(img, 3, axis=2)
+	# img = np.concatenate([r, g, b], axis=2)
+	try:
+		preds = fa.get_landmarks(img)
+		if preds is None:
+			return
+	except:
+		return
 
-def rendering(input_images, infer):
-	lv_m = infer["lv_m"]
-	lv_il = infer["lv_il"]
-	albedo_base = infer["albedo_base"]
-	albedo_comb = infer["albedo_comb"]
-	shape_1d_comb = infer["shape_1d_comb"]
-	shape_1d_base = infer["shape_1d_base"]
-	# exp = infer["exp"]
+	nose = preds[0][30]
+	left_eye = (((preds[0][36][0] + preds[0][39][0]) / 2), (preds[0][36][1] + preds[0][39][1]) / 2)
+	right_eye = ((preds[0][42][0] + preds[0][45][0]) / 2, (preds[0][42][1] + preds[0][45][1]) / 2)
+	left_mouth = preds[0][48]
+	right_mouth = preds[0][54]
 
-	m_full = generate_full(lv_m, "m")
+	return np.array([left_eye, right_eye, nose, left_mouth, right_mouth])
 
-	# shape_full_comb = generate_full((shape_1d_comb + exp), "shape")
-	# shape_full_base = generate_full((shape_1d_base + exp), "shape")
+def POS(xp,x):
+	npts = xp.shape[1]
 
-	shape_full_base = generate_full(shape_1d_base, "shape")
-	shape_full_comb = generate_full(shape_1d_comb, "shape")
+	A = np.zeros([2*npts,8])
 
-	shade_base = generate_shade(lv_il, m_full, shape_full_base)
-	shade_comb = generate_shade(lv_il, m_full, shape_full_comb)
+	A[0:2*npts-1:2,0:3] = x.transpose()
+	A[0:2*npts-1:2,3] = 1
 
-	tex_base = generate_texture(albedo_base, shade_base)
-	tex_mix_ac_sb = generate_texture(albedo_comb, shade_base)
-	tex_mix_ab_sc = generate_texture(albedo_base, shade_comb)  # ab = albedo_base, sc = shape_comb
-	tex_comb = generate_texture(albedo_comb, shade_comb)
+	A[1:2*npts:2,4:7] = x.transpose()
+	A[1:2*npts:2,7] = 1
 
-	u_base, v_base, mask_base = warping_flow(m_full, shape_full_base)
-	u_comb, v_comb, mask_comb = warping_flow(m_full, shape_full_comb)
+	b = np.reshape(xp.transpose(),[2*npts,1])
 
-	g_img_mask_base = mask_base.unsqueeze(1)
-	g_img_mask_comb = mask_comb.unsqueeze(1)
+	k,_,_,_ = np.linalg.lstsq(A,b,rcond=None)
 
-	g_img_raw_base = rendering_wflow(tex_base, u_base, v_base)
-	g_img_raw_ac_sb = rendering_wflow(tex_mix_ac_sb, u_base, v_base)
-	g_img_raw_ab_sc = rendering_wflow(tex_mix_ab_sc, u_comb, v_comb)
-	g_img_raw_comb = rendering_wflow(tex_comb, u_comb, v_comb)
+	R1 = k[0:3]
+	R2 = k[4:7]
+	sTx = k[3]
+	sTy = k[7]
+	s = (np.linalg.norm(R1) + np.linalg.norm(R2))/2
+	t = np.stack([sTx,sTy],axis = 0)
 
-	g_img_base = apply_mask(g_img_raw_base, g_img_mask_base, input_images)
-	g_img_ac_sb = apply_mask(g_img_raw_ac_sb, g_img_mask_base, input_images)
-	g_img_ab_sc = apply_mask(g_img_raw_ab_sc, g_img_mask_comb, input_images)
-	g_img_comb = apply_mask(g_img_raw_comb, g_img_mask_comb, input_images)
+	return t,s
 
-	# ======= gt =======
+def process_img(img,lm,t,s,target_size = 224.):
+	w0,h0 = img.size
+	w = (w0/s*102).astype(np.int32)
+	h = (h0/s*102).astype(np.int32)
+	img = img.resize((w,h),resample = Image.BICUBIC)
 
-	# for debugging
-	g_img_shade_base = rendering_wflow(shade_base, u_base, v_base)
-	g_img_shade_comb = rendering_wflow(shade_comb, u_comb, v_comb)
+	left = (w/2 - target_size/2 + float((t[0] - w0/2)*102/s)).astype(np.int32)
+	right = left + target_size
+	up = (h/2 - target_size/2 + float((h0/2 - t[1])*102/s)).astype(np.int32)
+	below = up + target_size
 
-	return {
-		"shade_base": shade_base,
-		"shade_comb": shade_comb,
+	img = img.crop((left,up,right,below))
+	img = np.array(img)
+	img = img[:,:,::-1] #RGBtoBGR
+	img = np.expand_dims(img,0)
+	lm = np.stack([lm[:,0] - t[0] + w0/2,lm[:,1] - t[1] + h0/2],axis = 1)/s*102
+	lm = lm - np.reshape(np.array([(w/2 - target_size/2),(h/2-target_size/2)]),[1,2])
 
-		"tex_base": tex_base,
-		"tex_mix_ac_sb": tex_mix_ac_sb,
-		"tex_mix_ab_sc": tex_mix_ab_sc,
-		"tex_comb": tex_comb,
+	return img,lm
 
-		"g_img_base": g_img_base,
-		"g_img_mask_base": g_img_mask_base,
+def Preprocess(fa, file, lm3D):
+	lm = extract_landmark(fa, file)
+	if lm is None:
+		return None, None, None
+	img = Image.open(file)
 
-		"g_img_ac_sb": g_img_ac_sb,
-		"g_img_ab_sc": g_img_ab_sc,
+	w0,h0 = img.size
 
-		"g_img_comb": g_img_comb,
-		"g_img_mask_comb": g_img_mask_comb,
+	# change from image plane coordinates to 3D sapce coordinates(X-Y plane)
+	lm = np.stack([lm[:,0],h0 - 1 - lm[:,1]], axis = 1)
 
-		# for debugging
-		"g_img_raw_base": g_img_raw_base,
-		"g_img_raw_ac_sb": g_img_raw_ac_sb,
-		"g_img_raw_ab_sc": g_img_raw_ab_sc,
-		"g_img_raw_comb": g_img_raw_comb,
+	# calculate translation and scale factors using 5 facial landmarks and standard landmarks of a 3D face
+	t,s = POS(lm.transpose(),lm3D.transpose())
 
-		"g_img_shade_base": g_img_shade_base,
-		"g_img_shade_comb": g_img_shade_comb,
+	# processing the image
+	img_new,lm_new = process_img(img,lm,t,s)
+	lm_new = np.stack([lm_new[:,0],223 - lm_new[:,1]], axis = 1)
+	trans_params = np.array([w0,h0,102.0/s,t[0],t[1]])
 
-		"shape_full_base": shape_full_base,
-		"shape_full_comb": shape_full_comb
-	}
+	return img_new,lm_new,trans_params
+
+def load_lm3d():
+
+	Lm3D = loadmat('/dataset/BFM/similarity_Lm3D_all.mat')
+	Lm3D = Lm3D['lm']
+
+	# calculate 5 facial landmarks using 68 landmarks
+	lm_idx = np.array([31,37,40,43,46,49,55]) - 1
+	Lm3D = np.stack([Lm3D[lm_idx[0],:],np.mean(Lm3D[lm_idx[[1,2]],:],0),np.mean(Lm3D[lm_idx[[3,4]],:],0),Lm3D[lm_idx[5],:],Lm3D[lm_idx[6],:]], axis = 0)
+	Lm3D = Lm3D[[1,2,0,3,4],:]
+
+	return Lm3D
+
+def load_img(img_path,lm_path):
+
+	image = Image.open(img_path)
+	lm = np.loadtxt(lm_path)
+
+	return image,lm
 
 def main():
-	tri = utils.load_3DMM_tri()
-	face = np.transpose(tri)[:-1]
+	init_3dmm_settings()
+	batch_size = 8
+	is_testset = True
+	fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False, device=CFG.device)
+	lm3D = load_lm3d()
 
-	losses = [
-		'm',
-		'shape',
-		'landmark',
-		'batchwise_white_shading',
-		'texture',
-		'symmetry',
-		'const_albedo',
-		'smoothness'
-	]
+	with torch.no_grad():
+		model = Nonlinear3DMM_redner().to(CFG.device).eval()
+		model, _, _, start_epoch, start_step = load(model)
 
-	# define model and loss
-	model = Nonlinear3DMM().to(CFG.device)
-	model, _, _, _, _ = utils.load(model)
+		if is_testset:	# test with testset
+			dataset = NonlinearDataset(phase='test', frac=0.1)
+			dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
-	# load images for prediction
-	fnames_raw = glob(join(CFG.prediction_src_path, "*"))
-	total_len = len(fnames_raw)
-	fnames = [fnames_raw[i:i + CFG.batch_size] for i in range(0, len(fnames_raw), CFG.batch_size)]
+		else:			# test with test image directory
+			img_list = glob(join(CFG.prediction_src_path, "*.jpg"))
+			img_list += glob(join(CFG.prediction_src_path, "*.jpeg"))
+			img_list += glob(join(CFG.prediction_src_path, "*.png"))
+			images = []
 
-	# output image lists
-	output = dict()
+			for file in img_list:
+				input_img, _, _ = Preprocess(fa, file, lm3D)
+				if input_img is None:
+					continue
+				images.append(input_img.squeeze(0))
+			images = torch.tensor(np.stack(images)) / 255.0
+			images = images.permute(0, 3, 1, 2)
+			r, g, b = torch.split(images, (1, 1, 1), dim=1)
+			images = torch.cat([b, g, r], dim=1)
 
-	for batch_fnames in fnames:
-		input_images = []
+			dataloader = []
+			for idx in range(0, images.shape[0], batch_size):
+				start_idx = idx
+				end_idx = min((idx + 1) * batch_size, images.shape[0])
+				dataloader.append({'image': images[start_idx:end_idx]})
 
-		# resize and crop images
-		for fname in batch_fnames:
-			img = Image.open(fname)
-			img = torchvision.transforms.functional.resize(img, CFG.image_size)
-			img = torchvision.transforms.functional.center_crop(img, CFG.image_size)
-			img = torchvision.transforms.functional.to_tensor(img)[:3, :, :]
-			input_images.append(img)
-			output[fname] = dict()
-		input_images = torch.stack(input_images, dim=0).to(CFG.device)
+		for samples in dataloader:
+			result = model(samples['image'].to(CFG.device))
 
-		# forward network
-		with torch.no_grad():
-			infer = model(input_images)
+			shape = result['shape_1d_base']
+			albedo = result['albedo_1d_base']
+			exp = result['exp_1d']
+			trans = result['lv_trans']
+			angle = result['lv_angle']
+			light = result['lv_il']
 
-			# exp = infer["exp"]
-			# lv_m, lv_il, lv_shape,  albedo, exp =
+			shape = shape + exp + CFG.mean_shape
+			color = albedo + CFG.mean_tex
 
-		# make full
-		result = rendering(input_images, infer)
+			images, masks, _ = renderer.render(
+				vertex_batch=shape,
+				color_batch=color,
+				trans_batch=trans,
+				angle_batch=angle,
+				light_batch=light,
+				print_timing=False)
 
-		for idx, fname in enumerate(batch_fnames):
-			output[fname]["input"] = input_images[idx]
-			output[fname]["shade_base"] = result["shade_base"][idx]
-			output[fname]["shade_comb"] = result["shade_comb"][idx]
-			output[fname]["tex_base"] = result["tex_base"][idx]
-			output[fname]["tex_mix_ac_sb"] = result["tex_mix_ac_sb"][idx]
-			output[fname]["tex_mix_ab_sc"] = result["tex_mix_ab_sc"][idx]
-			output[fname]["tex_comb"] = result["tex_comb"][idx]
-			output[fname]["g_img_base"] = result["g_img_base"][idx]
-			output[fname]["g_img_ac_sb"] = result["g_img_ac_sb"][idx]
-			output[fname]["g_img_ab_sc"] = result["g_img_ab_sc"][idx]
-			output[fname]["g_img_comb"] = result["g_img_comb"][idx]
-			output[fname]["g_img_mask_base"] = result["g_img_mask_base"][idx]
-			output[fname]["g_img_mask_comb"] = result["g_img_mask_comb"][idx]
-			output[fname]["g_img_raw_base"] = result["g_img_raw_base"][idx]
-			output[fname]["g_img_raw_ac_sb"] = result["g_img_raw_ac_sb"][idx]
-			output[fname]["g_img_raw_ab_sc"] = result["g_img_raw_ab_sc"][idx]
-			output[fname]["g_img_raw_comb"] = result["g_img_raw_comb"][idx]
-			output[fname]["g_img_shade_base"] = result["g_img_shade_base"][idx]
-			output[fname]["g_img_shade_comb"] = result["g_img_shade_comb"][idx]
-			output[fname]["shape_full_base"] = result["shape_full_base"][idx]
-			output[fname]["shape_full_comb"] = result["shape_full_comb"][idx]
+			images = torch.cat([image for image in images], dim=1)
 
-			output[fname]["albedo_base"] = infer["albedo_base"][idx]
-			output[fname]["albedo_comb"] = infer["albedo_comb"][idx]
-			output[fname]["shape_1d_base"] = infer["shape_1d_base"][idx]
-			output[fname]["shape_1d_comb"] = infer["shape_1d_comb"][idx]
+			image_labels = samples['image'].permute(0, 2, 3, 1).to(CFG.device)
+			image_labels = torch.cat([image for image in image_labels], dim=1)
+
+			masks = torch.cat([mask for mask in masks], dim=1)
+			maskeds = images * masks + image_labels * (1 - masks * 1)
+
+			images = images.cpu().detach().numpy()[:,:,::-1]
+			image_labels = image_labels.cpu().detach().numpy()[:,:,::-1]
+			maskeds = maskeds.cpu().detach().numpy()[:,:,::-1]
+
+			pass
+	return
 
 
-
-
-	# save images
-	if not os.path.isdir(CFG.prediction_dst_path):
-		os.makedirs(CFG.prediction_dst_path)
-
-	save_image = torchvision.utils.save_image
-	for fname, out in output.items():
-		name = join(CFG.prediction_dst_path, basename(fname).split('.')[0] + '_generated')
-		save_image(torch.stack([out["shade_base"], out["shade_comb"], out["albedo_base"], out["albedo_comb"]]),
-				   fp=name+"_shade.png")
-		save_image(torch.stack([out["tex_base"], out["tex_mix_ac_sb"], out["tex_mix_ab_sc"], out["tex_comb"]]),
-				   fp=name+"_tex.png")
-		save_image(torch.stack([out["input"], out["g_img_base"], out["g_img_ac_sb"], out["g_img_ab_sc"], out["g_img_comb"]]),
-				   fp=name+"_img_mask.png")
-		save_image(torch.stack([out["input"], out["g_img_raw_base"], out["g_img_raw_ac_sb"], out["g_img_raw_ab_sc"], out["g_img_raw_comb"]]),
-				   fp=name+"_img_raw.png")
-		save_image(torch.stack([out["input"], out["g_img_shade_base"], out["g_img_shade_comb"]]),
-				   fp=name+"_img_shade.png")
-
-		save_to_obj(name+"_base.obj", out["shape_full_base"].view(-1, 3), face)
-		save_to_obj(name+"_comb.obj", out["shape_full_comb"].view(-1, 3), face)
-
-	# for o1, o2, o3, fname in zip(random_camera, random_il, random_exp, fnames_raw):
-	# 	torchvision.utils.save_image(torch.stack([o1, o2, o3]), fp=join(CFG.prediction_dst_path, basename(fname).split('.')[0] + '_randomed.png'))
 
 
 if __name__ == '__main__':
