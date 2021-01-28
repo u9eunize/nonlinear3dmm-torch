@@ -74,7 +74,7 @@ class NonlinearDataset(Dataset):
 	def __getitem__( self, idx ):
 		# load image
 		img_name    = self.image_paths[idx]
-		img         = Image.open(img_name)
+		img         = Image.open(img_name).convert('RGB')
 		b, g, r 	= img.split()
 		img 		= Image.merge("RGB", (r, g, b))
 		img_tensor  = self.transform(img)
@@ -101,8 +101,8 @@ class NonlinearDataset(Dataset):
 
 		tex = torch.mm(torch.unsqueeze(tex_para, 0), CFG.texBase_cpu.transpose(0, 1))
 		vcolor = tex.view([-1, 3])[CFG.blender_to_deep_cpu] / 255.0
-		b, g, r = torch.split(vcolor, (1, 1, 1), dim=1)
-		vcolor = torch.cat([r, g, b], dim=1)
+		# b, g, r = torch.split(vcolor, (1, 1, 1), dim=1)
+		# vcolor = torch.cat([r, g, b], dim=1)
 		_tex_para = torch.mm(vcolor[CFG.deep_to_blender_cpu].view((1, -1)) * 255.0, CFG.texBase_inverse_cpu)
 
 		# set random albedo indices
@@ -114,8 +114,8 @@ class NonlinearDataset(Dataset):
 		albedo_indices_x2 = CFG.const_alb_mask[indices2, 0].view([CFG.const_pixels_num, 1]).long()
 		albedo_indices_y2 = CFG.const_alb_mask[indices2, 1].view([CFG.const_pixels_num, 1]).long()
 
-		b, g, r = torch.split(light.view([3, -1]), (1, 1, 1), dim=0)
-		light = torch.cat([r, g, b], dim=0).view(-1)
+		# b, g, r = torch.split(light.view([3, -1]), (1, 1, 1), dim=0)
+		# light = torch.cat([r, g, b], dim=0).view(-1)
 
 		sample = {
 				'image_name'    : img_name,
@@ -240,9 +240,9 @@ def main():
 		masks = torch.cat([mask for mask in masks], dim=1)
 		maskeds = images * masks + image_labels * (1 - masks * 1)
 
-		images = images.cpu().detach().numpy()
-		image_labels = image_labels.cpu().detach().numpy()
-		maskeds = maskeds.cpu().detach().numpy()
+		images = images.cpu().detach().numpy()[:,:,::-1]
+		image_labels = image_labels.cpu().detach().numpy()[:,:,::-1]
+		maskeds = maskeds.cpu().detach().numpy()[:,:,::-1]
 
 		continue
 
