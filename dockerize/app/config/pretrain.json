@@ -1,7 +1,7 @@
 {
   "name": "pretrain",
 
-  "checkpoint_name": "/dataset/checkpoint/20210125/225539_pretrain/ckpt_03/model_ckpt_03_055407.pt",
+  "checkpoint_name": "",
   "checkpoint_root_path":  "/dataset/checkpoint",
   "checkpoint_regex": null,
   "checkpoint_epoch":  null,
