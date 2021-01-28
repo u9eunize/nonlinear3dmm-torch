@@ -55,6 +55,7 @@ class NonlinearDataset(Dataset):
 				join(self.dataset_dir, 'mask', basename(image_path))
 				for image_path in self.image_paths
 		]
+		self.no_txt_image = [int(basename(fname[:-4])) - 1 for fname in sorted(glob(join(self.dataset_dir, 'no_txt_image', "*.jpg")))]
 		# self.vertex_paths = [
 		# 		join(self.dataset_dir, 'vertex', basename(image_path).replace('.jpg', '.npy'))
 		# 		for image_path in self.image_paths
@@ -74,8 +75,8 @@ class NonlinearDataset(Dataset):
 		# load image
 		img_name    = self.image_paths[idx]
 		img         = Image.open(img_name)
-		b, g, r 	= img.split()
-		img 		= Image.merge("RGB", (r, g, b))
+		# r, g, b 	= img.split()
+		# img 		= Image.merge("RGB", (b, g, r))
 		img_tensor  = self.transform(img)
 		
 		# load mask
@@ -84,7 +85,9 @@ class NonlinearDataset(Dataset):
 		mask_tensor = self.transform(mask)
 		
 		# load camera parameters
-		params = self.params[idx]
+		param_idx = int(basename(img_name)[:-4]) - 1
+		param_idx = param_idx - len(list(filter(lambda x: x < param_idx, self.no_txt_image)))
+		params = self.params[param_idx]
 		shape_para, exp_para, tex_para, angle, light, trans = torch.split(params, (80, 64, 80, 3, 27, 3), dim=-1)
 
 		shape = torch.mm(torch.unsqueeze(shape_para, 0), CFG.shapeBase_cpu.transpose(0, 1))
