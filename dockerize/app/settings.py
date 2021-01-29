@@ -218,7 +218,7 @@ def init_3dmm_settings():
     vt2pixel_u, vt2pixel_v = vt2pixel_u * h, vt2pixel_v * w
     
     landmark = np.load(join(CFG.definition_path, 'landmark.npy'))
-    
+    landmark = deep_to_blender[landmark - 1]
 
 
     face = np.load(join(CFG.definition_path, 'face.npy')) - 1
