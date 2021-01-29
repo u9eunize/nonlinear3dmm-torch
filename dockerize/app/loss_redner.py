@@ -178,7 +178,7 @@ class Loss:
 
         shape_full_label = input_shape + input_exp + CFG.mean_shape
         shape_full_label = shape_full_label.view([batch_size, -1, 3])
-        landmark_u_label, landmark_v_label = project_vertices(shape_full_label[:, CFG.landmark - 1], input_trans, input_angle)
+        landmark_u_label, landmark_v_label = project_vertices(shape_full_label[:, CFG.landmark], input_trans, input_angle)
 
         u_loss = torch.mean(norm_loss(landmark_u, landmark_u_label,
                                       loss_type=CFG.landmark_loss_type, reduce_mean=False))
