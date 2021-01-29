@@ -174,7 +174,7 @@ class Loss:
         batch_size = shape_1d.shape[0]
         shape_full = shape_1d + exp_1d + CFG.mean_shape
         shape_full = shape_full.view([batch_size, -1, 3])
-        landmark_u, landmark_v = project_vertices(shape_full[:, CFG.landmark - 1], lv_trans, lv_angle)
+        landmark_u, landmark_v = project_vertices(shape_full[:, CFG.landmark], lv_trans, lv_angle)
 
         shape_full_label = input_shape + input_exp + CFG.mean_shape
         shape_full_label = shape_full_label.view([batch_size, -1, 3])
