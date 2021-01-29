@@ -50,7 +50,7 @@
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
 
-  "base_landmark_loss":  100,
+  "base_landmark_loss":  null,
   "comb_landmark_loss": null,
   "gt_landmark_loss": null,
 
