@@ -13,7 +13,7 @@
   "prediction_dst_path": "/dataset/pred/dst",
 
   "epoch":  50,
-  "batch_size": 12,
+  "batch_size": 3,
   "lr":  0.0001,
   "betas": [0.5, 0.999],
   "save_ratio":  0.05,
@@ -35,7 +35,7 @@
   "vertex_num": 35709,
   "tri_num":  70789,
   "image_size": 224,
-  "texture_size":  [192, 224],
+  "texture_size":  [224, 224],
   "landmark_num": 68,
   "c_dim":  3,
 
