@@ -37,7 +37,7 @@ class Encoder(nn.Module):
         self.il = NLEmbeddingBlock(in_dim, gfc_dim_il, out_dim_il)
         self.shape = NLEmbeddingBlock(in_dim, gfc_dim_shape)
         self.tex = NLEmbeddingBlock(in_dim, gfc_dim_tex)
-        self.exp = NLEmbeddingBlock(in_dim, gfc_dim_exp)
+        self.exp = NLEmbeddingBlock(in_dim, gfc_dim_exp, 64)
 
 
     def forward(self, x):

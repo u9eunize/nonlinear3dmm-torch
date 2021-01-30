@@ -5,7 +5,7 @@ from os.path import join
 
 class Nonlinear3DMM_redner(nn.Module):
     def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, trans_dim=3, rot_dim=3, il_dim=27,
-                 tex_sz=CFG.texture_size, img_sz=CFG.image_size):
+                 tex_sz=CFG.texture_size):
         super(Nonlinear3DMM_redner, self).__init__()
 
         # naming from https://gist.github.com/EderSantana/9b0d5fb309d775b995d5236c32238349
@@ -20,7 +20,7 @@ class Nonlinear3DMM_redner(nn.Module):
         self.rot_dim = rot_dim          # Dimension of camera matrix latent vector [3]
         self.il_dim = il_dim            # Dimension of illumination latent vector [3]
         self.tex_sz = tex_sz            # Texture size
-        self.img_sz = img_sz
+        # self.img_sz = img_sz
         
         ###################################### encoder
         self.nl_encoder = Encoder(self.nz, self.gf_dim, self.gfc_dim // 5, self.gfc_dim // 5, self.gfc_dim // 2,
@@ -69,11 +69,11 @@ class Nonlinear3DMM_redner(nn.Module):
         shape_1d_res = shape_1d_comb - shape_1d_base
 
         # expression
-        exp_dec = self.exp_dec(lv_exp)
-        exp_2d = self.exp_gen(exp_dec)
-        exp_1d = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
-        # exp_1d = torch.bmm(torch.unsqueeze(lv_exp, 1), torch.unsqueeze(CFG.exBase.transpose(0, 1), 0).repeat(batch_size, 1, 1))
-        # exp_1d = exp_1d.view([batch_size, -1, 3])[:, CFG.blender_to_deep_cpu]
+        # exp_dec = self.exp_dec(lv_exp)
+        # exp_2d = self.exp_gen(exp_dec)
+        # exp_1d = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
+        exp_1d = torch.bmm(torch.unsqueeze(lv_exp, 1), torch.unsqueeze(CFG.exBase.transpose(0, 1), 0).repeat(batch_size, 1, 1))
+        exp_1d = exp_1d.view([batch_size, -1, 3])[:, CFG.blender_to_deep_cpu]
 
         return dict(
             lv_trans=lv_trans,
