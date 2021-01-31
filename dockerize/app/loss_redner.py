@@ -140,7 +140,7 @@ class Loss:
         batch_size = shape_1d_base.shape[0]
         shape_para = torch.bmm((shape_1d_base + torch.mean(CFG.mean_shape, dim=0))[:, CFG.deep_to_blender].view((batch_size, 1, -1)), CFG.shapeBase_inverse.repeat(batch_size, 1, 1))
         g_loss_shape_ = norm_loss(shape_para, input_shape_para, loss_type=CFG.shape_loss_type)
-        return g_loss_shape #+ g_loss_shape_
+        return g_loss_shape
 
     def shape_regularization_loss(self, shape_2d_base, **kwargs):
         g_loss_shape_regularization_x = norm_loss(shape_2d_base[:, 0, :, :], torch.zeros_like(shape_2d_base[:, 0, :, :], device=CFG.device), loss_type=CFG.shape_regularization_loss_type)

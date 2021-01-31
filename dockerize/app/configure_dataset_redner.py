@@ -28,7 +28,7 @@ class NonlinearDataset(Dataset):
 		# initialize attributes
 		self.dataset_dir = dataset_dir
 		self.transform = transforms.Compose([
-			transforms.Resize((224, 224)),
+			transforms.Resize((256, 256)),
 			transforms.ToTensor(),
 			transforms.ConvertImageDtype(CFG.dtype)
 		])
