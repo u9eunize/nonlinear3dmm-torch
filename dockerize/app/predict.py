@@ -1,5 +1,6 @@
 from network.Nonlinear_3DMM_redner import Nonlinear3DMM_redner
 from torch.utils.data import DataLoader, Dataset
+from torchvision.utils import save_image
 from torchvision import transforms
 from configure_dataset_redner import NonlinearDataset
 from settings import *
@@ -12,15 +13,10 @@ import face_alignment
 from tqdm import tqdm
 from skimage import io
 from scipy.io import loadmat
+from os.path import basename
+import torch.nn.functional as F
 
 
-
-
-class CustomDataset(Dataset):
-	def __init__(self):
-		self.fnames = glob(join(CFG.prediction_src_path, "*.jpg"))
-		self.fnames += glob(join(CFG.prediction_src_path, "*.jpeg"))
-		self.fnames += glob(join(CFG.prediction_src_path, "*.png"))
 
 def save_to_obj(name, vertex, face):
 	with open(name, 'w') as fd:
@@ -29,7 +25,7 @@ def save_to_obj(name, vertex, face):
 
 		fd.write("\n")
 		for f1, f2, f3 in face:
-			fd.write(f'f {f3 + 1} {f2 + 1} {f1 + 1}\n')
+			fd.write(f'f {f1 + 1} {f2 + 1} {f3 + 1}\n')
 
 	print(name)
 
@@ -89,7 +85,7 @@ def process_img(img,lm,t,s,target_size = 224.):
 
 	img = img.crop((left,up,right,below))
 	img = np.array(img)
-	img = img[:,:,::-1] #RGBtoBGR
+	# img = img[:,:,::-1] #RGBtoBGR
 	img = np.expand_dims(img,0)
 	lm = np.stack([lm[:,0] - t[0] + w0/2,lm[:,1] - t[1] + h0/2],axis = 1)/s*102
 	lm = lm - np.reshape(np.array([(w/2 - target_size/2),(h/2-target_size/2)]),[1,2])
@@ -138,8 +134,7 @@ def load_img(img_path,lm_path):
 
 def main():
 	init_3dmm_settings()
-	batch_size = 8
-	is_testset = True
+	is_testset = False
 	fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False, device=CFG.device)
 	lm3D = load_lm3d()
 
@@ -149,29 +144,32 @@ def main():
 
 		if is_testset:	# test with testset
 			dataset = NonlinearDataset(phase='test', frac=0.1)
-			dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+			dataloader = DataLoader(dataset, batch_size=CFG.batch_size, shuffle=False, num_workers=0)
 
 		else:			# test with test image directory
 			img_list = glob(join(CFG.prediction_src_path, "*.jpg"))
 			img_list += glob(join(CFG.prediction_src_path, "*.jpeg"))
 			img_list += glob(join(CFG.prediction_src_path, "*.png"))
 			images = []
-
+			name_list = []
 			for file in img_list:
 				input_img, _, _ = Preprocess(fa, file, lm3D)
 				if input_img is None:
+					print(f"No landmark in file : {file}")
 					continue
-				images.append(input_img.squeeze(0))
-			images = torch.tensor(np.stack(images)) / 255.0
-			images = images.permute(0, 3, 1, 2)
-			r, g, b = torch.split(images, (1, 1, 1), dim=1)
-			images = torch.cat([b, g, r], dim=1)
+				image_tensor = torch.tensor(input_img).permute(0, 3, 1, 2)
+				images.append(F.interpolate(image_tensor, size=256))
+				name_list.append(file)
+			images = torch.cat(images, dim=0) / 255.0
+			# images = images.permute(0, 3, 1, 2)
+			# r, g, b = torch.split(images, (1, 1, 1), dim=1)
+			# images = torch.cat([b, g, r], dim=1)
 
 			dataloader = []
-			for idx in range(0, images.shape[0], batch_size):
+			for idx in range(0, images.shape[0], CFG.batch_size):
 				start_idx = idx
-				end_idx = min((idx + 1) * batch_size, images.shape[0])
-				dataloader.append({'image': images[start_idx:end_idx]})
+				end_idx = min((idx + 1) * CFG.batch_size, images.shape[0])
+				dataloader.append({'image': images[start_idx:end_idx], 'image_name': name_list[start_idx:end_idx]})
 
 		for samples in dataloader:
 			result = model(samples['image'].to(CFG.device))
@@ -183,7 +181,14 @@ def main():
 			angle = result['lv_angle']
 			light = result['lv_il']
 
-			shape = shape + exp + CFG.mean_shape
+			# shape = samples['shape'].to(CFG.device)
+			# albedo = samples['vcolor'].to(CFG.device)
+			# exp = samples['exp'].to(CFG.device)
+			# trans = samples['trans'].to(CFG.device)
+			# angle = samples['angle'].to(CFG.device)
+			# light = samples['light'].to(CFG.device)
+
+			shape = shape + CFG.mean_shape
 			color = albedo + CFG.mean_tex
 
 			images, masks, _ = renderer.render(
@@ -194,6 +199,13 @@ def main():
 				light_batch=light,
 				print_timing=False)
 
+			# for image, mask, image_label, image_name in zip(images, masks, samples['image'], samples['image_name']):
+			# 	masked = image * mask + image_label.to(CFG.device).permute(1, 2 ,0) * (1 - mask)
+			# 	save_image(masked.permute(2, 0, 1), join(CFG.prediction_dst_path, basename(image_name)))
+			# 	save_to_obj(join(CFG.prediction_dst_path, basename(image_name).replace('.jpg', '.obj').replace('.jpeg', '.obj').replace('.png', '.obj')), vertex=(CFG.mean_shape + shape).view((-1, 3)), face=CFG.face)
+			# 	pass
+
+			# for degugginb
 			images = torch.cat([image for image in images], dim=1)
 
 			image_labels = samples['image'].permute(0, 2, 3, 1).to(CFG.device)
