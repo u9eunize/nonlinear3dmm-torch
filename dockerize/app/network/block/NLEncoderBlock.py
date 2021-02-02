@@ -40,7 +40,7 @@ class Encoder(nn.Module):
         self.exp = NLEmbeddingBlock(in_dim, gfc_dim_exp, 64)
 
 
-    def forward(self, x):
+    def forward(self, x, reg=False):
         if x.is_cuda and self.ngpu > 1:
             output = nn.parallel.data_parallel(self.main, x, range(self.ngpu))
         else:
@@ -52,6 +52,9 @@ class Encoder(nn.Module):
         shape = self.shape(output)
         tex = self.tex(output)
         exp = self.exp(output)
+
+        if reg:
+           return trans, rot, il, shape, tex, exp, output
         return trans, rot, il, shape, tex, exp
 
     def _make_layer(self, out_dim, kernel_size, stride):

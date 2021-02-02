@@ -134,6 +134,11 @@ class Loss:
         g_loss_exp_regularization = norm_loss(exp_1d, torch.zeros_like(exp_1d, device=CFG.device), loss_type=CFG.exp_regularization_loss_type)
         return g_loss_exp_regularization
 
+    def reg_loss(self, reg, **kwargs):
+        batch_size = reg.shape[0]
+        g_loss_reg = reg.sum() / batch_size
+        return g_loss_reg
+
     def shape_loss(self, shape_1d_base, input_shape, input_shape_para, **kwargs):
         g_loss_shape = norm_loss(shape_1d_base, input_shape, loss_type=CFG.shape_loss_type)
 

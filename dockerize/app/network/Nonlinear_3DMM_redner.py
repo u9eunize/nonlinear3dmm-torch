@@ -44,7 +44,7 @@ class Nonlinear3DMM_redner(nn.Module):
         vt2pixel_u = CFG.vt2pixel_u.view((1, 1, -1)).repeat(batch_size, 1, 1)
         vt2pixel_v = CFG.vt2pixel_v.view((1, 1, -1)).repeat(batch_size, 1, 1)
 
-        lv_trans, lv_angle, lv_il, lv_shape, lv_tex, lv_exp = self.nl_encoder(input_images)
+        lv_trans, lv_angle, lv_il, lv_shape, lv_tex, lv_exp, reg = self.nl_encoder(input_images, reg=True)
 
         # albedo
         albedo_dec = self.albedo_dec(lv_tex)
@@ -97,6 +97,7 @@ class Nonlinear3DMM_redner(nn.Module):
             # exp_2d=exp_2d,
             exp_1d=exp_1d,
             exp=lv_exp,
+            reg=reg
         )
 
     def make_1d(self, decoder_2d_result, vt2pixel_u, vt2pixel_v):
