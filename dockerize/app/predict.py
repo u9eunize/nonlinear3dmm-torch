@@ -1,13 +1,13 @@
-from network.Nonlinear_3DMM_redner import Nonlinear3DMM_redner
+from network.Nonlinear_3DMM_pytorch3d import Nonlinear3DMM_pytorch3d
 from torch.utils.data import DataLoader, Dataset
 from torchvision.utils import save_image
 from torchvision import transforms
-from configure_dataset_redner import NonlinearDataset
+from configure_dataset_pytorch3d import NonlinearDataset
 from settings import *
 import numpy as np
 from PIL import Image
 from glob import glob
-from renderer.rendering_ops_redner import renderer
+from renderer.rendering_ops_pytorch3d import renderer
 from utils import load
 import face_alignment
 from tqdm import tqdm
@@ -139,7 +139,7 @@ def main():
 	lm3D = load_lm3d()
 
 	with torch.no_grad():
-		model = Nonlinear3DMM_redner().to(CFG.device).eval()
+		model = Nonlinear3DMM_pytorch3d().to(CFG.device).eval()
 		model, _, _, start_epoch, start_step = load(model)
 
 		if is_testset:	# test with testset
@@ -199,11 +199,11 @@ def main():
 				light_batch=light,
 				print_timing=False)
 
-			# for image, mask, image_label, image_name in zip(images, masks, samples['image'], samples['image_name']):
-			# 	masked = image * mask + image_label.to(CFG.device).permute(1, 2 ,0) * (1 - mask)
-			# 	save_image(masked.permute(2, 0, 1), join(CFG.prediction_dst_path, basename(image_name)))
-			# 	save_to_obj(join(CFG.prediction_dst_path, basename(image_name).replace('.jpg', '.obj').replace('.jpeg', '.obj').replace('.png', '.obj')), vertex=(CFG.mean_shape + shape).view((-1, 3)), face=CFG.face)
-			# 	pass
+			for image, mask, image_label, image_name in zip(images, masks, samples['image'], samples['image_name']):
+				masked = image * mask + image_label.to(CFG.device).permute(1, 2 ,0) * (1 - mask)
+				save_image(masked.permute(2, 0, 1), join(CFG.prediction_dst_path, basename(image_name)))
+				save_to_obj(join(CFG.prediction_dst_path, basename(image_name).replace('.jpg', '.obj').replace('.jpeg', '.obj').replace('.png', '.obj')), vertex=(CFG.mean_shape + shape).view((-1, 3)), face=CFG.face)
+				pass
 
 			# for degugginb
 			images = torch.cat([image for image in images], dim=1)
