@@ -171,6 +171,7 @@ def main():
 				end_idx = min((idx + 1) * CFG.batch_size, images.shape[0])
 				dataloader.append({'image': images[start_idx:end_idx], 'image_name': name_list[start_idx:end_idx]})
 
+		idx = 0
 		for samples in dataloader:
 			result = model(samples['image'].to(CFG.device))
 
@@ -199,10 +200,11 @@ def main():
 				light_batch=light,
 				print_timing=False)
 
-			for image, mask, image_label, image_name in zip(images, masks, samples['image'], samples['image_name']):
+			for image, mask, image_label, image_name, vcolor in zip(images, masks, samples['image'], samples['image_name'], color):
 				masked = image * mask + image_label.to(CFG.device).permute(1, 2 ,0) * (1 - mask)
 				save_image(masked.permute(2, 0, 1), join(CFG.prediction_dst_path, basename(image_name)))
 				save_to_obj(join(CFG.prediction_dst_path, basename(image_name).replace('.jpg', '.obj').replace('.jpeg', '.obj').replace('.png', '.obj')), vertex=(CFG.mean_shape + shape).view((-1, 3)), face=CFG.face)
+				np.save(join(CFG.prediction_dst_path, basename(image_name).replace('.jpg', '.npy').replace('.jpeg', '.npy').replace('.png', '.npy')), vcolor.cpu().numpy())
 				pass
 
 			# for degugginb
@@ -218,6 +220,9 @@ def main():
 			image_labels = image_labels.cpu().detach().numpy()[:,:,::-1]
 			maskeds = maskeds.cpu().detach().numpy()[:,:,::-1]
 
+			idx += 1
+			if idx > 5:
+				break
 			pass
 	return
 

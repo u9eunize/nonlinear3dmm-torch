@@ -30,7 +30,7 @@ def parse():
     parser.add_argument("--checkpoint_step", type=int, default=None, help="")
 
     parser.add_argument("--dataset_path", type=str, default="./dataset", help="")
-    parser.add_argument("--definition_path", type=str, default="./dataset/3DMM_definition/", help="")
+    parser.add_argument("--definition_path", type=str, default="./dataset/definition", help="")
     parser.add_argument("--prediction_src_path", type=str, default="pred/dst", help="")
     parser.add_argument("--prediction_dst_path", type=str, default="pred/src", help="")
 

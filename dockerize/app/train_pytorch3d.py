@@ -9,6 +9,7 @@ from renderer.rendering_ops_pytorch3d import *
 from loss_pytorch3d import Loss
 import log_utils
 from settings import CFG, LOSSES, init_3dmm_settings
+import random
 
 
 class Nonlinear3DMMHelper:
@@ -44,10 +45,6 @@ class Nonlinear3DMMHelper:
         self.net = Nonlinear3DMM_pytorch3d().to(CFG.device)
         if CFG.dtype == torch.double:
             self.net = self.net.double()
-
-        self.random_angle_samples = []
-        self.random_trans_samples = []
-        self.random_light_samples = []
 
 
     def rendering_for_train( self, input_trans, input_angle, input_light, input_exp, input_shape, input_vcolor, input_image, input_mask,
@@ -85,11 +82,25 @@ class Nonlinear3DMMHelper:
             mix_ac_sb[key + '_ac_sb']  = result[3 * batch_size:4 * batch_size]
             comb[key + '_comb']        = result[4 * batch_size:5 * batch_size]
 
+        # Random environments
+        # random = {}
+        # random_trans = lv_trans[np.random.randint(0, batch_size, batch_size)]
+        # random_angle = lv_angle[np.random.randint(0, batch_size, batch_size)]
+        # random_il = lv_il[np.random.randint(0, batch_size, batch_size)]
+        # random_result = render_all(random_trans, random_angle, random_il, albedo_1d_base, exp_1d, shape_1d_base,
+        #                            input_mask=torch.zeros_like(input_mask).to(CFG.device), input_background=torch.zeros_like(input_image).to(CFG.device))
+        # random_result = list(random_result.items())
+        # for idx in range(4):
+        #     key = random_result[idx][0]
+        #     result = random_result[idx][1]
+        #     random[key + '_random'] = result
+        #
+        # return {**gt, **base, **comb, **mix_ac_sb, **mix_ab_sc, **{'random': random_result}}
+
+
         return {**gt, **base, **comb, **mix_ac_sb, **mix_ab_sc}
 
-        # results = render_all(lv_trans, lv_angle, lv_il, vcolor_base, torch.zeros_like(exp_1d), shape_1d_base, input_mask, input_image)
-        # base = {f"{key}_base" : result for key, result in results.items()}
-        # return {**base}
+
 
 
     def run_model(self, **inputs):

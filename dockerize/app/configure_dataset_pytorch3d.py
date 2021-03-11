@@ -242,6 +242,15 @@ def main():
 		image_labels = image_labels.cpu().detach().numpy()[:,:,::-1]
 		maskeds = maskeds.cpu().detach().numpy()[:,:,::-1]
 
+		random_trans = samples['trans'][np.random.randint(0, batch_size, batch_size)].to(CFG.device)
+		random_angle = samples['angle'][np.random.randint(0, batch_size, batch_size)].to(CFG.device)
+		random_il = samples['light'][np.random.randint(0, batch_size, batch_size)].to(CFG.device)
+		random_result = render_all(random_trans, random_angle, random_il, samples['vcolor'].to(CFG.device), samples['exp'].to(CFG.device), samples['shape'].to(CFG.device),
+								   input_mask=torch.zeros_like(samples['mask']).to(CFG.device), input_background=torch.zeros_like(samples['image']).to(CFG.device))
+
+		random_result = torch.cat([result for result in random_result['g_img'].permute(0, 2, 3, 1)], dim=1)
+		random_images = random_result.cpu().detach().numpy()[:,:,::-1]
+
 		continue
 
 

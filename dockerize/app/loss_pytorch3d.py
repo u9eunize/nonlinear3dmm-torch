@@ -237,6 +237,17 @@ class Loss:
             pcpt_g_img_ab_sc=(idxes[3], fts[3]),
         )
 
+    def _perceptual_recon_precalculation_random(self, input_image, g_img_base, g_img_ac_sb, g_img_ab_sc, g_img_random,
+                                         input_mask, **kwargs):
+        idxes, fts = self._face_calculation_multiple(input_image * input_mask, g_img_base, g_img_ac_sb, g_img_ab_sc, g_img_random)
+
+        return dict(
+            pcpt_input_images=(idxes[0], fts[0]),
+            pcpt_g_img_base=(idxes[1], fts[1]),
+            pcpt_g_img_ac_sb=(idxes[2], fts[2]),
+            pcpt_g_img_ab_sc=(idxes[3], fts[3]),
+        )
+
     def _face_calculation(self, img):
         features = []
         idx_vec = self.facenet(img)
