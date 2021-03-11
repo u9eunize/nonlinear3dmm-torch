@@ -45,7 +45,7 @@
 
   "m_loss": null,
   "shape_loss":  1e4,
-  "expression_loss": 1e4,
+  "expression_loss": null,
 
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
@@ -59,7 +59,7 @@
   "mix_ab_sc_texture_loss": null,
   "comb_texture_loss":  null,
 
-  "base_pix_recon_loss": 10000,
+  "base_pix_recon_loss": 1000,
   "mix_ab_sc_pix_recon_loss":  null,
   "mix_ac_sb_pix_recon_loss": null,
   "comb_pix_recon_loss":  null,
