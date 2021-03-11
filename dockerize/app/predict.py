@@ -18,10 +18,12 @@ import torch.nn.functional as F
 
 
 
-def save_to_obj(name, vertex, face):
+def save_to_obj(name, vertex, face, vcolor):
 	with open(name, 'w') as fd:
-		for v1, v2, v3 in vertex:
-			fd.write(f'v {v1:.3f} {v2:.3f} {v3:.3f}\n')
+		for v, c in zip(vertex, vcolor):
+			v1, v2, v3 = v
+			c1, c2, c3 = c
+			fd.write(f'v {v1:.3f} {v2:.3f} {v3:.3f} {c1:.3f} {c2:.3f} {c3:.3f}\n')
 
 		fd.write("\n")
 		for f1, f2, f3 in face:
@@ -189,7 +191,7 @@ def main():
 			# angle = samples['angle'].to(CFG.device)
 			# light = samples['light'].to(CFG.device)
 
-			shape = shape + CFG.mean_shape
+			shape = shape + CFG.mean_shape + exp
 			color = albedo + CFG.mean_tex
 
 			images, masks, _ = renderer.render(
@@ -203,8 +205,8 @@ def main():
 			for image, mask, image_label, image_name, vcolor in zip(images, masks, samples['image'], samples['image_name'], color):
 				masked = image * mask + image_label.to(CFG.device).permute(1, 2 ,0) * (1 - mask)
 				save_image(masked.permute(2, 0, 1), join(CFG.prediction_dst_path, basename(image_name)))
-				save_to_obj(join(CFG.prediction_dst_path, basename(image_name).replace('.jpg', '.obj').replace('.jpeg', '.obj').replace('.png', '.obj')), vertex=(CFG.mean_shape + shape).view((-1, 3)), face=CFG.face)
-				np.save(join(CFG.prediction_dst_path, basename(image_name).replace('.jpg', '.npy').replace('.jpeg', '.npy').replace('.png', '.npy')), vcolor.cpu().numpy())
+				save_to_obj(join(CFG.prediction_dst_path, basename(image_name).replace('.jpg', '.obj').replace('.jpeg', '.obj').replace('.png', '.obj')), vertex=shape.view((-1, 3)), face=CFG.face, vcolor=vcolor.view((-1, 3)))
+				# np.save(join(CFG.prediction_dst_path, basename(image_name).replace('.jpg', '.npy').replace('.jpeg', '.npy').replace('.png', '.npy')), vcolor.cpu().numpy())
 				pass
 
 			# for degugginb

@@ -127,7 +127,10 @@ class Loss:
         # exp_para = torch.bmm(exp_1d[:, CFG.deep_to_blender].view((batch_size, 1, -1)), CFG.exBase_inverse.repeat(batch_size, 1, 1))
         # g_loss_exp_ = norm_loss(exp_para, input_exp_para, loss_type=CFG.expression_loss_type)
         #
-        g_loss_exp = norm_loss(exp, input_exp_para, loss_type=CFG.expression_loss_type)
+
+        # g_loss_exp = norm_loss(exp, input_exp_para, loss_type=CFG.expression_loss_type)
+
+        g_loss_exp = norm_loss(exp_1d, input_exp, loss_type=CFG.expression_loss_type)
         return g_loss_exp
 
     def exp_regularization_loss(self, exp_1d, **kwargs):
