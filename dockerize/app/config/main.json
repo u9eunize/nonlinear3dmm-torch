@@ -1,5 +1,5 @@
 {
-  "name": "pretrain",
+  "name": "main",
 
   "checkpoint_name": "/dataset/checkpoint/20210201/213406_pretrain/ckpt_00/model_ckpt_00_036440.pt",
   "checkpoint_root_path":  "/dataset/checkpoint",
@@ -50,7 +50,7 @@
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
 
-  "base_landmark_loss":  null,
+  "base_landmark_loss":  100,
   "comb_landmark_loss": null,
   "gt_landmark_loss": null,
 
