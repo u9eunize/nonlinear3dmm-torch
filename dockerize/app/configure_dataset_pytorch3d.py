@@ -252,15 +252,6 @@ def main():
 		random_result = torch.cat([result for result in random_result['g_img'].permute(0, 2, 3, 1)], dim=1)
 		random_images = random_result.cpu().detach().numpy()[:,:,::-1]
 
-		landmark_u, landmark_v = project_vertices(shape.to(CFG.device)[:, CFG.landmark], samples['trans'].to(CFG.device), samples['angle'].to(CFG.device))
-		landmark_u = landmark_u.long()
-		landmark_v = landmark_v.long()
-
-		# labels = samples['image'].permute(0, 2, 3, 1).to(CFG.device)
-		# # labels[:, landmark_u, landmark_v, :] = 1
-		# for image, u, v in zip(labels, landmark_u, landmark_v):
-		# 	image[u, v, :] = 1
-
 		continue
 
 

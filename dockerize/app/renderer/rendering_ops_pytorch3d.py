@@ -435,8 +435,11 @@ def project_vertices(vertices, trans, angle):
 
     projection = aug_projection[:, :, 0:2] / aug_projection[:, :, 2].view((batch_size, aug_projection.shape[1], 1))
 
-    u = CFG.image_size - projection[:, :, 1]
+    u = CFG.image_size - projection[:, :, 1] - 1
     v = projection[:, :, 0]
+
+    u = u.clamp(0, CFG.image_size - 1)
+    v = v.clamp(0, CFG.image_size - 1)
 
     return u, v
 
