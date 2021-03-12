@@ -219,8 +219,8 @@ def init_3dmm_settings():
     # vt2pixel_u = torch.cat([vt2pixel_u, torch.zeros(1, 1)], dim=0)
     # vt2pixel_v = torch.cat([vt2pixel_v, torch.zeros(1, 1)], dim=0)
     
-    landmark = np.load(join(CFG.definition_path, 'landmark.npy'))
-    landmark = deep_to_blender[landmark - 1] - 1
+    landmark = np.load(join(CFG.definition_path, 'landmark.npy')) - 1
+    landmark = deep_to_blender[landmark]
 
 
     face = np.load(join(CFG.definition_path, 'face.npy')) - 1

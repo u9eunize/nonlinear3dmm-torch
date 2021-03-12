@@ -189,6 +189,7 @@ class Batch_Renderer_pytorch3d():
                trans_batch: Optional[torch.Tensor],
                angle_batch: Optional[torch.Tensor],
                light_batch: Optional[torch.Tensor],
+               landmark: Any = False,
                print_timing: Any = False,
                uv_indices: Optional[torch.Tensor] = None,
                texture: Optional[torch.Tensor] = None):
@@ -241,6 +242,13 @@ class Batch_Renderer_pytorch3d():
         outputs, fragments = self.renderer(meshes)
         images, _ = torch.split(outputs, (3, 1), dim=3)
         masks = (fragments.zbuf > 0) * 1
+
+        if landmark:
+            landmark_u, landmark_v = project_vertices(vertex_batch[:, CFG.landmark], trans_batch, angle_batch)
+            landmark_u = landmark_u.long()
+            landmark_v = landmark_v.long()
+            for image, u, v in zip(images, landmark_u, landmark_v):
+                image[u, v, :] = 1
 
         return images, masks, colors
 
@@ -409,7 +417,7 @@ def project_vertices(vertices, trans, angle):
 
     vertices = torch.bmm(vertices, Compute_rotation_matrix(angle)) + torch.unsqueeze(trans, 1)
 
-    focal = 1015.0
+    focal = 1100
     half_size = CFG.image_size / 2
     camera_pos = torch.tensor([0., 0., 10.]).view((1, 1, 3)).to(CFG.device)
     p_matrix = torch.tensor([
@@ -453,7 +461,7 @@ def make_1d ( decoder_2d_result, vt2pixel_u, vt2pixel_v ):
 
 
 
-def render_all(lv_trans, lv_angle, lv_il, vcolor, exp_1d, shape_1d, input_mask, input_background):
+def render_all(lv_trans, lv_angle, lv_il, vcolor, exp_1d, shape_1d, input_mask, input_background, landmark=False):
     shape_full = CFG.mean_shape + shape_1d + exp_1d
     vcolor_full = CFG.mean_tex + vcolor
 
@@ -463,6 +471,7 @@ def render_all(lv_trans, lv_angle, lv_il, vcolor, exp_1d, shape_1d, input_mask, 
         trans_batch=lv_trans,
         angle_batch=lv_angle,
         light_batch=lv_il,
+        landmark=landmark
     )
     images = images.permute(0, 3, 1, 2)
     masks = masks.permute(0, 3, 1, 2)
