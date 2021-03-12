@@ -115,7 +115,7 @@ class NLDecoderTailBlock(nn.Module):
     Output: uv_texture [N, tex_sz[0], tex_sz[1], self.c_dim]
     """
 
-    def __init__(self, in_dim, out_dim, gf_dim, additional_layer=False, is_sigmoid=False):
+    def __init__(self, in_dim, out_dim, gf_dim, additional_layer=False, is_sigmoid=True):
         super(NLDecoderTailBlock, self).__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
