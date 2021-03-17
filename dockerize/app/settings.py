@@ -213,7 +213,7 @@ def init_3dmm_settings():
     
 
     h, w = CFG.texture_size
-    vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.definition_path, 'BFM_uvmap.npy')), dtype=CFG.dtype), (1, 1), dim=-1)
+    vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.definition_path, 'BFM_uvmap_.npy')), dtype=CFG.dtype), (1, 1), dim=-1)
     vt2pixel_v = torch.ones_like(vt2pixel_v) - vt2pixel_v
     vt2pixel_u, vt2pixel_v = vt2pixel_u * h, vt2pixel_v * w
     # vt2pixel_u = torch.cat([vt2pixel_u, torch.zeros(1, 1)], dim=0)

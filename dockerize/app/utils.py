@@ -230,12 +230,12 @@ def load_3DMM_vertex_tri(is_reduce=False):
 def load_3DMM_vt2pixel():
     # Mapping in UV space
 
-    fd = open(CFG.definition_path + 'vertices_2d_u.dat')
+    fd = open(join(CFG.definition_path, 'vertices_2d_u.dat'))
     vt2pixel_u = np.fromfile(file=fd, dtype=np.float32)
     vt2pixel_u = np.append(vt2pixel_u - 1, 0)
     fd.close()
 
-    fd = open(CFG.definition_path + 'vertices_2d_v.dat')
+    fd = open(join(CFG.definition_path, 'vertices_2d_v.dat'))
     vt2pixel_v = np.fromfile(file=fd, dtype=np.float32)
     vt2pixel_v = np.append(vt2pixel_v - 1, 0)
     fd.close()
