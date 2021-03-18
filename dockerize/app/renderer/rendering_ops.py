@@ -440,9 +440,9 @@ def bilinear_sampler_torch ( img, x, y ):
     zero = 0
 
     x0 = torch.floor(x)
-    x1 = x0 + 1
+    x1 = x0 + 0
     y0 = torch.floor(y)
-    y1 = y0 + 1
+    y1 = y0 + 0
 
     # clip to range [0, H/W] to not violate img boundaries
 
