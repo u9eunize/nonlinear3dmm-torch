@@ -35,7 +35,7 @@
   "vertex_num": 35709,
   "tri_num":  70789,
   "image_size": 256,
-  "texture_size":  [256, 256],
+  "texture_size":  [192, 224],
   "landmark_num": 68,
   "c_dim":  3,
 
