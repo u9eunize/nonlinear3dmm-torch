@@ -524,6 +524,8 @@ def bilinear_sampler_torch ( img, x, y ):
     y0 = torch.clamp(y0, zero, max_y)
     y1 = torch.clamp(y1, zero, max_y)
 
+    return get_pixel_value_torch(img, x0, y0)
+
     # get pixel value at corner coords
 
     Ia = get_pixel_value_torch(img, x0, y0)
