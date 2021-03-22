@@ -1,5 +1,6 @@
 from network.block import *
-from renderer.rendering_ops import *
+from settings import CFG
+from renderer.rendering_ops_pytorch3d import bilinear_sampler_torch
 from os.path import join
 
 

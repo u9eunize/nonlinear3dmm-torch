@@ -389,29 +389,7 @@ def compute_landmarks_torch(m, shape):
 
 
 
-def get_pixel_value_torch( img, x, y):
-    """
-    Utility function to get pixel value for coordinate
-    vectors x and y from a  4D tensor image.
-    Input
-    -----
-    - img: tensor of shape (B, H, W, C)
-    - x: flattened tensor of shape (B*H*W, )
-    - y: flattened tensor of shape (B*H*W, )
-    Returns
-    -------
-    - output: tensor of shape (B, H, W, C)
-    """
 
-    batch_size, height, width = x.shape
-
-
-    batch_idx = torch.arange(0, batch_size).view((batch_size, 1, 1)).type(torch.int64)
-    b = batch_idx.repeat(1, height, width)
-
-    value = img[b.long(), :, y.long(), x.long()]
-
-    return value
 
 
 

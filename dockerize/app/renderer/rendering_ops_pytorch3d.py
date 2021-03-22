@@ -7,7 +7,6 @@ from utils import *
 from settings import CFG
 import numpy as np
 from os.path import join
-from renderer.rendering_ops import bilinear_sampler_torch
 import torch.nn.functional as F
 from time import time
 from joblib import Parallel, delayed
@@ -499,5 +498,94 @@ def RGB2BGR(rgb):
     return bgr
 
 
+def bilinear_sampler_torch ( img, x, y ):
+    """
+    Performs bilinear sampling of the input images according to the
+    normalized coordinates provided by the sampling grid. Note that
+    the sampling is done identically for each channel of the input.
+    To test if the function works properly, output image should be
+    identical to input image when theta is initialized to identity
+    transform.
+    Input
+    -----
+    - img: batch of images in (B, H, W, C) layout.
+    - grid: x, y which is the output of affine_grid_generator.
+    Returns
+    -------
+    - interpolated images according to grids. Same size as grid.
+    """
 
 
+    B, C, H, W = img.shape
+
+    max_y = H - 1
+    max_x = W - 1
+    zero = 0
+
+    x0 = torch.floor(x)
+    x1 = x0 + 0
+    y0 = torch.floor(y)
+    y1 = y0 + 0
+
+    # clip to range [0, H/W] to not violate img boundaries
+
+    x0 = torch.clamp(x0, zero, max_x)
+    x1 = torch.clamp(x1, zero, max_x)
+    y0 = torch.clamp(y0, zero, max_y)
+    y1 = torch.clamp(y1, zero, max_y)
+
+    # get pixel value at corner coords
+
+    Ia = get_pixel_value_torch(img, x0, y0)
+    Ib = get_pixel_value_torch(img, x0, y1)
+    Ic = get_pixel_value_torch(img, x1, y0)
+    Id = get_pixel_value_torch(img, x1, y1)
+
+    # recast as float for delta calculation
+
+    x0 = x0.float()
+    x1 = x1.float()
+    y0 = y0.float()
+    y1 = y1.float()
+
+    # calculate deltas
+    wa = (x1 - x) * (y1 - y)
+    wb = (x1 - x) * (y - y0)
+    wc = (x - x0) * (y1 - y)
+    wd = (x - x0) * (y - y0)
+
+    # add dimension for addition
+
+    wa = torch.unsqueeze(wa, dim=3)
+    wb = torch.unsqueeze(wb, dim=3)
+    wc = torch.unsqueeze(wc, dim=3)
+    wd = torch.unsqueeze(wd, dim=3)
+
+    # compute output
+    out = wa * Ia + wb * Ib + wc * Ic + wd * Id
+
+    return out
+
+def get_pixel_value_torch( img, x, y):
+    """
+    Utility function to get pixel value for coordinate
+    vectors x and y from a  4D tensor image.
+    Input
+    -----
+    - img: tensor of shape (B, H, W, C)
+    - x: flattened tensor of shape (B*H*W, )
+    - y: flattened tensor of shape (B*H*W, )
+    Returns
+    -------
+    - output: tensor of shape (B, H, W, C)
+    """
+
+    batch_size, height, width = x.shape
+
+
+    batch_idx = torch.arange(0, batch_size).view((batch_size, 1, 1)).type(torch.int64)
+    b = batch_idx.repeat(1, height, width)
+
+    value = img[b.long(), :, y.long(), x.long()]
+
+    return value
