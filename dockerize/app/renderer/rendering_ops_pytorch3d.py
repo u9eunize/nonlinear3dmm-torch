@@ -453,16 +453,6 @@ def generate_full(vec, kind="shape"):
     return vec + mean
 
 
-
-def make_1d ( decoder_2d_result, vt2pixel_u, vt2pixel_v ):
-    batch_size = decoder_2d_result.shape[0]
-    decoder_1d_result = bilinear_sampler_torch(decoder_2d_result, vt2pixel_u, vt2pixel_v)
-    decoder_1d_result = decoder_1d_result.view(batch_size, -1)
-    
-    return decoder_1d_result
-
-
-
 def render_all(lv_trans, lv_angle, lv_il, vcolor, exp_1d, shape_1d, input_mask, input_background, landmark=False):
     shape_full = CFG.mean_shape + shape_1d + exp_1d
     vcolor_full = CFG.mean_tex + vcolor
@@ -523,9 +513,9 @@ def bilinear_sampler_torch ( img, x, y ):
     zero = 0
 
     x0 = torch.floor(x)
-    x1 = x0 + 0
+    x1 = x0 + 1
     y0 = torch.floor(y)
-    y1 = y0 + 0
+    y1 = y0 + 1
 
     # clip to range [0, H/W] to not violate img boundaries
 
