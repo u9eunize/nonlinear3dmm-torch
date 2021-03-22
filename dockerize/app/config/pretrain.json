@@ -44,8 +44,8 @@
   "dtype": "float",
 
   "m_loss": null,
-  "shape_loss":  1e4,
-  "expression_loss": 1e4,
+  "shape_loss":  1e3,
+  "expression_loss": 1e3,
 
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
@@ -54,7 +54,7 @@
   "comb_landmark_loss": null,
   "gt_landmark_loss": null,
 
-  "base_texture_loss": 1e4,
+  "base_texture_loss": 1e3,
   "mix_ac_sb_texture_loss":  null,
   "mix_ab_sc_texture_loss": null,
   "comb_texture_loss":  null,

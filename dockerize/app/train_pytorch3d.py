@@ -63,7 +63,7 @@ class Nonlinear3DMMHelper:
         input_image_all = torch.cat([input_image, input_image, input_image, input_image, input_image], dim=0)
 
         results = render_all(lv_trans_all, lv_angle_all, lv_il_all, albedo_all, exp_all, shape_1d_all,
-                             input_mask=input_mask_all, input_background=input_image_all, landmark=True)
+                             input_mask=input_mask_all, input_background=input_image_all, landmark=False)
         results = list(results.items())
 
         gt = { }
