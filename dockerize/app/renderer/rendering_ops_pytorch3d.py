@@ -531,8 +531,6 @@ def bilinear_sampler_torch ( img, x, y ):
     Ic = get_pixel_value_torch(img, x1, y0)
     Id = get_pixel_value_torch(img, x1, y1)
 
-    return Ia
-
     # recast as float for delta calculation
 
     x0 = x0.float()
