@@ -253,7 +253,7 @@ class Batch_Renderer_pytorch3d():
 
 
 # renderer = Batch_Renderer()
-renderer = Batch_Renderer_pytorch3d(resolution=256)
+renderer = Batch_Renderer_pytorch3d(resolution=224)
 
 
 
