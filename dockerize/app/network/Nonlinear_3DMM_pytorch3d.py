@@ -69,11 +69,11 @@ class Nonlinear3DMM_pytorch3d(nn.Module):
         shape_1d_res = shape_1d_comb - shape_1d_base
 
         # expression
-        # exp_dec = self.exp_dec(lv_exp)
-        # exp_2d = self.exp_gen(exp_dec)
-        # exp_1d = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
-        exp_1d = torch.bmm(torch.unsqueeze(lv_exp, 1), torch.unsqueeze(CFG.exBase.transpose(0, 1), 0).repeat(batch_size, 1, 1))
-        exp_1d = exp_1d.view([batch_size, -1, 3])[:, CFG.blender_to_deep_cpu]
+        exp_dec = self.exp_dec(lv_exp)
+        exp_2d = self.exp_gen(exp_dec)
+        exp_1d = self.make_1d(exp_2d, vt2pixel_u, vt2pixel_v)
+        # exp_1d = torch.bmm(torch.unsqueeze(lv_exp, 1), torch.unsqueeze(CFG.exBase.transpose(0, 1), 0).repeat(batch_size, 1, 1))
+        # exp_1d = exp_1d.view([batch_size, -1, 3])[:, CFG.blender_to_deep_cpu]
 
         return dict(
             lv_trans=lv_trans,
