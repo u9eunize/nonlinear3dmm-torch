@@ -37,7 +37,7 @@ class Encoder(nn.Module):
         self.il = NLEmbeddingBlock(in_dim, gfc_dim_il, out_dim_il)
         self.shape = NLEmbeddingBlock(in_dim, gfc_dim_shape)
         self.tex = NLEmbeddingBlock(in_dim, gfc_dim_tex)
-        self.exp = NLEmbeddingBlock(in_dim, gfc_dim_exp)
+        self.exp = NLEmbeddingBlock(in_dim, gfc_dim_exp, 64)
 
 
     def forward(self, x, reg=False):
@@ -79,8 +79,7 @@ class NLEmbeddingBlock(nn.Module):
 
         self.main = nn.Sequential(
             nn.Conv2d(in_dim, out_dim, 3, stride=1, padding=1),
-            nn.AdaptiveAvgPool2d(1),
-            nn.Tanh()
+            nn.AdaptiveAvgPool2d(1)
         )
         self.linear = None
         if fc_dim is not None:
@@ -140,7 +139,7 @@ class NLEncoderBlock(nn.Module):
             nn.Conv2d(self.in_dim, out_dim, kernel_size, stride=stride, padding=int((kernel_size - 1) / 2)),
             nn.BatchNorm2d(out_dim),
             # nn.GroupNorm(32, out_dim),
-            nn.ReLU(inplace=True)  # inplace 옵션 주는 것은 의문
+            nn.ReLU(inplace=False)  # inplace 옵션 주는 것은 의문
         ]
         self.in_dim = out_dim
         return nn.Sequential(*layers)
