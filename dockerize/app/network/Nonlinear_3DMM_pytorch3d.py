@@ -5,7 +5,7 @@ from os.path import join
 
 
 class Nonlinear3DMM_pytorch3d(nn.Module):
-    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=512, dfc_dim=512, nz=3, trans_dim=3, rot_dim=3, il_dim=27,
+    def __init__(self, gf_dim=32, df_dim=32, gfc_dim=1024, dfc_dim=512, nz=3, trans_dim=3, rot_dim=3, il_dim=27,
                  tex_sz=CFG.texture_size):
         super(Nonlinear3DMM_pytorch3d, self).__init__()
 
