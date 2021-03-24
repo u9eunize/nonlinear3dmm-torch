@@ -99,7 +99,7 @@
   "exp_regularization_loss_type": "l1",
   "shape_regularization_loss_type": "l2,1",
 
-  "reg_loss": 10,
+  "reg_loss": null,
   "reg_loss_type": "l1",
 
   "random_angle": false,
