@@ -64,7 +64,7 @@ class Encoder(nn.Module):
             nn.BatchNorm2d(out_dim),
             # nn.GroupNorm(32, out_dim),
 
-            nn.ReLU(inplace=False)  # inplace 옵션 주는 것은 의문
+            nn.LeakyReLU(inplace=False)  # inplace 옵션 주는 것은 의문
         ]
         self.in_dim = out_dim
         return nn.Sequential(*layers)
@@ -79,7 +79,6 @@ class NLEmbeddingBlock(nn.Module):
 
         self.main = nn.Sequential(
             nn.Conv2d(in_dim, out_dim, 3, stride=1, padding=1),
-            nn.BatchNorm2d(out_dim),
             nn.AdaptiveAvgPool2d(1)
         )
         self.linear = None
@@ -140,7 +139,7 @@ class NLEncoderBlock(nn.Module):
             nn.Conv2d(self.in_dim, out_dim, kernel_size, stride=stride, padding=int((kernel_size - 1) / 2)),
             nn.BatchNorm2d(out_dim),
             # nn.GroupNorm(32, out_dim),
-            nn.ReLU(inplace=False)  # inplace 옵션 주는 것은 의문
+            nn.LeakyReLU(inplace=False)  # inplace 옵션 주는 것은 의문
         ]
         self.in_dim = out_dim
         return nn.Sequential(*layers)
