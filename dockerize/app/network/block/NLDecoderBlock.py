@@ -44,7 +44,7 @@ class DeconvBlock(nn.Module):
                                                    padding=1, output_size=output_size)),
             ("bat", nn.BatchNorm2d(out_dim)),
             # ("bat", nn.GroupNorm(32, out_dim)),
-            ("relu", nn.ReLU(inplace=False))
+            ("relu", nn.eLU(inplace=False))
         ]
         self.in_dim = out_dim
         self.main = nn.Sequential(OrderedDict(layers))
@@ -71,7 +71,7 @@ class NLDecoderBlock(nn.Module):
         self.bn_relu = nn.Sequential(
             nn.BatchNorm2d(self.gfc_dim),
             # nn.GroupNorm(32, self.gfc_dim),
-            nn.ReLU(inplace=False)
+            nn.eLU(inplace=False)
         )
 
         self.nl_decoder_block = self._make_decoder_layers(self.gfc_dim, [self.s32_h, self.s32_w])

@@ -29,8 +29,8 @@ class Nonlinear3DMM_pytorch3d(nn.Module):
         self.in_dim = self.nl_encoder.in_dim
 
         self.albedo_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gf_dim, self.tex_sz)
-        self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, is_sigmoid=True)
-        self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim, is_sigmoid=True)
+        self.albedo_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim)
+        self.albedo_gen_comb = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim)
 
         self.shape_dec = NLDecoderBlock(self.gfc_dim // 2, self.gf_dim, self.gfc_dim, self.tex_sz)
         self.shape_gen_base = NLDecoderTailBlock(self.gf_dim, self.nz, self.gf_dim)
