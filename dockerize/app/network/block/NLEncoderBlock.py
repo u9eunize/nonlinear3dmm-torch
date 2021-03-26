@@ -79,7 +79,7 @@ class NLEmbeddingBlock(nn.Module):
 
         self.main = nn.Sequential(
             nn.Conv2d(in_dim, out_dim, 3, stride=1, padding=1),
-            nn.AdaptiveMaxPool2d(1)
+            nn.AdaptiveAvgPool2d(1)
         )
         self.linear = None
         if fc_dim is not None:
