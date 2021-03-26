@@ -48,8 +48,8 @@ class Nonlinear3DMM_pytorch3d(nn.Module):
 
         # albedo
         albedo_dec = self.albedo_dec(lv_tex)
-        albedo_2d_base = self.albedo_gen_base(albedo_dec)
-        albedo_2d_comb = self.albedo_gen_comb(albedo_dec)
+        albedo_2d_base = (self.albedo_gen_base(albedo_dec) + 1) / 2
+        albedo_2d_comb = (self.albedo_gen_comb(albedo_dec) + 1) / 2
 
         albedo_1d_base = self.make_1d(albedo_2d_base, vt2pixel_u, vt2pixel_v)
         albedo_1d_comb = self.make_1d(albedo_2d_comb, vt2pixel_u, vt2pixel_v)
