@@ -130,6 +130,7 @@ class NLDecoderTailBlock(nn.Module):
             self.in_dim = gf_dim * 2
 
         layers.append(nn.ConvTranspose2d(self.in_dim, self.out_dim, 3, stride=1, padding=1))
+        layers.append(nn.BatchNorm2d(self.out_dim))
         if self.is_sigmoid:
             layers.append(nn.Sigmoid())
         else:

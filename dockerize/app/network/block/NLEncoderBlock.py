@@ -28,7 +28,7 @@ class Encoder(nn.Module):
             self._make_layer(gf_dim * 8, 3, 1),
 
             self._make_layer(gf_dim * 8, 3, 2),
-            self._make_layer(gf_dim * 5, 3, 1)
+            self._make_layer(gf_dim * 5, 3, 1, )
         )
 
         in_dim = gf_dim * 5
@@ -79,6 +79,7 @@ class NLEmbeddingBlock(nn.Module):
 
         self.main = nn.Sequential(
             nn.Conv2d(in_dim, out_dim, 3, stride=1, padding=1),
+            nn.BatchNorm2d(out_dim),
             nn.AdaptiveAvgPool2d(1)
         )
         self.linear = None
