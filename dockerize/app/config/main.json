@@ -44,8 +44,8 @@
   "dtype": "float",
 
   "m_loss": null,
-  "shape_loss":  1e5,
-  "expression_loss": 1e5,
+  "shape_loss":  1e3,
+  "expression_loss": 1e3,
 
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
