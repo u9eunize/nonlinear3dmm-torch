@@ -1,7 +1,7 @@
 {
   "name": "main",
 
-  "checkpoint_name": "/dataset/checkpoint/20210201/213406_pretrain/ckpt_00/model_ckpt_00_036440.pt",
+  "checkpoint_name": "/dataset/checkpoint/20210327/231136_pretrain/ckpt_01/model_ckpt_01_036440.pt",
   "checkpoint_root_path":  "/dataset/checkpoint",
   "checkpoint_regex": null,
   "checkpoint_epoch":  null,
@@ -44,17 +44,17 @@
   "dtype": "float",
 
   "m_loss": null,
-  "shape_loss":  1e4,
-  "expression_loss": null,
+  "shape_loss":  1e5,
+  "expression_loss": 1e5,
 
   "shape_loss_type": "l1",
   "expression_loss_type": "l1",
 
-  "base_landmark_loss":  100,
+  "base_landmark_loss":  1e2,
   "comb_landmark_loss": null,
   "gt_landmark_loss": null,
 
-  "base_texture_loss": 5000,
+  "base_texture_loss": 1e4,
   "mix_ac_sb_texture_loss":  null,
   "mix_ab_sc_texture_loss": null,
   "comb_texture_loss":  null,
@@ -65,7 +65,7 @@
   "comb_pix_recon_loss":  null,
 
   "perceptual_layer": ["conv2d_1a", "conv2d_2a", "maxpool_3a", "conv2d_4a"],
-  "base_perceptual_recon_loss": 100,
+  "base_perceptual_recon_loss": null,
   "mix_ab_sc_perceptual_recon_loss": null,
   "mix_ac_sb_perceptual_recon_loss": null,
   "comb_perceptual_recon_loss":  null,
