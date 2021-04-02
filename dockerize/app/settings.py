@@ -199,14 +199,16 @@ def init_3dmm_settings():
     deep_to_blender = np.load(join(CFG.definition_path, 'deep_to_blender.npy'))
     blender_to_deep = np.load(join(CFG.definition_path, 'blender_to_deep.npy'))
     
-    mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy')).reshape([-1, 3])[blender_to_deep]
+    # mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy')).reshape([-1, 3])[blender_to_deep]
+    mean_shape = np.load(join(CFG.definition_path, 'mean_shape.npy')).reshape([-1, 3])
     shapeBase = np.load(join(CFG.definition_path, 'shapeBase.npy'))
     shapeBase_inverse = np.matmul(np.linalg.inv(np.matmul(shapeBase.transpose(), shapeBase)), shapeBase.transpose()).transpose()
 
     exBase = np.load(join(CFG.definition_path, 'exBase.npy'))
     exBase_inverse = np.matmul(np.linalg.inv(np.matmul(exBase.transpose(), exBase)), exBase.transpose()).transpose()
 
-    mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])[blender_to_deep]
+    # mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])[blender_to_deep]
+    mean_tex = np.reshape(np.load(join(CFG.definition_path, 'mean_tex.npy')) / 255.0, [-1, 3])
     # mean_tex = mean_tex[:,::-1].copy()
     texBase = np.load(join(CFG.definition_path, 'texBase.npy'))
     texBase_inverse = np.matmul(np.linalg.inv(np.matmul(texBase.transpose(), texBase)), texBase.transpose()).transpose()
@@ -216,19 +218,19 @@ def init_3dmm_settings():
     vt2pixel_u, vt2pixel_v = torch.split(torch.tensor(np.load(join(CFG.definition_path, 'BFM_uvmap.npy')), dtype=CFG.dtype), (1, 1), dim=-1)
     vt2pixel_v = torch.ones_like(vt2pixel_v) - vt2pixel_v
     vt2pixel_u, vt2pixel_v = vt2pixel_u * h, vt2pixel_v * w
-    # vt2pixel_u = vt2pixel_u[blender_to_deep]
-    # vt2pixel_v = vt2pixel_v[blender_to_deep]
+    vt2pixel_u = vt2pixel_u[blender_to_deep]
+    vt2pixel_v = vt2pixel_v[blender_to_deep]
     # vt2pixel_u, vt2pixel_v = vt2pixel_v, vt2pixel_u
     
     landmark = np.load(join(CFG.definition_path, 'landmark.npy')) - 1
-    landmark = deep_to_blender[landmark]
+    # landmark = deep_to_blender[landmark]
 
 
     face = np.load(join(CFG.definition_path, 'face.npy')) - 1
-    face = deep_to_blender[face]
+    # face = deep_to_blender[face]
     
     point_buf = np.load(join(CFG.definition_path, 'point_buf.npy')) - 1
-    point_buf = point_buf[blender_to_deep]
+    # point_buf = point_buf[blender_to_deep]
 
     const_alb_mask = 255 - np.load(join(CFG.definition_path, 'const_alb_mask.npy'))
 

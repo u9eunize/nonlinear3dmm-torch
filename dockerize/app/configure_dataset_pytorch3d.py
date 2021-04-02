@@ -89,19 +89,25 @@ class NonlinearDataset(Dataset):
 		shape_para, exp_para, tex_para, angle, light, trans = torch.split(params, (80, 64, 80, 3, 27, 3), dim=-1)
 
 		shape = torch.mm(torch.unsqueeze(shape_para, 0), CFG.shapeBase_cpu.transpose(0, 1))
-		shape = shape.view([-1, 3])[CFG.blender_to_deep_cpu]
+		# shape = shape.view([-1, 3])[CFG.blender_to_deep_cpu]
+		shape = shape.view([-1, 3])
 		shape -= torch.mean(CFG.mean_shape_cpu, dim=0)  # ?
-		_shape_para = torch.mm((shape + torch.mean(CFG.mean_shape_cpu, dim=0))[CFG.deep_to_blender_cpu].view((1, -1)), CFG.shapeBase_inverse_cpu)
+		# _shape_para = torch.mm((shape + torch.mean(CFG.mean_shape_cpu, dim=0))[CFG.deep_to_blender_cpu].view((1, -1)), CFG.shapeBase_inverse_cpu)
+		_shape_para = torch.mm((shape + torch.mean(CFG.mean_shape_cpu, dim=0)).view((1, -1)), CFG.shapeBase_inverse_cpu)
 
 		exp = torch.mm(torch.unsqueeze(exp_para, 0), CFG.exBase_cpu.transpose(0, 1))
-		exp = exp.view([-1, 3])[CFG.blender_to_deep_cpu]
-		_exp_para = torch.mm(exp[CFG.deep_to_blender_cpu].view((1, -1)), CFG.exBase_inverse_cpu)
+		# exp = exp.view([-1, 3])[CFG.blender_to_deep_cpu]
+		exp = exp.view([-1, 3])
+		# _exp_para = torch.mm(exp[CFG.deep_to_blender_cpu].view((1, -1)), CFG.exBase_inverse_cpu)
+		_exp_para = torch.mm(exp.view((1, -1)), CFG.exBase_inverse_cpu)
 
 		tex = torch.mm(torch.unsqueeze(tex_para, 0), CFG.texBase_cpu.transpose(0, 1))
-		vcolor = tex.view([-1, 3])[CFG.blender_to_deep_cpu] / 255.0
+		# vcolor = tex.view([-1, 3])[CFG.blender_to_deep_cpu] / 255.0
+		vcolor = tex.view([-1, 3]) / 255.0
 		# b, g, r = torch.split(vcolor, (1, 1, 1), dim=1)
 		# vcolor = torch.cat([r, g, b], dim=1)
-		_tex_para = torch.mm(vcolor[CFG.deep_to_blender_cpu].view((1, -1)) * 255.0, CFG.texBase_inverse_cpu)
+		# _tex_para = torch.mm(vcolor[CFG.deep_to_blender_cpu].view((1, -1)) * 255.0, CFG.texBase_inverse_cpu)
+		_tex_para = torch.mm(vcolor.view((1, -1)) * 255.0, CFG.texBase_inverse_cpu)
 
 		# set random albedo indices
 		indices1 = np.random.randint(low=0, high=CFG.const_alb_mask.shape[0], size=[CFG.const_pixels_num])

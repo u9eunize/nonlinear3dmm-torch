@@ -146,7 +146,8 @@ class Loss:
         g_loss_shape = norm_loss(shape_1d_base, input_shape, loss_type=CFG.shape_loss_type)
 
         batch_size = shape_1d_base.shape[0]
-        shape_para = torch.bmm((shape_1d_base + torch.mean(CFG.mean_shape, dim=0))[:, CFG.deep_to_blender].view((batch_size, 1, -1)), CFG.shapeBase_inverse.repeat(batch_size, 1, 1))
+        # shape_para = torch.bmm((shape_1d_base + torch.mean(CFG.mean_shape, dim=0))[:, CFG.deep_to_blender].view((batch_size, 1, -1)), CFG.shapeBase_inverse.repeat(batch_size, 1, 1))
+        shape_para = torch.bmm((shape_1d_base + torch.mean(CFG.mean_shape, dim=0)).view((batch_size, 1, -1)), CFG.shapeBase_inverse.repeat(batch_size, 1, 1))
         g_loss_shape_ = norm_loss(shape_para, input_shape_para, loss_type=CFG.shape_loss_type)
         return g_loss_shape
 
@@ -329,7 +330,8 @@ class Loss:
         g_loss_vcolor = norm_loss(vcolor, input_vcolor, loss_type=CFG.texture_loss_type)
 
         batch_size = vcolor.shape[0]
-        tex_para = torch.bmm(vcolor[:, CFG.deep_to_blender].view((batch_size, 1, -1)) * 255.0, CFG.texBase_inverse.repeat(batch_size, 1, 1))
+        # tex_para = torch.bmm(vcolor[:, CFG.deep_to_blender].view((batch_size, 1, -1)) * 255.0, CFG.texBase_inverse.repeat(batch_size, 1, 1))
+        tex_para = torch.bmm(vcolor.view((batch_size, 1, -1)) * 255.0, CFG.texBase_inverse.repeat(batch_size, 1, 1))
         g_loss_vcolor_ = norm_loss(tex_para, input_tex_para, loss_type=CFG.texture_loss_type)
         return g_loss_vcolor #+ g_loss_vcolor_
 
